@@ -1,0 +1,6 @@
+{
+  "name": "Stream Manager",
+  "description": "Track viewing habits, analyze streaming subscriptions, and optimize budgets with smart local watch tracking.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
