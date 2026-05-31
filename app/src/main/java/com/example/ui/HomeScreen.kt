@@ -57,9 +57,11 @@ fun HomeScreen(
     val tmdbApiKey by viewModel.tmdbApiKey.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Budget ROI, 2: My Services, 3: Settings
+    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Budget ROI
     var filterOnlyMyServices by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
 
     // Clear and display Toast/Status banners beautifully
     LaunchedEffect(statusMessage) {
@@ -73,22 +75,25 @@ fun HomeScreen(
         modifier = modifier.testTag("home_scaffold"),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            "Stream Manager",
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "Maximize Hours. Minimize Spent.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
+                    Text(
+                        "Streamwise",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 },
                 actions = {
+                    IconButton(
+                        onClick = { showSettingsDialog = true },
+                        modifier = Modifier.testTag("settings_gear_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     IconButton(
                         onClick = simulateForegroundReturn,
                         modifier = Modifier.testTag("simulate_foreground_button")
@@ -100,7 +105,7 @@ fun HomeScreen(
                         )
                     }
                 },
-                colors = TopAppBarDefaults.largeTopAppBarColors(
+                colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
                 )
             )
@@ -144,20 +149,6 @@ fun HomeScreen(
                     icon = { Icon(Icons.Default.Star, contentDescription = "ROI stats tab") },
                     modifier = Modifier.testTag("tab_budget")
                 )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    text = { Text("My Services") },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = "My services tab") },
-                    modifier = Modifier.testTag("tab_providers")
-                )
-                Tab(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    text = { Text("Settings") },
-                    icon = { Icon(Icons.Default.Info, contentDescription = "Settings tab") },
-                    modifier = Modifier.testTag("tab_settings")
-                )
             }
 
             AnimatedContent(
@@ -175,19 +166,14 @@ fun HomeScreen(
                         onFilterToggle = { filterOnlyMyServices = it },
                         onWatchClick = { viewModel.startIntendingToWatch(it) },
                         onDeleteClick = { viewModel.deleteItem(it) },
-                        onSyncClick = { viewModel.triggerImmediateSync() }
+                        onSyncClick = { viewModel.triggerImmediateSync() },
+                        tmdbApiKey = tmdbApiKey,
+                        onOpenSettings = { showSettingsDialog = true },
+                        onMovieClick = { detailMovieItem = it }
                     )
                     1 -> MonthlyRoiContent(
                         monthlyStats = monthlyStats,
                         allProviders = allProviders
-                    )
-                    2 -> ManageServicesTabContent(
-                        allProviders = allProviders,
-                        onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) }
-                    )
-                    3 -> SettingsTabContent(
-                        tmdbApiKey = tmdbApiKey,
-                        onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) }
                     )
                 }
             }
@@ -225,6 +211,34 @@ fun HomeScreen(
                 }
             )
         }
+
+        // Settings Dialog (Overlay)
+        if (showSettingsDialog) {
+            SettingsDialog(
+                allProviders = allProviders,
+                onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
+                tmdbApiKey = tmdbApiKey,
+                onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
+                onDismiss = { showSettingsDialog = false }
+            )
+        }
+
+        // Expanded Movie Details Bottom Sheet
+        if (detailMovieItem != null) {
+            MovieDetailsBottomSheet(
+                item = detailMovieItem!!,
+                allProviders = allProviders,
+                onDismiss = { detailMovieItem = null },
+                onWatchClick = {
+                    viewModel.startIntendingToWatch(detailMovieItem!!)
+                    detailMovieItem = null
+                },
+                onDeleteClick = {
+                    viewModel.deleteItem(detailMovieItem!!)
+                    detailMovieItem = null
+                }
+            )
+        }
     }
 }
 
@@ -239,17 +253,28 @@ fun WatchlistTabContent(
     onFilterToggle: (Boolean) -> Unit,
     onWatchClick: (MediaItem) -> Unit,
     onDeleteClick: (MediaItem) -> Unit,
-    onSyncClick: () -> Unit = {}
+    onSyncClick: () -> Unit = {},
+    tmdbApiKey: String,
+    onOpenSettings: () -> Unit,
+    onMovieClick: (MediaItem) -> Unit
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
     }
 
+    var selectedPlatformId by remember { mutableStateOf<String?>(null) }
+    var searchQuery by remember { mutableStateOf("") }
+    var sortBy by remember { mutableStateOf("added") } // "added", "alpha", "rating"
+
     // Filter items according to state
-    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds) {
+    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
+
+            if (selectedPlatformId != null) {
+                if (item.providersList.contains(selectedPlatformId) != true) return@filter false
+            }
 
             if (filterOnlyMyServices) {
                 // Return items having at least one of their available platforms as locally active/subscribed
@@ -261,11 +286,190 @@ fun WatchlistTabContent(
         }
     }
 
+    val processedItems = remember(filteredItems, searchQuery, sortBy) {
+        var items = filteredItems
+        if (searchQuery.isNotBlank()) {
+            items = items.filter { it.title.contains(searchQuery, ignoreCase = true) }
+        }
+        when (sortBy) {
+            "alpha" -> items.sortedBy { it.title.lowercase() }
+            "rating" -> items.sortedByDescending { it.rating ?: 0.0 }
+            else -> items.sortedByDescending { it.addedAt }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // TMDB Key Warning Box for new users
+        val isKeyConfigured = tmdbApiKey.isNotEmpty() && tmdbApiKey != "MY_TMDB_API_KEY"
+        if (!isKeyConfigured) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .clickable { onOpenSettings() },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f)
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = "Warning",
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "TMDB Integration Pending",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Text(
+                            "Streaming matching is inactive. Tap here or setup in Settings to add your key.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = onOpenSettings,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.onErrorContainer,
+                            contentColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text("Setup", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Search & Sorting controls
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Search watchlist...") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(52.dp),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // Sort Selector Button
+            var sortExpanded by remember { mutableStateOf(false) }
+            Box(modifier = Modifier.weight(1.2f)) {
+                OutlinedButton(
+                    onClick = { sortExpanded = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp)
+                ) {
+                    val sortLabel = when (sortBy) {
+                        "alpha" -> "A-Z"
+                        "rating" -> "Rating"
+                        else -> "Recent"
+                    }
+                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(sortLabel, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                DropdownMenu(
+                    expanded = sortExpanded,
+                    onDismissRequest = { sortExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Recently Added") },
+                        onClick = {
+                            sortBy = "added"
+                            sortExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Alphabetical A-Z") },
+                        onClick = {
+                            sortBy = "alpha"
+                            sortExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Highest Rated") },
+                        onClick = {
+                            sortBy = "rating"
+                            sortExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // Hot-Platform Horizontal Ribbon Filter
+        val filterProviders = remember(allProviders) { allProviders.filter { it.isActive || it.costPerMonth == 0.0 } }
+        if (filterProviders.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Services:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+
+                FilterChip(
+                    selected = selectedPlatformId == null,
+                    onClick = { selectedPlatformId = null },
+                    label = { Text("All Platforms", fontSize = 11.sp) }
+                )
+
+                filterProviders.forEach { provider ->
+                    FilterChip(
+                        selected = selectedPlatformId == provider.id,
+                        onClick = {
+                            selectedPlatformId = if (selectedPlatformId == provider.id) null else provider.id
+                        },
+                        label = { Text(provider.name, fontSize = 11.sp) }
+                    )
+                }
+            }
+        }
+
         // Filter Selection Pills + Sync button
         Row(
             modifier = Modifier
@@ -307,7 +511,7 @@ fun WatchlistTabContent(
             }
         }
 
-        if (filteredItems.isEmpty()) {
+        if (processedItems.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -347,12 +551,13 @@ fun WatchlistTabContent(
                     .weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(filteredItems, key = { it.id }) { item ->
+                items(processedItems, key = { it.id }) { item ->
                     MediaItemCard(
                         item = item,
                         allProviders = allProviders,
                         onWatchClick = { onWatchClick(item) },
-                        onDeleteClick = { onDeleteClick(item) }
+                        onDeleteClick = { onDeleteClick(item) },
+                        onMovieClick = { onMovieClick(item) }
                     )
                 }
             }
@@ -365,7 +570,8 @@ fun MediaItemCard(
     item: MediaItem,
     allProviders: List<StreamingProvider>,
     onWatchClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onMovieClick: () -> Unit
 ) {
     val activeSubscribedIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -374,6 +580,7 @@ fun MediaItemCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onMovieClick() }
             .testTag("media_item_${item.id}"),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
@@ -1264,100 +1471,447 @@ fun ProviderSelector(
 }
 
 // ==========================================
-// COMPOSABLE: Settings Screen
+// COMPOSABLE: Settings Dialog
 // ==========================================
 @Composable
-fun SettingsTabContent(
+fun SettingsDialog(
+    allProviders: List<StreamingProvider>,
+    onProviderToggle: (String, Boolean) -> Unit,
     tmdbApiKey: String,
-    onSaveTmdbApiKey: (String) -> Unit
+    onSaveTmdbApiKey: (String) -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
-    var keyInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
-    var showKey by remember { mutableStateOf(false) }
-    val readmeText = remember {
-        try {
-            context.assets.open("README.md").bufferedReader().readText()
-        } catch (e: Exception) {
-            "README not found."
-        }
-    }
+    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: TMDB API Key & About
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        // API Key Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    "TMDB API Key",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Required for real streaming availability data. Get your free key at themoviedb.org/settings/api",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-                OutlinedTextField(
-                    value = keyInput,
-                    onValueChange = { keyInput = it },
-                    label = { Text("TMDB API Key") },
-                    placeholder = { Text("Paste your key here") },
-                    singleLine = true,
-                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { showKey = !showKey }) {
-                            Icon(
-                                imageVector = if (showKey) Icons.Default.Clear else Icons.Default.Search,
-                                contentDescription = if (showKey) "Hide key" else "Show key"
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().testTag("settings_tmdb_api_key_input")
-                )
-                Button(
-                    onClick = { onSaveTmdbApiKey(keyInput) },
-                    modifier = Modifier.fillMaxWidth().testTag("settings_save_api_key"),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Save API Key")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Settings", fontWeight = FontWeight.Bold)
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close Settings")
                 }
             }
-        }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 500.dp)
+            ) {
+                TabRow(
+                    selectedTabIndex = activeSubTab,
+                    containerColor = Color.Transparent,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                ) {
+                    Tab(
+                        selected = activeSubTab == 0,
+                        onClick = { activeSubTab = 0 },
+                        text = { Text("Subscriptions", fontSize = 12.sp) }
+                    )
+                    Tab(
+                        selected = activeSubTab == 1,
+                        onClick = { activeSubTab = 1 },
+                        text = { Text("TMDB Key & About", fontSize = 12.sp) }
+                    )
+                }
 
-        // README Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            )
+                when (activeSubTab) {
+                    0 -> {
+                        val scrollState = rememberScrollState()
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                        ) {
+                            Text(
+                                "Manage Subscriptions",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Toggle active services you currently pay for. Free services (Tubi, Freevee, Pluto TV) are free and enabled by default.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            allProviders.forEach { provider ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = provider.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = if (provider.costPerMonth > 0) "$${provider.costPerMonth}/mo" else "Free Platform ($0.0)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                        Switch(
+                                            checked = provider.isActive,
+                                            onCheckedChange = { onProviderToggle(provider.id, it) },
+                                            modifier = Modifier.testTag("dialog_switch_${provider.id}")
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    1 -> {
+                        val context = LocalContext.current
+                        var keyInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
+                        var showKey by remember { mutableStateOf(false) }
+                        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                        val readmeText = remember {
+                            try {
+                                context.assets.open("README.md").bufferedReader().readText()
+                            } catch (e: Exception) {
+                                "README file not found."
+                            }
+                        }
+                        val scrollState = rememberScrollState()
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                        ) {
+                            Text(
+                                "The Movie Database Integration",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Streaming availability check matches actual flatrate, free, and ad-supported platforms via the TMDB API.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            // Status Badge
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            ) {
+                                val isConfigured = tmdbApiKey.isNotEmpty() && tmdbApiKey != "MY_TMDB_API_KEY"
+                                Icon(
+                                    imageVector = if (isConfigured) Icons.Default.Check else Icons.Default.Warning,
+                                    contentDescription = null,
+                                    tint = if (isConfigured) Color(0xFF4CAF50) else Color(0xFFFF9800),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isConfigured) "Key Status: Configured ✓" else "Key Status: Disconnected ⚠",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isConfigured) Color(0xFF4CAF50) else Color(0xFFFF9800)
+                                )
+                            }
+
+                            Button(
+                                onClick = { uriHandler.openUri("https://www.themoviedb.org/settings/api") },
+                                modifier = Modifier.fillMaxWidth().testTag("get_key_link_button"),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Get TMDB API Key Link", fontSize = 12.sp)
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            OutlinedTextField(
+                                value = keyInput,
+                                onValueChange = { keyInput = it },
+                                label = { Text("TMDB API Key") },
+                                placeholder = { Text("Paste key here") },
+                                singleLine = true,
+                                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showKey = !showKey }) {
+                                        Icon(
+                                            imageVector = if (showKey) Icons.Default.Clear else Icons.Default.Search,
+                                            contentDescription = if (showKey) "Hide key" else "Show key"
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth().testTag("dialog_settings_tmdb_api_key_input")
+                            )
+
+                            Button(
+                                onClick = {
+                                    onSaveTmdbApiKey(keyInput)
+                                },
+                                modifier = Modifier.fillMaxWidth().testTag("dialog_settings_save_api_key"),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save TMDB Key")
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            Text(
+                                "About & Setup Guide",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            
+                            Text(
+                                text = readmeText,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {}
+    )
+}
+
+// ==========================================
+// COMPOSABLE: Movie Details Bottom Sheet
+// ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MovieDetailsBottomSheet(
+    item: MediaItem,
+    allProviders: List<StreamingProvider>,
+    onDismiss: () -> Unit,
+    onWatchClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        modifier = Modifier.testTag("movie_details_bottom_sheet")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "About & Setup Guide",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                HorizontalDivider()
-                Text(
-                    text = readmeText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag("settings_readme_text")
-                )
+            // Row with poster and titles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                if (!item.imageUrl.isNullOrEmpty()) {
+                    coil.compose.AsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = "Movie Poster",
+                        modifier = Modifier
+                            .size(width = 110.dp, height = 160.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (item.rating != null && item.rating > 0.0) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Rating",
+                                tint = Color(0xFFFFD700),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "${String.format("%.1f", item.rating)}/10",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val statusLabel = when (item.status) {
+                        MediaStatus.PENDING_METADATA.name -> "Matching TMDB..."
+                        MediaStatus.WATCHLIST.name -> "In Watchlist"
+                        MediaStatus.INTENDING_TO_WATCH.name -> "Watching Now"
+                        MediaStatus.WATCHED.name -> "Watched!"
+                        else -> item.status
+                    }
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ) {
+                        Text(
+                            text = statusLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            // Stream availability
+            Text(
+                text = "Currently Available On:",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            val providers = item.providersList
+            if (providers.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Not streaming on any tracked subscriptions or free channels.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    providers.forEach { pId ->
+                        val provider = allProviders.find { it.id == pId }
+                        val isSubscribed = provider?.isActive == true
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSubscribed) {
+                                MaterialTheme.colorScheme.primaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant
+                            },
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isSubscribed) Icons.Default.Check else Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = if (isSubscribed) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = provider?.name ?: pId.capitalize(),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSubscribed) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Movie Plot / Overview
+            Text(
+                text = "Storyline / Overview",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Text(
+                text = item.overview ?: "No synopsis description fetched for this film.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 20.sp
+            )
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+            // Action Items
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Letterboxd link if available
+                if (!item.sharedUrl.isNullOrEmpty()) {
+                    OutlinedButton(
+                        onClick = { uriHandler.openUri(item.sharedUrl) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("View Source", fontSize = 12.sp)
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        onDismiss()
+                        onWatchClick()
+                    },
+                    modifier = Modifier.weight(1.2f).testTag("detail_watch_now_button"),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Watch Now", fontSize = 12.sp)
+                }
+
+                IconButton(
+                    onClick = {
+                        onDismiss()
+                        onDeleteClick()
+                    },
+                    modifier = Modifier.size(48.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete title")
+                }
             }
         }
     }

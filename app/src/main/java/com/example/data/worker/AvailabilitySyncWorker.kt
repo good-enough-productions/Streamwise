@@ -85,9 +85,14 @@ class AvailabilitySyncWorker(
 
                         // 2. Fetch Providers for TMDB Movie ID
                         val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(match.id, apiKey)
-                        val usProviders = providerResponse.results?.get("US")?.flatrate
-                        if (usProviders != null) {
-                            syncedProviders = mapTmdbProvidersToLocal(usProviders)
+                        val usCountry = providerResponse.results?.get("US")
+                        val usProvidersList = mutableListOf<com.example.data.remote.TmdbProvider>()
+                        usCountry?.flatrate?.let { usProvidersList.addAll(it) }
+                        usCountry?.free?.let { usProvidersList.addAll(it) }
+                        usCountry?.ads?.let { usProvidersList.addAll(it) }
+
+                        if (usProvidersList.isNotEmpty()) {
+                            syncedProviders = mapTmdbProvidersToLocal(usProvidersList)
                         } else {
                             syncedProviders = null
                         }
@@ -131,6 +136,9 @@ class AvailabilitySyncWorker(
                 name.contains("disney") -> localIds.add("disney")
                 name.contains("amazon") || name.contains("prime video") -> localIds.add("prime")
                 name.contains("apple tv") -> localIds.add("apple")
+                name.contains("tubi") -> localIds.add("tubi")
+                name.contains("freevee") -> localIds.add("freevee")
+                name.contains("pluto") -> localIds.add("pluto")
             }
         }
         val result = localIds.distinct().joinToString(",")

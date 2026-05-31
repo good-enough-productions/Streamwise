@@ -73,7 +73,10 @@ abstract class AppDatabase : RoomDatabase() {
                 StreamingProvider("max", "Max (HBO)", costPerMonth = 15.99, isActive = true),
                 StreamingProvider("disney", "Disney+", costPerMonth = 13.99, isActive = true),
                 StreamingProvider("prime", "Prime Video", costPerMonth = 8.99, isActive = false),
-                StreamingProvider("apple", "Apple TV+", costPerMonth = 9.99, isActive = false)
+                StreamingProvider("apple", "Apple TV+", costPerMonth = 9.99, isActive = false),
+                StreamingProvider("tubi", "Tubi", costPerMonth = 0.0, isActive = true),
+                StreamingProvider("freevee", "Freevee", costPerMonth = 0.0, isActive = true),
+                StreamingProvider("pluto", "Pluto TV", costPerMonth = 0.0, isActive = true)
             )
             dao.insertStreamingProviders(providers)
 
