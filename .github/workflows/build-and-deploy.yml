@@ -1,0 +1,83 @@
+name: Build & Deploy to Phone
+
+# Runs on every push to main, or manually from the Actions tab
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    # IMPORTANT: This must run on your local Windows machine (self-hosted runner)
+    # because ADB needs to reach your phone on the local Wi-Fi network.
+    # See README.md → "CI/CD Setup" for runner installation instructions.
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Build setup ─────────────────────────────────────────────────────────
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Decode debug keystore
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String((Get-Content debug.keystore.base64 -Raw).Trim())
+          [IO.File]::WriteAllBytes("$PWD\debug.keystore", $bytes)
+
+      - name: Create .env file
+        shell: pwsh
+        run: |
+          "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" | Set-Content .env
+          "TMDB_API_KEY=${{ secrets.TMDB_API_KEY }}"    | Add-Content .env
+
+      # ── Compile ──────────────────────────────────────────────────────────────
+
+      - name: Build debug APK
+        shell: pwsh
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 7
+
+      # ── Deploy via ADB wireless ──────────────────────────────────────────────
+      # Requires Android SDK platform-tools on PATH (installed with Android Studio).
+      # Phone must be paired once via: Settings → Developer Options → Wireless debugging
+      # Then stored as PHONE_IP (e.g. 192.168.1.42) and ADB_PORT (e.g. 5555) in
+      # repo Settings → Variables → Actions (not Secrets — these aren't sensitive).
+
+      - name: Connect to phone via ADB wireless
+        shell: pwsh
+        run: |
+          adb connect "${{ vars.PHONE_IP }}:${{ vars.ADB_PORT }}"
+          # Give ADB a moment to establish the connection
+          Start-Sleep -Seconds 3
+          $devices = adb devices
+          Write-Output $devices
+          if ($devices -notmatch "${{ vars.PHONE_IP }}") {
+            Write-Error "Phone not found. Check PHONE_IP / ADB_PORT variables and that wireless debugging is enabled."
+            exit 1
+          }
+
+      - name: Install APK on phone
+        shell: pwsh
+        run: |
+          adb -s "${{ vars.PHONE_IP }}:${{ vars.ADB_PORT }}" install -r `
+            app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Launch app on phone
+        shell: pwsh
+        run: |
+          adb -s "${{ vars.PHONE_IP }}:${{ vars.ADB_PORT }}" shell am start `
+            -n "com.aistudio.streammanager.qpwoei/com.example.MainActivity"
