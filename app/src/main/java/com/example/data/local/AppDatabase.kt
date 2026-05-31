@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,6 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
+                .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
                 INSTANCE = instance
