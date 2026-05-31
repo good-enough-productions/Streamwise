@@ -30,7 +30,9 @@ data class TmdbWatchProvidersResponse(
 @JsonClass(generateAdapter = true)
 data class CountryProviders(
     @Json(name = "link") val link: String? = null,
-    @Json(name = "flatrate") val flatrate: List<TmdbProvider>? = null
+    @Json(name = "flatrate") val flatrate: List<TmdbProvider>? = null,
+    @Json(name = "free") val free: List<TmdbProvider>? = null,
+    @Json(name = "ads") val ads: List<TmdbProvider>? = null
 )
 
 @JsonClass(generateAdapter = true)
