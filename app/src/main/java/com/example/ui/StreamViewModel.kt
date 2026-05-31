@@ -1,23 +1,31 @@
 package com.example.ui
 
+import android.app.Application
 import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.work.Constraints
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.example.data.local.UserPreferencesManager
 import com.example.data.local.ProviderUsageStats
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
 import com.example.data.model.StreamingProvider
 import com.example.data.repository.MediaRepository
+import com.example.data.worker.AvailabilitySyncWorker
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
 
 class StreamViewModel(
+    application: Application,
     private val repository: MediaRepository,
     private val userPreferences: UserPreferencesManager
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     // --- State Expositions ---
 
@@ -215,6 +223,17 @@ class StreamViewModel(
         _statusMessage.value = null
     }
 
+    fun triggerImmediateSync() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .build()
+        val request = OneTimeWorkRequestBuilder<AvailabilitySyncWorker>()
+            .setConstraints(constraints)
+            .build()
+        WorkManager.getInstance(getApplication()).enqueue(request)
+        _statusMessage.value = "Fetching streaming availability from TMDB\u2026"
+    }
+
     fun deleteItem(item: MediaItem) {
         viewModelScope.launch {
             repository.deleteMediaItem(item)
@@ -280,13 +299,14 @@ class StreamViewModel(
  * Custom Factory allowing constructor injection for MediaRepository without generating runtime build/Hilt crashes.
  */
 class StreamViewModelFactory(
+    private val application: Application,
     private val repository: MediaRepository,
     private val userPreferences: UserPreferencesManager
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(StreamViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return StreamViewModel(repository, userPreferences) as T
+            return StreamViewModel(application, repository, userPreferences) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
