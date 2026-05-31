@@ -57,6 +57,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        override fun onDestructiveMigration(db: SupportSQLiteDatabase) {
+            super.onDestructiveMigration(db)
+            INSTANCE?.let { database ->
+                scope.launch(Dispatchers.IO) {
+                    populateInitialProvidersAndLetterboxdData(database.mediaDao())
+                }
+            }
+        }
+
         private suspend fun populateInitialProvidersAndLetterboxdData(dao: MediaDao) {
             val providers = listOf(
                 StreamingProvider("netflix", "Netflix", costPerMonth = 15.49, isActive = true),
