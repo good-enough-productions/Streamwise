@@ -174,7 +174,8 @@ fun HomeScreen(
                         filterOnlyMyServices = filterOnlyMyServices,
                         onFilterToggle = { filterOnlyMyServices = it },
                         onWatchClick = { viewModel.startIntendingToWatch(it) },
-                        onDeleteClick = { viewModel.deleteItem(it) }
+                        onDeleteClick = { viewModel.deleteItem(it) },
+                        onSyncClick = { viewModel.triggerImmediateSync() }
                     )
                     1 -> MonthlyRoiContent(
                         monthlyStats = monthlyStats,
@@ -237,7 +238,8 @@ fun WatchlistTabContent(
     filterOnlyMyServices: Boolean,
     onFilterToggle: (Boolean) -> Unit,
     onWatchClick: (MediaItem) -> Unit,
-    onDeleteClick: (MediaItem) -> Unit
+    onDeleteClick: (MediaItem) -> Unit,
+    onSyncClick: () -> Unit = {}
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -264,7 +266,7 @@ fun WatchlistTabContent(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Filter Selection Pills
+        // Filter Selection Pills + Sync button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -287,6 +289,22 @@ fun WatchlistTabContent(
                 leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 modifier = Modifier.testTag("filter_subscribed_chip")
             )
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            IconButton(
+                onClick = onSyncClick,
+                modifier = Modifier
+                    .size(36.dp)
+                    .testTag("sync_providers_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Refresh,
+                    contentDescription = "Sync streaming availability from TMDB",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
 
         if (filteredItems.isEmpty()) {

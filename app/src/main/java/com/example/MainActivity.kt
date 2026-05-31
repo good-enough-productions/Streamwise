@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
     // Instantiate Viewmodel using Constructor Injection via modern factory linked to our AppContainer
     private val viewModel: StreamViewModel by viewModels {
         val container = (application as StreamApp).container
-        StreamViewModelFactory(container.mediaRepository, container.userPreferences)
+        StreamViewModelFactory(application, container.mediaRepository, container.userPreferences)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
