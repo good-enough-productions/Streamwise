@@ -45,8 +45,17 @@ class AvailabilitySyncWorker(
 
             Log.d(TAG, "Found ${pendingOrActiveItems.size} items to sync.")
 
-            val apiKey = com.example.BuildConfig.TMDB_API_KEY
+            // Prefer runtime-saved key; fall back to build-time key
+            val userPrefs = app?.container?.userPreferences
+            val runtimeKey = userPrefs?.tmdbApiKey ?: ""
+            val buildTimeKey = com.example.BuildConfig.TMDB_API_KEY
+            val apiKey = if (runtimeKey.isNotEmpty()) runtimeKey else buildTimeKey
             val isRealApiKeyConfigured = apiKey.isNotEmpty() && apiKey != "MY_TMDB_API_KEY"
+
+            if (!isRealApiKeyConfigured) {
+                Log.d(TAG, "No TMDB API key configured. Skipping sync — add your key in Settings.")
+                return Result.success()
+            }
 
             for (item in pendingOrActiveItems) {
                 // Rate Limiting Optimization: Wait 1 second between calls to protect TMDB API rate-limit of 40 reqs/10s.
@@ -57,42 +66,35 @@ class AvailabilitySyncWorker(
                     return Result.retry()
                 }
 
-                var syncedProviders: String? = null
+                var syncedProviders: String? = item.providerIds
                 var syncedOverview: String? = item.overview
                 var syncedRating: Double? = item.rating
                 var syncedPosterUrl: String? = item.imageUrl
                 var syncedTmdbId: String? = item.tmdbId
 
-                if (isRealApiKeyConfigured) {
-                    try {
-                        Log.d(TAG, "Fetching real metadata from TMDB for: ${item.title}")
-                        // 1. Search for TMDB movie ID
-                        val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
-                        val match = searchResponse.results.firstOrNull()
-                        if (match != null) {
-                            syncedTmdbId = match.id.toString()
-                            syncedOverview = match.overview ?: item.overview
-                            syncedRating = match.voteAverage ?: item.rating
-                            syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+                try {
+                    Log.d(TAG, "Fetching real metadata from TMDB for: ${item.title}")
+                    // 1. Search for TMDB movie ID
+                    val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
+                    val match = searchResponse.results.firstOrNull()
+                    if (match != null) {
+                        syncedTmdbId = match.id.toString()
+                        syncedOverview = match.overview ?: item.overview
+                        syncedRating = match.voteAverage ?: item.rating
+                        syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
 
-                            // 2. Fetch Providers for TMDB Movie ID
-                            val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(match.id, apiKey)
-                            val usProviders = providerResponse.results?.get("US")?.flatrate
-                            if (usProviders != null) {
-                                syncedProviders = mapTmdbProvidersToLocal(usProviders)
-                            }
+                        // 2. Fetch Providers for TMDB Movie ID
+                        val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(match.id, apiKey)
+                        val usProviders = providerResponse.results?.get("US")?.flatrate
+                        if (usProviders != null) {
+                            syncedProviders = mapTmdbProvidersToLocal(usProviders)
+                        } else {
+                            syncedProviders = null
                         }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed calling TMDB API for \"${item.title}\": ${e.message}. Using fallback lookup.", e)
                     }
-                }
-
-                if (syncedProviders == null) {
-                    // Fallback to simulation/mock lookup if API is offline or key is unconfigured
-                    syncedProviders = simulateTmdbWatchProviderLookUp(item.title)
-                    if (syncedOverview.isNullOrEmpty()) {
-                        syncedOverview = "Discovered streaming options for \"${item.title}\" via auto fallback lookup curation."
-                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed calling TMDB API for \"${item.title}\": ${e.message}. Skipping this item.", e)
+                    continue
                 }
 
                 // Update the Room database record with retrieved availability IDs and promote state
@@ -118,7 +120,7 @@ class AvailabilitySyncWorker(
         }
     }
 
-    private fun mapTmdbProvidersToLocal(providers: List<com.example.data.remote.TmdbProvider>): String {
+    private fun mapTmdbProvidersToLocal(providers: List<com.example.data.remote.TmdbProvider>): String? {
         val localIds = mutableListOf<String>()
         for (provider in providers) {
             val name = provider.providerName.lowercase()
@@ -131,27 +133,7 @@ class AvailabilitySyncWorker(
                 name.contains("apple tv") -> localIds.add("apple")
             }
         }
-        return localIds.distinct().joinToString(",")
-    }
-
-    /**
-     * Simulates TMDB API watch-provider endpoint matching based on common movie catalogs.
-     * In a full-network implementation, we call the TMDB Search API followed by /movie/{id}/watch/providers.
-     */
-    private fun simulateTmdbWatchProviderLookUp(title: String): String {
-        val titleLower = title.lowercase()
-        return when {
-            titleLower.contains("white lotus") || titleLower.contains("hbo") || titleLower.contains("thrones") || titleLower.contains("wired") -> "max"
-            titleLower.contains("stranger") || titleLower.contains("crown") || titleLower.contains("squid") || titleLower.contains("f1") -> "netflix"
-            titleLower.contains("shōgun") || titleLower.contains("shogun") || titleLower.contains("bear") || titleLower.contains("under") -> "hulu,disney"
-            titleLower.contains("mandalorian") || titleLower.contains("star wars") || titleLower.contains("marvel") -> "disney"
-            titleLower.contains("boys") || titleLower.contains("rings") || titleLower.contains("reacher") -> "prime"
-            titleLower.contains("lasso") || titleLower.contains("morning") || titleLower.contains("severance") -> "apple"
-            else -> {
-                // Return a mix of popular services randomly as a placeholder to show dynamic filters for custom additions
-                val allPossibilities = listOf("netflix", "hulu", "max", "disney")
-                allPossibilities.shuffled().take(2).joinToString(",")
-            }
-        }
+        val result = localIds.distinct().joinToString(",")
+        return if (result.isEmpty()) null else result
     }
 }

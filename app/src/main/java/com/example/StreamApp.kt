@@ -6,6 +6,7 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.data.local.AppDatabase
+import com.example.data.local.UserPreferencesManager
 import com.example.data.repository.MediaRepository
 import com.example.data.worker.AvailabilitySyncWorker
 import kotlinx.coroutines.CoroutineScope
@@ -19,6 +20,7 @@ import java.util.concurrent.TimeUnit
 class AppContainer(private val context: Application, private val scope: CoroutineScope) {
     val database: AppDatabase by lazy { AppDatabase.getDatabase(context, scope) }
     val mediaRepository: MediaRepository by lazy { MediaRepository(database.mediaDao()) }
+    val userPreferences: UserPreferencesManager by lazy { UserPreferencesManager(context) }
 }
 
 class StreamApp : Application() {

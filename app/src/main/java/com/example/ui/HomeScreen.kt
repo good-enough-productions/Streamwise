@@ -29,6 +29,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,9 +54,10 @@ fun HomeScreen(
     val monthlyStats by viewModel.monthlyROIStats.collectAsState()
     val checkInItem by viewModel.activeCheckInItem.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
+    val tmdbApiKey by viewModel.tmdbApiKey.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Subscriptions ROI, 2: Manage Services
+    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Budget ROI, 2: My Services, 3: Settings
     var filterOnlyMyServices by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
 
@@ -145,6 +151,13 @@ fun HomeScreen(
                     icon = { Icon(Icons.Default.Settings, contentDescription = "My services tab") },
                     modifier = Modifier.testTag("tab_providers")
                 )
+                Tab(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    text = { Text("Settings") },
+                    icon = { Icon(Icons.Default.Info, contentDescription = "Settings tab") },
+                    modifier = Modifier.testTag("tab_settings")
+                )
             }
 
             AnimatedContent(
@@ -170,6 +183,10 @@ fun HomeScreen(
                     2 -> ManageServicesTabContent(
                         allProviders = allProviders,
                         onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) }
+                    )
+                    3 -> SettingsTabContent(
+                        tmdbApiKey = tmdbApiKey,
+                        onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) }
                     )
                 }
             }
@@ -1223,6 +1240,106 @@ fun ProviderSelector(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPOSABLE: Settings Screen
+// ==========================================
+@Composable
+fun SettingsTabContent(
+    tmdbApiKey: String,
+    onSaveTmdbApiKey: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var keyInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
+    var showKey by remember { mutableStateOf(false) }
+    val readmeText = remember {
+        try {
+            context.assets.open("README.md").bufferedReader().readText()
+        } catch (e: Exception) {
+            "README not found."
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        // API Key Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "TMDB API Key",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Required for real streaming availability data. Get your free key at themoviedb.org/settings/api",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                OutlinedTextField(
+                    value = keyInput,
+                    onValueChange = { keyInput = it },
+                    label = { Text("TMDB API Key") },
+                    placeholder = { Text("Paste your key here") },
+                    singleLine = true,
+                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showKey = !showKey }) {
+                            Icon(
+                                imageVector = if (showKey) Icons.Default.Clear else Icons.Default.Search,
+                                contentDescription = if (showKey) "Hide key" else "Show key"
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag("settings_tmdb_api_key_input")
+                )
+                Button(
+                    onClick = { onSaveTmdbApiKey(keyInput) },
+                    modifier = Modifier.fillMaxWidth().testTag("settings_save_api_key"),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Save API Key")
+                }
+            }
+        }
+
+        // README Section
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "About & Setup Guide",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                HorizontalDivider()
+                Text(
+                    text = readmeText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("settings_readme_text")
+                )
             }
         }
     }
