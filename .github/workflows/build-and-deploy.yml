@@ -52,32 +52,46 @@ jobs:
           retention-days: 7
 
       # ── Deploy via ADB wireless ──────────────────────────────────────────────
-      # Requires Android SDK platform-tools on PATH (installed with Android Studio).
-      # Phone must be paired once via: Settings → Developer Options → Wireless debugging
-      # Then stored as PHONE_IP (e.g. 192.168.1.42) and ADB_PORT (e.g. 5555) in
-      # repo Settings → Variables → Actions (not Secrets — these aren't sensitive).
+      # The self-hosted runner is your local Windows PC, which stays paired to
+      # your phone via Android Wireless Debugging (mDNS/TLS). No manual IP
+      # variables needed — ADB discovers the device automatically.
+      # One-time setup: enable Wireless Debugging on phone and run:
+      #   adb pair <ip>:<pair-port>   (enter the 6-digit code shown on screen)
 
-      - name: Connect to phone via ADB wireless
+      - name: Find ADB and verify phone is connected
         shell: pwsh
         run: |
-          adb connect "${{ vars.PHONE_IP }}:${{ vars.ADB_PORT }}"
-          # Give ADB a moment to establish the connection
-          Start-Sleep -Seconds 3
-          $devices = adb devices
+          # Locate ADB from ANDROID_HOME or the well-known Android Studio path
+          $adb = if ($env:ANDROID_HOME) {
+            Join-Path $env:ANDROID_HOME "platform-tools\adb.exe"
+          } else {
+            "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
+          }
+          if (-not (Test-Path $adb)) { Write-Error "adb.exe not found at $adb"; exit 1 }
+          Write-Output "Using ADB: $adb"
+          echo "ADB_PATH=$adb" >> $env:GITHUB_ENV
+
+          $devices = & $adb devices
           Write-Output $devices
-          if ($devices -notmatch "${{ vars.PHONE_IP }}") {
-            Write-Error "Phone not found. Check PHONE_IP / ADB_PORT variables and that wireless debugging is enabled."
+          # Expect at least one non-header device line
+          $connected = ($devices -split "`n") | Where-Object { $_ -match "device$" }
+          if (-not $connected) {
+            Write-Error "No phone found. Ensure Wireless Debugging is on and the phone is on the same network."
             exit 1
           }
+          # Grab the serial of the first connected device for subsequent steps
+          $serial = ($connected[0] -split "\s+")[0].Trim()
+          Write-Output "Deploying to: $serial"
+          echo "ADB_SERIAL=$serial" >> $env:GITHUB_ENV
 
       - name: Install APK on phone
         shell: pwsh
         run: |
-          adb -s "${{ vars.PHONE_IP }}:${{ vars.ADB_PORT }}" install -r `
+          & "$env:ADB_PATH" -s "$env:ADB_SERIAL" install -r `
             app/build/outputs/apk/debug/app-debug.apk
 
       - name: Launch app on phone
         shell: pwsh
         run: |
-          adb -s "${{ vars.PHONE_IP }}:${{ vars.ADB_PORT }}" shell am start `
+          & "$env:ADB_PATH" -s "$env:ADB_SERIAL" shell am start `
             -n "com.aistudio.streammanager.qpwoei/com.example.MainActivity"

@@ -51,18 +51,16 @@ Because ADB needs to reach your phone over local Wi-Fi, the workflow runs on a *
    adb connect 192.168.1.42:5555          # confirm it says "connected"
    ```
 
-### 3 · Add repo variables & secrets
+### 3 · Add repo secrets
 
-In your repo → **Settings → Secrets and variables → Actions**:
+In your repo → **Settings → Secrets and variables → Actions → Secrets**:
 
-| Type | Name | Value |
-|------|------|-------|
-| **Variable** | `PHONE_IP` | your phone's local IP, e.g. `192.168.1.42` |
-| **Variable** | `ADB_PORT` | ADB port, usually `5555` |
-| **Secret** | `GEMINI_API_KEY` | your Gemini API key |
-| **Secret** | `TMDB_API_KEY` | your TMDB API key |
+| Name | Value |
+|------|-------|
+| `GEMINI_API_KEY` | your Gemini API key |
+| `TMDB_API_KEY` | your TMDB API key |
 
-> Variables (IP/port) are non-sensitive so they live under **Variables**, not Secrets.
+> No IP/port variables needed — the runner discovers your phone automatically via ADB wireless debugging (mDNS).
 
 ### 4 · Push and watch it deploy
 
