@@ -346,36 +346,86 @@ fun MediaItemCard(
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
+                // TMDB Poster image display
+                if (!item.imageUrl.isNullOrEmpty()) {
+                    coil.compose.AsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = "Poster artwork",
+                        modifier = Modifier
+                            .size(width = 65.dp, height = 95.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+
                 Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
                             text = item.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
-                        if (item.status == MediaStatus.PENDING_METADATA.name) {
-                            Badge(
-                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(start = 8.dp)
+
+                        IconButton(onClick = onDeleteClick, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Delete item",
+                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    // TMDB Rating Display if available
+                    if (item.rating != null && item.rating > 0.0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Rating",
+                                tint = Color(0xFFFFD700), // Gold
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = String.format("%.1f", item.rating),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    if (item.status == MediaStatus.PENDING_METADATA.name) {
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(10.dp))
-                                    Spacer(modifier = Modifier.width(3.dp))
-                                    Text("matching", fontSize = 9.sp)
-                                }
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(10.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("matching", fontSize = 9.sp)
                             }
                         }
                     }
@@ -391,18 +441,9 @@ fun MediaItemCard(
                         )
                     }
                 }
-
-                // Delete Action Button
-                IconButton(onClick = onDeleteClick) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Delete item",
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-                    )
-                }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -430,7 +471,8 @@ fun MediaItemCard(
                             )
                         }
                     } else {
-                        providers.forEach { pId ->
+                        // Limit display of providers to 3 to avoid overflow/wrapping bugs
+                        providers.take(3).forEach { pId ->
                             val fullProvider = allProviders.find { it.id == pId }
                             val isSubscribed = activeSubscribedIds.contains(pId)
 
@@ -460,17 +502,25 @@ fun MediaItemCard(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = fullProvider?.name ?: pId.capitalize(),
+                                        text = fullProvider?.name ?: pId.replaceFirstChar { it.uppercase() },
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (isSubscribed) {
                                             MaterialTheme.colorScheme.onPrimaryContainer
-                                        } else {
+                                         } else {
                                             MaterialTheme.colorScheme.outline
-                                        },
+                                         },
                                         fontWeight = if (isSubscribed) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
                             }
+                        }
+                        if (providers.size > 3) {
+                            Text(
+                                text = "+${providers.size - 3} more",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
                         }
                     }
                 }

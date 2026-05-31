@@ -26,6 +26,9 @@ interface MediaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMediaItem(item: MediaItem): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMediaItems(items: List<MediaItem>): List<Long>
+
     @Update
     suspend fun updateMediaItem(item: MediaItem)
 
@@ -34,6 +37,9 @@ interface MediaDao {
 
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMediaItemById(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWatchSessions(sessions: List<WatchSession>)
 
 
     // --- Streaming Providers Queries ---

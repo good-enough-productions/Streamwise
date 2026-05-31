@@ -45,6 +45,9 @@ class AvailabilitySyncWorker(
 
             Log.d(TAG, "Found ${pendingOrActiveItems.size} items to sync.")
 
+            val apiKey = com.example.BuildConfig.TMDB_API_KEY
+            val isRealApiKeyConfigured = apiKey.isNotEmpty() && apiKey != "MY_TMDB_API_KEY"
+
             for (item in pendingOrActiveItems) {
                 // Rate Limiting Optimization: Wait 1 second between calls to protect TMDB API rate-limit of 40 reqs/10s.
                 delay(1000)
@@ -54,17 +57,42 @@ class AvailabilitySyncWorker(
                     return Result.retry()
                 }
 
-                // Simulate/Mock Retrofit TMDB API call to fetch watch providers
-                // In production, this would make network calls to:
-                // 1. Search DB for TMDB ID: retrofittedTmdbApi.searchMulti(item.title)
-                // 2. Fetch Providers: retrofittedTmdbApi.getWatchProviders(tmdbId, apiKey)
-                // Map to local provider IDs (e.g. netflix, hulu, max, disney, etc.)
-                
-                val syncedProviders = simulateTmdbWatchProviderLookUp(item.title)
-                val syncedOverview = if (item.overview.isNullOrEmpty()) {
-                    "Discovered streaming option details for \"${item.title}\" via TMDB automatic background curation."
-                } else {
-                    item.overview
+                var syncedProviders: String? = null
+                var syncedOverview: String? = item.overview
+                var syncedRating: Double? = item.rating
+                var syncedPosterUrl: String? = item.imageUrl
+                var syncedTmdbId: String? = item.tmdbId
+
+                if (isRealApiKeyConfigured) {
+                    try {
+                        Log.d(TAG, "Fetching real metadata from TMDB for: ${item.title}")
+                        // 1. Search for TMDB movie ID
+                        val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
+                        val match = searchResponse.results.firstOrNull()
+                        if (match != null) {
+                            syncedTmdbId = match.id.toString()
+                            syncedOverview = match.overview ?: item.overview
+                            syncedRating = match.voteAverage ?: item.rating
+                            syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+
+                            // 2. Fetch Providers for TMDB Movie ID
+                            val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(match.id, apiKey)
+                            val usProviders = providerResponse.results?.get("US")?.flatrate
+                            if (usProviders != null) {
+                                syncedProviders = mapTmdbProvidersToLocal(usProviders)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed calling TMDB API for \"${item.title}\": ${e.message}. Using fallback lookup.", e)
+                    }
+                }
+
+                if (syncedProviders == null) {
+                    // Fallback to simulation/mock lookup if API is offline or key is unconfigured
+                    syncedProviders = simulateTmdbWatchProviderLookUp(item.title)
+                    if (syncedOverview.isNullOrEmpty()) {
+                        syncedOverview = "Discovered streaming options for \"${item.title}\" via auto fallback lookup curation."
+                    }
                 }
 
                 // Update the Room database record with retrieved availability IDs and promote state
@@ -72,6 +100,9 @@ class AvailabilitySyncWorker(
                     status = if (item.status == MediaStatus.PENDING_METADATA.name) MediaStatus.WATCHLIST.name else item.status,
                     providerIds = syncedProviders,
                     overview = syncedOverview,
+                    rating = syncedRating,
+                    imageUrl = syncedPosterUrl,
+                    tmdbId = syncedTmdbId,
                     updatedAt = System.currentTimeMillis()
                 )
 
@@ -85,6 +116,22 @@ class AvailabilitySyncWorker(
             Log.e(TAG, "Error in streaming availability sync: ${e.message}", e)
             return Result.retry()
         }
+    }
+
+    private fun mapTmdbProvidersToLocal(providers: List<com.example.data.remote.TmdbProvider>): String {
+        val localIds = mutableListOf<String>()
+        for (provider in providers) {
+            val name = provider.providerName.lowercase()
+            when {
+                name.contains("netflix") -> localIds.add("netflix")
+                name.contains("hulu") -> localIds.add("hulu")
+                name.contains("max") || name.contains("hbo") -> localIds.add("max")
+                name.contains("disney") -> localIds.add("disney")
+                name.contains("amazon") || name.contains("prime video") -> localIds.add("prime")
+                name.contains("apple tv") -> localIds.add("apple")
+            }
+        }
+        return localIds.distinct().joinToString(",")
     }
 
     /**
