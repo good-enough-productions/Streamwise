@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streamwise - Deep Review Documentation</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 960px; margin: 0 auto; padding: 20px; }
+        h1, h2, h3 { color: #2c3e50; }
+        h1 { border-bottom: 3px solid #2c3e50; padding-bottom: 10px; }
+        h2 { border-bottom: 1px solid #ddd; padding-bottom: 6px; margin-top: 0; }
+        code { background: #f4f4f4; padding: 2px 5px; border-radius: 4px; font-family: monospace; }
+        pre { background: #1e1e2e; color: #cdd6f4; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: monospace; font-size: 0.9em; }
+        .section { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .tag { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; margin-right: 5px; }
+        .tag.current  { background: #d4edda; color: #155724; }
+        .tag.backlog  { background: #fff3cd; color: #856404; }
+        .tag.broken   { background: #f8d7da; color: #721c24; }
+        .tag.fixed    { background: #cfe2ff; color: #084298; }
+        .tag.new      { background: #e2d9f3; color: #432874; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
+        th { background-color: #f2f2f2; font-weight: 600; }
+        .changelog-entry { border-left: 4px solid #2c3e50; padding: 10px 16px; margin-bottom: 12px; background: #fafafa; border-radius: 0 8px 8px 0; }
+        .changelog-entry h3 { margin: 0 0 6px 0; font-size: 1em; color: #2c3e50; }
+        .changelog-entry p  { margin: 0; font-size: 0.92em; color: #555; }
+        .commit-hash { font-family: monospace; font-size: 0.8em; background: #eee; padding: 2px 6px; border-radius: 4px; color: #444; }
+        .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; }
+        .alert.info    { background: #cfe2ff; border: 1px solid #9ec5fe; color: #084298; }
+        .alert.warning { background: #fff3cd; border: 1px solid #ffecb5; color: #664d03; }
+        .alert.success { background: #d1e7dd; border: 1px solid #a3cfbb; color: #0a3622; }
+    </style>
+</head>
+<body>
+    <h1>Streamwise — Deep Review Documentation</h1>
+    <p><em>Maximize Watch Hours. Minimize Spent.</em></p>
+    <p style="color:#666; font-size:0.9em;">Last updated: 2026-05-31 &mdash; Post AI Studio export &amp; full local fix session.</p>
+
+    <!-- ============================================================ -->
+    <div class="section">
+        <h2>How-to Guide</h2>
+        <ol>
+            <li><strong>Add Media:</strong> Tap the Floating Action Button (+) to manually add a show or movie to your watchlist, or share a link from IMDb, Letterboxd, or any other source directly to the app using the Android Share sheet.</li>
+            <li><strong>Sync Streaming Availability:</strong> Tap the refresh icon (↺) at the top of the Watchlist tab to immediately trigger a TMDB API lookup for every item in your queue. Real provider data (Netflix, Hulu, Max, etc.) will appear on each card once your TMDB API key is configured.</li>
+            <li><strong>Configure Your TMDB API Key:</strong> Navigate to the <em>Settings</em> tab and paste your key into the "TMDB API Key" field. This key is saved locally in SharedPreferences and used by the background worker.</li>
+            <li><strong>Manage Subscriptions:</strong> Navigate to the <em>My Services</em> tab to toggle your active subscriptions and set their monthly costs for ROI calculations.</li>
+            <li><strong>Start Watching:</strong> On the <em>Watchlist</em> tab, optionally filter titles by "Available on My Services". Tap <em>Watch</em> on any item to flag it as your active viewing intent.</li>
+            <li><strong>Log Sessions:</strong> Next time you open the app after marking an intent, it automatically prompts a check-in sheet. Log the session as Finished, Partial, or Something Else, along with duration.</li>
+            <li><strong>Analyze Budget ROI:</strong> Check the <em>Budget ROI</em> tab to see cost-per-hour for each subscription, with flagging for services under 3 hours/month of tracked use.</li>
+        </ol>
+    </div>
+
+    <!-- ============================================================ -->
+    <div class="section">
+        <h2>Core Tech Stack</h2>
+        <table>
+            <tr><th>Layer</th><th>Technology</th></tr>
+            <tr><td>Platform</td><td>Android (Kotlin, Min SDK 24, Target SDK 36)</td></tr>
+            <tr><td>UI Architecture</td><td>Jetpack Compose with Material 3 Design</td></tr>
+            <tr><td>App Architecture</td><td>MVVM + Clean Architecture Repository Pattern</td></tr>
+            <tr><td>Concurrency &amp; State</td><td>Kotlin Coroutines, StateFlow, ViewModelScope</td></tr>
+            <tr><td>Local Storage</td><td>Room Database — entities: <code>MediaItem</code>, <code>StreamingProvider</code>, <code>WatchSession</code></td></tr>
+            <tr><td>Background Processing</td><td>WorkManager (periodic + one-shot TMDB availability sync)</td></tr>
+            <tr><td>Networking</td><td>Retrofit 2 + OkHttp + Moshi (calling TMDB REST API)</td></tr>
+            <tr><td>Image Loading</td><td>Coil Compose (<code>AsyncImage</code> for TMDB poster artwork)</td></tr>
+            <tr><td>Build System</td><td>Gradle 9.3.1 + Android Gradle Plugin 9.1.1 (Kotlin DSL)</td></tr>
+            <tr><td>Wireless Deployment</td><td>ADB over TLS (Wi-Fi) with <code>deploy.ps1</code> helper script</td></tr>
+        </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <div class="section">
+        <h2>Capabilities: Current vs Backlog vs Broken</h2>
+        <table>
+            <tr>
+                <th>Feature</th>
+                <th>Status</th>
+                <th>Details</th>
+            </tr>
+            <tr>
+                <td>Watchlist &amp; Intent Logging</td>
+                <td><span class="tag current">Working</span></td>
+                <td>Add titles manually or via Share sheet. Foreground check-in prompt fires automatically on app resume when an item is flagged <em>INTENDING_TO_WATCH</em>.</td>
+            </tr>
+            <tr>
+                <td>ROI Analyzer &amp; Budgeting</td>
+                <td><span class="tag current">Working</span></td>
+                <td>Cost-per-hour per provider calculated from <code>WatchSession</code> records. Highlights subscriptions below 3 hours/month as cancellation candidates.</td>
+            </tr>
+            <tr>
+                <td>Quick Share Intent (IMDb, Letterboxd, etc.)</td>
+                <td><span class="tag current">Working</span></td>
+                <td>Captures <code>ACTION_SEND</code> intent, parses title/URL from shared text, inserts under <code>PENDING_METADATA</code> status for background enrichment.</td>
+            </tr>
+            <tr>
+                <td>TMDB Metadata + Streaming Availability</td>
+                <td><span class="tag fixed">Fixed this session</span></td>
+                <td>Previously shipped with a mock function that hard-coded fake provider strings. Replaced with real Retrofit calls to <code>search/movie</code> and <code>movie/{id}/watch/providers</code>. Requires a user-supplied TMDB API key in Settings. Results persist to Room; shown as badge chips on each watchlist card.</td>
+            </tr>
+            <tr>
+                <td>Immediate Sync Button (↺)</td>
+                <td><span class="tag new">Added this session</span></td>
+                <td>One-tap <code>IconButton</code> in the Watchlist tab header enqueues a one-shot <code>AvailabilitySyncWorker</code> via WorkManager. Shows a status snackbar immediately on tap.</td>
+            </tr>
+            <tr>
+                <td>Settings Tab (TMDB API Key)</td>
+                <td><span class="tag current">Working</span></td>
+                <td>Runtime key stored in <code>SharedPreferences</code> via <code>UserPreferencesManager</code>. Worker picks up runtime key over build-time key automatically.</td>
+            </tr>
+            <tr>
+                <td>CSV Seed Data (Letterboxd Import)</td>
+                <td><span class="tag fixed">Fixed this session</span></td>
+                <td>Watchlist (33 items) and watch history (285 items) are seeded from bundled <code>assets/watchlist.csv</code> and <code>assets/watched_history.csv</code> on first launch. Database version bump and the <code>onDestructiveMigration</code> override now guarantee re-seeding survives schema wipes without data loss.</td>
+            </tr>
+            <tr>
+                <td>Wireless ADB Deploy Script</td>
+                <td><span class="tag new">Added this session</span></td>
+                <td><code>deploy.ps1</code> in the project root auto-discovers the wireless device via <code>adb devices</code>, installs the debug APK, and immediately launches the app. Run it after any build to push to your phone.</td>
+            </tr>
+            <tr>
+                <td>AI Studio Integration (Gemini)</td>
+                <td><span class="tag broken">Not implemented</span></td>
+                <td>Original <code>README.md</code> references a Gemini API key; Firebase AI dependencies are absent from the build. No Gemini calls exist in source code.</td>
+            </tr>
+            <tr>
+                <td>Cloud Sync &amp; Multi-User</td>
+                <td><span class="tag backlog">Backlog</span></td>
+                <td>Architecture is layered for a Firebase Auth + Firestore backend, but implementation is pending.</td>
+            </tr>
+        </table>
+    </div>
+
+    <!-- ============================================================ -->
+    <div class="section">
+        <h2>Session Changelog — AI Studio Export Fix (2026-05-31)</h2>
+        <p>The app was exported from Google AI Studio with several issues that prevented it from building, running, or displaying correct data locally. Below is the full chronological log of everything diagnosed and fixed.</p>
+
+        <div class="changelog-entry">
+            <h3><span class="commit-hash">b28c28d</span> &nbsp; CI: Fix ADB Deploy to use mDNS Wireless Debugging Auto-Discovery</h3>
+            <p><strong>Problem:</strong> The GitHub Actions workflow referenced a hard-coded IP:port for ADB which becomes stale every time the phone reconnects to Wi-Fi.<br>
+            <strong>Fix:</strong> Rewrote the deploy step to auto-detect the active wireless device serial from <code>adb devices</code> output, matching the mDNS TLS service name (<code>_adb-tls-connect._tcp</code>). Device is now discovered dynamically.</p>
+        </div>
+
+        <div class="changelog-entry">
+            <h3><span class="commit-hash">6e4394e</span> &nbsp; Build: Bump Gradle Wrapper to 9.3.1; Add <code>deploy.ps1</code></h3>
+            <p><strong>Problem:</strong> The project shipped with a Gradle wrapper pinned to 8.11.1, which is incompatible with Android Gradle Plugin 9.1.1. Attempting any local build failed immediately with a version mismatch error.<br>
+            <strong>Fix:</strong> Updated <code>gradle/wrapper/gradle-wrapper.properties</code> to use <code>gradle-9.3.1-bin.zip</code> (the minimum version supported by AGP 9.1.1). Also added <code>deploy.ps1</code> to the project root — a one-command PowerShell script that builds, installs, and launches the app on a wirelessly connected phone.</p>
+        </div>
+
+        <div class="changelog-entry">
+            <h3><span class="commit-hash">2c6a8e1 / 957cedd</span> &nbsp; Feat: Real TMDB Integration; Remove Fake Provider Data</h3>
+            <p><strong>Problem:</strong> The AI Studio export contained a function (<code>simulateTmdbWatchProviderLookUp</code>) that randomly assigned fake streaming providers like <code>"netflix,hulu,max"</code> to every item, regardless of actual availability. The Settings tab and TMDB API key input were not wired to any real network calls.<br>
+            <strong>Fix:</strong> Replaced the mock function entirely with a full Retrofit implementation in <code>TmdbApiService.kt</code> and <code>TmdbClient.kt</code>. The <code>AvailabilitySyncWorker</code> now calls TMDB's <code>search/movie</code> endpoint by title, then fetches <code>movie/{id}/watch/providers</code> for US flatrate availability. Provider names are mapped to local IDs (<code>netflix</code>, <code>hulu</code>, <code>max</code>, <code>disney</code>, <code>prime</code>, <code>apple</code>). Results are persisted to Room and shown as colored chips on each card. The worker respects a 1-second rate-limit delay between items.</p>
+        </div>
+
+        <div class="changelog-entry">
+            <h3><span class="commit-hash">1e56933</span> &nbsp; Feat: Add "Sync Now" Button (↺) to Watchlist Tab</h3>
+            <p><strong>Problem:</strong> After wiring up real TMDB calls, there was no way to trigger an immediate sync from inside the app — users had to wait for the 4-hour periodic WorkManager schedule.<br>
+            <strong>Fix:</strong> Added a small <code>IconButton</code> using <code>Icons.Default.Refresh</code> to the right side of the filter chip row in <code>WatchlistTabContent</code>. Tapping it calls <code>viewModel.triggerImmediateSync()</code>, which enqueues a one-shot <code>AvailabilitySyncWorker</code> request with a <em>CONNECTED</em> network constraint and immediately shows a status message.</p>
+        </div>
+
+        <div class="changelog-entry">
+            <h3><span class="commit-hash">7d3b680</span> &nbsp; Fix: Add INTERNET Permission; Bump Room DB to v2 to Clear Fake Seed Data</h3>
+            <p><strong>Problem 1 — SecurityException:</strong> Despite adding real Retrofit calls, the background worker was silently failing. Inspecting logs revealed a <code>java.lang.SecurityException: Permission denied (missing INTERNET permission?)</code> thrown inside OkHttp. The AI Studio export never declared <code>INTERNET</code> in the manifest.<br>
+            <strong>Fix:</strong> Added <code>&lt;uses-permission android:name="android.permission.INTERNET" /&gt;</code> to <code>AndroidManifest.xml</code>.</p>
+            <p style="margin-top:8px"><strong>Problem 2 — Stale Mock Data in Database:</strong> Even after adding the permission, existing watchlist items still displayed fake provider badges because the mock values (<code>"netflix,hulu,max"</code>) were already written to the Room SQLite database on the phone's local storage. The new worker code that sets <code>providerIds = null</code> on insert was never reached for existing rows.<br>
+            <strong>Fix:</strong> Incremented the Room <code>@Database(version = 2)</code> and enabled <code>.fallbackToDestructiveMigration()</code>. This instructs Room to drop and recreate all tables when the schema version changes, wiping the cached fake data.</p>
+        </div>
+
+        <div class="changelog-entry">
+            <h3>(This session) &nbsp; Fix: <code>onDestructiveMigration</code> Override — Watchlist Disappeared After Schema Wipe</h3>
+            <p><strong>Problem:</strong> After bumping the database to v2, the app's watchlist was completely empty. The Room database wipe (destructive migration) cleared all rows, but the seed data was never re-inserted. This happened because the <code>DatabaseCallback</code> in <code>AppDatabase.kt</code> only overrode <code>onCreate</code>, which Room only calls on a true fresh install — not on schema upgrades, even destructive ones.<br>
+            <strong>Fix:</strong> Added an <code>onDestructiveMigration</code> override to the nested <code>DatabaseCallback</code> class that calls the same <code>populateInitialProvidersAndLetterboxdData</code> coroutine as <code>onCreate</code>. Now when Room drops and recreates tables, it immediately re-seeds 33 watchlist items and 285 historical watch sessions from the bundled CSV assets.<br>
+            <strong>Verified:</strong> Cleared app data via <code>adb shell pm clear</code> and confirmed in live logcat:
+            <pre>D AppDatabase: Seeded 33 watchlist items from CSV successfully.
+D AppDatabase: Inserted 285 watched movies from CSV successfully.
+D AppDatabase: Seeded 285 historical watch sessions from CSV successfully.
+D AvailabilitySyncWorker: Found 33 items to sync.</pre></p>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <div class="section">
+        <h2>Local Development — Quick Start</h2>
+
+        <h3>Prerequisites</h3>
+        <ul>
+            <li>JDK 17+</li>
+            <li>Android SDK with platform-tools (ADB) on your PATH or at <code>C:\Users\&lt;you&gt;\AppData\Local\Android\Sdk\platform-tools\</code></li>
+            <li>Wireless debugging enabled on your Android phone (Developer Options → Wireless Debugging)</li>
+            <li>A free <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB API key</a> (v3 auth, read-only access)</li>
+        </ul>
+
+        <h3>Build &amp; Deploy</h3>
+        <pre># 1. Build the debug APK
+.\gradlew.bat assembleDebug
+
+# 2. Push to your wireless-connected phone and launch
+.\deploy.ps1</pre>
+
+        <h3>Configure TMDB Key at Runtime</h3>
+        <p>Open the app → <strong>Settings</strong> tab → paste your TMDB v3 API key → tap <strong>Save</strong>. Then tap the ↺ button on the Watchlist tab to immediately fetch real provider data.</p>
+
+        <div class="alert info">
+            <strong>Note:</strong> The TMDB key is stored in <code>SharedPreferences</code> on device and is never committed to source control. You do not need to set it at build time.
+        </div>
+
+        <h3>Database Reset (if needed)</h3>
+        <p>If you need to force a full database re-seed (e.g., after adding new CSV entries), either increment <code>@Database(version = N)</code> in <code>AppDatabase.kt</code> and rebuild, or clear app data manually:</p>
+        <pre>$adb = "C:\Users\&lt;you&gt;\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+&amp; $adb shell pm clear com.aistudio.streammanager.qpwoei</pre>
+    </div>
+
+    <!-- ============================================================ -->
+    <div class="section">
+        <h2>Key Files Reference</h2>
+        <table>
+            <tr><th>File</th><th>Purpose</th></tr>
+            <tr><td><code>app/src/main/java/com/example/data/local/AppDatabase.kt</code></td><td>Room database setup, version management, CSV seeding callback (<code>onCreate</code> + <code>onDestructiveMigration</code>)</td></tr>
+            <tr><td><code>app/src/main/java/com/example/data/worker/AvailabilitySyncWorker.kt</code></td><td>WorkManager background job — calls TMDB search + watch/providers, maps results to local provider IDs, updates Room</td></tr>
+            <tr><td><code>app/src/main/java/com/example/data/remote/TmdbApiService.kt</code></td><td>Retrofit service interface + Moshi response models for TMDB REST API</td></tr>
+            <tr><td><code>app/src/main/java/com/example/data/remote/TmdbClient.kt</code></td><td>Singleton OkHttp + Retrofit client targeting <code>https://api.themoviedb.org/3/</code></td></tr>
+            <tr><td><code>app/src/main/java/com/example/ui/StreamViewModel.kt</code></td><td>MVVM ViewModel — exposes StateFlows, handles user actions, <code>triggerImmediateSync()</code></td></tr>
+            <tr><td><code>app/src/main/java/com/example/ui/HomeScreen.kt</code></td><td>Compose UI — tab layout, watchlist cards, sync button, check-in bottom sheet, settings panel</td></tr>
+            <tr><td><code>app/src/main/assets/watchlist.csv</code></td><td>Letterboxd watchlist export (33 titles) — seeded into Room on first install or schema wipe</td></tr>
+            <tr><td><code>app/src/main/assets/watched_history.csv</code></td><td>Letterboxd watched history export (285 titles) — seeded as <code>WATCHED</code> items + watch sessions</td></tr>
+            <tr><td><code>deploy.ps1</code></td><td>Windows PowerShell deploy helper — auto-discovers wireless ADB device, installs APK, launches app</td></tr>
+        </table>
+    </div>
+
+</body>
+</html>
