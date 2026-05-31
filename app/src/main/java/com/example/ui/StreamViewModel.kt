@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.data.local.UserPreferencesManager
 import com.example.data.local.ProviderUsageStats
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
@@ -13,7 +14,10 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
 
-class StreamViewModel(private val repository: MediaRepository) : ViewModel() {
+class StreamViewModel(
+    private val repository: MediaRepository,
+    private val userPreferences: UserPreferencesManager
+) : ViewModel() {
 
     // --- State Expositions ---
 
@@ -36,6 +40,16 @@ class StreamViewModel(private val repository: MediaRepository) : ViewModel() {
     // Status UI messages or toast triggers
     private val _statusMessage = MutableStateFlow<String?>(null)
     val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    // Persisted TMDB API key (user-configurable at runtime)
+    private val _tmdbApiKey = MutableStateFlow(userPreferences.tmdbApiKey)
+    val tmdbApiKey: StateFlow<String> = _tmdbApiKey.asStateFlow()
+
+    fun saveTmdbApiKey(key: String) {
+        userPreferences.tmdbApiKey = key
+        _tmdbApiKey.value = key.trim()
+        _statusMessage.value = if (key.isBlank()) "TMDB API key cleared." else "TMDB API key saved."
+    }
 
     /**
      * Scans Room database when app lifecycle resumes.
@@ -265,11 +279,14 @@ class StreamViewModel(private val repository: MediaRepository) : ViewModel() {
 /**
  * Custom Factory allowing constructor injection for MediaRepository without generating runtime build/Hilt crashes.
  */
-class StreamViewModelFactory(private val repository: MediaRepository) : ViewModelProvider.Factory {
+class StreamViewModelFactory(
+    private val repository: MediaRepository,
+    private val userPreferences: UserPreferencesManager
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(StreamViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return StreamViewModel(repository) as T
+            return StreamViewModel(repository, userPreferences) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

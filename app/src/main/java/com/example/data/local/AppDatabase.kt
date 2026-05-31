@@ -70,13 +70,12 @@ abstract class AppDatabase : RoomDatabase() {
             Log.d("AppDatabase", "Seeding initial Letterboxd watch list entries from CSV...")
             val watchlistRows = parseCsv(context, "watchlist.csv")
             val watchlistItems = watchlistRows.map { row ->
-                val randomProviders = providers.shuffled().take(2).joinToString(",") { it.id }
                 MediaItem(
                     title = row.name,
                     sharedUrl = row.uri,
                     status = com.example.data.model.MediaStatus.WATCHLIST.name,
                     addedAt = parseDateToTimestamp(row.date),
-                    providerIds = randomProviders,
+                    providerIds = null,
                     overview = "Imported watchlist item \"${row.name}\" from Letterboxd account watchlist record."
                 )
             }
@@ -88,13 +87,12 @@ abstract class AppDatabase : RoomDatabase() {
             Log.d("AppDatabase", "Seeding initial Letterboxd watched history entries and monthly watch sessions from CSV...")
             val historyRows = parseCsv(context, "watched_history.csv")
             val historyItems = historyRows.map { row ->
-                val randomProviders = providers.shuffled().take(2).joinToString(",") { it.id }
                 MediaItem(
                     title = row.name,
                     sharedUrl = row.uri,
                     status = com.example.data.model.MediaStatus.WATCHED.name,
                     addedAt = parseDateToTimestamp(row.date),
-                    providerIds = randomProviders,
+                    providerIds = null,
                     overview = "Imported movie logged as watched on ${row.date} from Letterboxd archive."
                 )
             }
