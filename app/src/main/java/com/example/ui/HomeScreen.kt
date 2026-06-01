@@ -185,8 +185,8 @@ fun HomeScreen(
             AddMediaDialog(
                 allProviders = allProviders,
                 onDismiss = { showAddDialog = false },
-                onAdd = { title, selectedProviderIds ->
-                    viewModel.addCustomWatchlistItem(title, selectedProviderIds)
+                onAdd = { titlesInput, selectedProviderIds ->
+                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds)
                     showAddDialog = false
                 }
             )
@@ -1063,25 +1063,44 @@ fun AddMediaDialog(
     onDismiss: () -> Unit,
     onAdd: (String, List<String>) -> Unit
 ) {
-    var title by remember { mutableStateOf("") }
+    var titlesInput by remember { mutableStateOf("") }
     val selectedProviders = remember { mutableStateListOf<String>() }
+    val parsedTitles = remember(titlesInput) {
+        titlesInput
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Movie or Show", fontWeight = FontWeight.Bold) },
+        title = { Text("Add Title(s)", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title") },
-                    placeholder = { Text("e.g. Severance") },
-                    singleLine = true,
+                    value = titlesInput,
+                    onValueChange = { titlesInput = it },
+                    label = { Text("Movie / Show Titles") },
+                    placeholder = { Text("One title per line\nSeverance\nDune: Part Two\nThe Godfather") },
+                    singleLine = false,
+                    minLines = 4,
+                    maxLines = 8,
                     modifier = Modifier.fillMaxWidth().testTag("add_input_title"),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+                )
+
+                Text(
+                    text = if (parsedTitles.size == 1) {
+                        "1 title ready to add"
+                    } else {
+                        "${parsedTitles.size} titles ready to add"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
                 )
 
                 Text("Available On Support Services:", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -1135,11 +1154,15 @@ fun AddMediaDialog(
         },
         confirmButton = {
             Button(
-                onClick = { if (title.isNotBlank()) onAdd(title, selectedProviders.toList()) },
-                enabled = title.isNotBlank(),
+                onClick = {
+                    if (parsedTitles.isNotEmpty()) {
+                        onAdd(titlesInput, selectedProviders.toList())
+                    }
+                },
+                enabled = parsedTitles.isNotEmpty(),
                 modifier = Modifier.testTag("add_dialog_confirm")
             ) {
-                Text("Add to Watchlist")
+                Text(if (parsedTitles.size > 1) "Add ${parsedTitles.size} Titles" else "Add to Watchlist")
             }
         },
         dismissButton = {

@@ -187,6 +187,7 @@ class StreamViewModel(
                 status = MediaStatus.PENDING_METADATA.name
             )
             repository.insertMediaItem(item)
+            enqueueTmdbSync(showMessage = false)
             _statusMessage.value = "\"$potentialTitle\" successfully added via Quick Share!"
         }
     }
@@ -204,7 +205,41 @@ class StreamViewModel(
                 providerIds = providerString
             )
             repository.insertMediaItem(item)
+            enqueueTmdbSync(showMessage = false)
             _statusMessage.value = "\"${title.trim()}\" added to watchlist!"
+        }
+    }
+
+    /**
+     * Supports multiline add where each non-empty line is treated as one title.
+     */
+    fun addCustomWatchlistItemsBulk(multilineTitles: String, associatedProviders: List<String>) {
+        viewModelScope.launch {
+            val titles = multilineTitles
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .toList()
+
+            if (titles.isEmpty()) return@launch
+
+            val providerString = if (associatedProviders.isEmpty()) null else associatedProviders.joinToString(",")
+            titles.forEach { title ->
+                val item = MediaItem(
+                    title = title,
+                    status = MediaStatus.WATCHLIST.name,
+                    providerIds = providerString
+                )
+                repository.insertMediaItem(item)
+            }
+
+            enqueueTmdbSync(showMessage = false)
+            _statusMessage.value = if (titles.size == 1) {
+                "\"${titles.first()}\" added to watchlist!"
+            } else {
+                "Added ${titles.size} titles to watchlist. Matching from TMDB started."
+            }
         }
     }
 
@@ -224,6 +259,10 @@ class StreamViewModel(
     }
 
     fun triggerImmediateSync() {
+        enqueueTmdbSync(showMessage = true)
+    }
+
+    private fun enqueueTmdbSync(showMessage: Boolean) {
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -231,7 +270,9 @@ class StreamViewModel(
             .setConstraints(constraints)
             .build()
         WorkManager.getInstance(getApplication()).enqueue(request)
-        _statusMessage.value = "Fetching streaming availability from TMDB\u2026"
+        if (showMessage) {
+            _statusMessage.value = "Fetching streaming availability from TMDB\u2026"
+        }
     }
 
     fun deleteItem(item: MediaItem) {
