@@ -35,10 +35,14 @@ class AvailabilitySyncWorker(
         val repository = app?.container?.mediaRepository ?: return Result.failure()
 
         try {
-            // Retrieve watchlist items that need metadata or availability updates
+            // Zero-Touch Automation: Identify any watchlist items missing key research metadata or availability info
             val items = repository.allMediaItems.first()
             val pendingOrActiveItems = items.filter { 
-                it.status == MediaStatus.PENDING_METADATA.name || it.status == MediaStatus.WATCHLIST.name 
+                it.status == MediaStatus.PENDING_METADATA.name || 
+                it.status == MediaStatus.WATCHLIST.name ||
+                it.trivia.isNullOrEmpty() ||
+                it.genres.isNullOrEmpty() ||
+                it.imageUrl.isNullOrEmpty()
             }
 
             if (pendingOrActiveItems.isEmpty()) {

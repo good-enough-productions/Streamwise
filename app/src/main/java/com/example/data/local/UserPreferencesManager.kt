@@ -15,7 +15,7 @@ class UserPreferencesManager(context: Context) {
         set(value) { prefs.edit().putString(KEY_TMDB_API_KEY, value.trim()).apply() }
 
     var ollamaHost: String
-        get() = prefs.getString(KEY_OLLAMA_HOST, "192.168.1.100") ?: "192.168.1.100"
+        get() = prefs.getString(KEY_OLLAMA_HOST, "192.168.86.217") ?: "192.168.86.217"
         set(value) { prefs.edit().putString(KEY_OLLAMA_HOST, value.trim()).apply() }
 
     companion object {

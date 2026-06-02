@@ -7,7 +7,7 @@ import retrofit2.http.POST
 
 @JsonClass(generateAdapter = true)
 data class OllamaChatRequest(
-    val model: String = "gemma2",
+    val model: String = "gemma4:e2b",
     val messages: List<OllamaChatMessage>,
     val stream: Boolean = false
 )
