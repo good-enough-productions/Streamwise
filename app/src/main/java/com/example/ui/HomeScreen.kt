@@ -215,11 +215,14 @@ fun HomeScreen(
 
         // Settings Dialog (Overlay)
         if (showSettingsDialog) {
+            val ollamaHost by viewModel.ollamaHost.collectAsState()
             SettingsDialog(
                 allProviders = allProviders,
                 onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
                 tmdbApiKey = tmdbApiKey,
                 onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
+                ollamaHost = ollamaHost,
+                onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
                 onDismiss = { showSettingsDialog = false }
             )
         }
@@ -1571,9 +1574,11 @@ fun SettingsDialog(
     onProviderToggle: (String, Boolean) -> Unit,
     tmdbApiKey: String,
     onSaveTmdbApiKey: (String) -> Unit,
+    ollamaHost: String,
+    onSaveOllamaHost: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: TMDB API Key & About
+    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: TMDB API Key, 2: AI (Ollama) & About
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1603,12 +1608,17 @@ fun SettingsDialog(
                     Tab(
                         selected = activeSubTab == 0,
                         onClick = { activeSubTab = 0 },
-                        text = { Text("Subscriptions", fontSize = 12.sp) }
+                        text = { Text("Subs", fontSize = 11.sp) }
                     )
                     Tab(
                         selected = activeSubTab == 1,
                         onClick = { activeSubTab = 1 },
-                        text = { Text("TMDB Key & About", fontSize = 12.sp) }
+                        text = { Text("TMDB", fontSize = 11.sp) }
+                    )
+                    Tab(
+                        selected = activeSubTab == 2,
+                        onClick = { activeSubTab = 2 },
+                        text = { Text("AI/Local", fontSize = 11.sp) }
                     )
                 }
 
@@ -1671,17 +1681,9 @@ fun SettingsDialog(
                         }
                     }
                     1 -> {
-                        val context = LocalContext.current
                         var keyInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
                         var showKey by remember { mutableStateOf(false) }
                         val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
-                        val readmeText = remember {
-                            try {
-                                context.assets.open("README.md").bufferedReader().readText()
-                            } catch (e: Exception) {
-                                "README file not found."
-                            }
-                        }
                         val scrollState = rememberScrollState()
 
                         Column(
@@ -1700,27 +1702,6 @@ fun SettingsDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-
-                            // Status Badge
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(vertical = 4.dp)
-                            ) {
-                                val isConfigured = tmdbApiKey.isNotEmpty() && tmdbApiKey != "MY_TMDB_API_KEY"
-                                Icon(
-                                    imageVector = if (isConfigured) Icons.Default.Check else Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = if (isConfigured) Color(0xFF4CAF50) else Color(0xFFFF9800),
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isConfigured) "Key Status: Configured ✓" else "Key Status: Disconnected ⚠",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isConfigured) Color(0xFF4CAF50) else Color(0xFFFF9800)
-                                )
-                            }
 
                             Button(
                                 onClick = { uriHandler.openUri("https://www.themoviedb.org/settings/api") },
@@ -1764,11 +1745,60 @@ fun SettingsDialog(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Save TMDB Key")
                             }
+                        }
+                    }
+                    2 -> {
+                        val context = LocalContext.current
+                        var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
+                        val scrollState = rememberScrollState()
+                        val readmeText = remember {
+                            try {
+                                context.assets.open("README.md").bufferedReader().readText()
+                            } catch (e: Exception) {
+                                "README file not found."
+                            }
+                        }
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                        ) {
+                            Text(
+                                "Local AI Synthesis (Ollama)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Synthesis 2.0 uses your local Ollama instance (Gemma 2) to analyze watch history for personalized research.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            OutlinedTextField(
+                                value = hostInput,
+                                onValueChange = { hostInput = it },
+                                label = { Text("Ollama Host IP") },
+                                placeholder = { Text("e.g. 192.168.1.100") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Button(
+                                onClick = { onSaveOllamaHost(hostInput) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save Ollama Host")
+                            }
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
                             Text(
-                                "About & Setup Guide",
+                                "About Streamwise",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )

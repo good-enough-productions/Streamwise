@@ -179,6 +179,19 @@ D AvailabilitySyncWorker: Found 33 items to sync.</pre></p>
         </div>
 
         <div class="changelog-entry">
+            <h3>(This session) &nbsp; Feat: Synthesis 2.0 — Personalized Local LLM Research</h3>
+            <p><strong>Problem:</strong> Research notes were generic and didn't account for the user's specific cinematic history or preferences.<br>
+            <strong>Fix:</strong> 
+            <ul>
+                <li><strong>Ollama Integration:</strong> Built a custom Retrofit client to communicate with a local **Ollama** instance (running Gemma 2) on the user's laptop.</li>
+                <li><strong>Smart Sourcing:</strong> The research agent now summarizes the user's watch history and feeds it into the LLM prompt. This enables personalized "Historical Connection" and "Relevance Score" insights.</li>
+                <li><strong>Hybrid Architecture:</strong> If the local Ollama host is unreachable (e.g., while away from home), the agent gracefully falls back to a high-quality static template based on TMDB metadata.</li>
+                <li><strong>AI Settings:</strong> Added a new "AI/Local" tab in Settings to configure the Ollama Host IP.</li>
+            </ul>
+            <strong>Verified:</strong> Successfully generated personalized research cards using Gemma 2 and verified the fallback logic when the host was intentionally disconnected.</p>
+        </div>
+
+        <div class="changelog-entry">
             <h3>(This session) &nbsp; Feat: Advanced Filtering & Personal Context Vault</h3>
             <p><strong>Problem:</strong> The app was missing granular discovery tools like genre filtering and rating-based sorting. Additionally, there was no way to track personal notes or the original recommendation source (e.g., specific podcast episodes) for imported titles.<br>
             <strong>Fix:</strong> 

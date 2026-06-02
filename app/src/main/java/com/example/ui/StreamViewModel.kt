@@ -53,10 +53,20 @@ class StreamViewModel(
     private val _tmdbApiKey = MutableStateFlow(userPreferences.tmdbApiKey)
     val tmdbApiKey: StateFlow<String> = _tmdbApiKey.asStateFlow()
 
+    // Persisted Ollama Host
+    private val _ollamaHost = MutableStateFlow(userPreferences.ollamaHost)
+    val ollamaHost: StateFlow<String> = _ollamaHost.asStateFlow()
+
     fun saveTmdbApiKey(key: String) {
         userPreferences.tmdbApiKey = key
         _tmdbApiKey.value = key.trim()
         _statusMessage.value = if (key.isBlank()) "TMDB API key cleared." else "TMDB API key saved."
+    }
+
+    fun saveOllamaHost(host: String) {
+        userPreferences.ollamaHost = host
+        _ollamaHost.value = host.trim()
+        _statusMessage.value = "Local Ollama host updated: $host"
     }
 
     /**

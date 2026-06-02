@@ -55,6 +55,10 @@ class MediaRepository(private val mediaDao: MediaDao) {
         return mediaDao.getIntendingToWatchItems()
     }
 
+    suspend fun getAllWatchSessionsList(): List<WatchSession> {
+        return mediaDao.getAllWatchSessionsList()
+    }
+
 
     // --- Streaming Providers Configuration ---
 
