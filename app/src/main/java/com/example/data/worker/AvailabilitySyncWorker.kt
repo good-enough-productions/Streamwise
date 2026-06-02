@@ -57,6 +57,15 @@ class AvailabilitySyncWorker(
                 return Result.success()
             }
 
+            // Fetch genre list once to map IDs to names
+            val genreMap = try {
+                val genreResponse = com.example.data.remote.TmdbClient.tmdbApiService.getGenreList(apiKey)
+                genreResponse.genres.associate { it.id to it.name }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch genre list: ${e.message}")
+                emptyMap<Int, String>()
+            }
+
             for (item in pendingOrActiveItems) {
                 // Rate Limiting Optimization: Wait 1 second between calls to protect TMDB API rate-limit of 40 reqs/10s.
                 delay(1000)
@@ -72,6 +81,7 @@ class AvailabilitySyncWorker(
                 var syncedPosterUrl: String? = item.imageUrl
                 var syncedTmdbId: String? = item.tmdbId
                 var syncedTrivia: String? = item.trivia
+                var syncedGenres: String? = item.genres
 
                 try {
                     Log.d(TAG, "Fetching real metadata from TMDB for: ${item.title}")
@@ -99,14 +109,21 @@ class AvailabilitySyncWorker(
                             syncedProviders = null
                         }
 
-                        // 3. Synthesis Agent Research: Fetch Keywords and Cast
+                        // Extract genres from search result
+                        syncedGenres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
+
+                        // 3. Synthesis Agent Research: Fetch Keywords, Cast, and Genres
                         try {
                             val keywordsResponse = com.example.data.remote.TmdbClient.tmdbApiService.getKeywords(movieId, apiKey)
                             val creditsResponse = com.example.data.remote.TmdbClient.tmdbApiService.getCredits(movieId, apiKey)
                             
                             val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
                             val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
-                            
+
+                            // We can also extract genres from the search result match
+                            // Note: match.genreIds is a list of Ints. To get names, we'd need another API call or a local map.
+                            // For now, let's just stick to the research synthesis.
+
                             syncedTrivia = """
                                 ---
                                 focus_topics: "$topKeywords"
@@ -119,6 +136,9 @@ class AvailabilitySyncWorker(
                                 - Talent Profile: Features notable performances by $topCast.
                                 - Smart Sourcing: We've cross-referenced this with your historical preferences.
                             """.trimIndent()
+
+                            // If we have genres from a previous call or want to fetch them
+                            // The search match contains genre_ids. For now, let's keep it simple or fetch genres.
                         } catch (e: Exception) {
                             Log.e(TAG, "Synthesis Agent failed for \"${item.title}\": ${e.message}")
                         }
@@ -137,6 +157,7 @@ class AvailabilitySyncWorker(
                     imageUrl = syncedPosterUrl,
                     tmdbId = syncedTmdbId,
                     trivia = syncedTrivia,
+                    genres = syncedGenres,
                     updatedAt = System.currentTimeMillis()
                 )
 

@@ -213,7 +213,12 @@ class StreamViewModel(
     /**
      * Supports multiline add where each non-empty line is treated as one title.
      */
-    fun addCustomWatchlistItemsBulk(multilineTitles: String, associatedProviders: List<String>) {
+    fun addCustomWatchlistItemsBulk(
+        multilineTitles: String, 
+        associatedProviders: List<String>,
+        userNotes: String? = null,
+        importSource: String? = null
+    ) {
         viewModelScope.launch {
             val titles = multilineTitles
                 .lineSequence()
@@ -229,7 +234,9 @@ class StreamViewModel(
                 val item = MediaItem(
                     title = title,
                     status = MediaStatus.WATCHLIST.name,
-                    providerIds = providerString
+                    providerIds = providerString,
+                    userNotes = userNotes,
+                    importSource = importSource
                 )
                 repository.insertMediaItem(item)
             }

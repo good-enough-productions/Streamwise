@@ -24,6 +24,12 @@ data class MediaItem(
     val overview: String? = null,
     // Agent-synthesized cultural trivia, focus topics, and research notes for pre-watch strategy
     val trivia: String? = null,
+    // User's own personal notes about the movie
+    val userNotes: String? = null,
+    // Source from where the movie was imported (e.g., "Podcast: The Big Picture")
+    val importSource: String? = null,
+    // Comma-separated list of genres (e.g., "Sci-Fi, Drama")
+    val genres: String? = null,
     // Comma-separated list of active provider IDs (e.g., "netflix,hulu,max") available for this media item
     val providerIds: String? = null
 ) {

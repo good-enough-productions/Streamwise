@@ -185,8 +185,8 @@ fun HomeScreen(
             AddMediaDialog(
                 allProviders = allProviders,
                 onDismiss = { showAddDialog = false },
-                onAdd = { titlesInput, selectedProviderIds ->
-                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds)
+                onAdd = { titlesInput, selectedProviderIds, notes, source ->
+                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source)
                     showAddDialog = false
                 }
             )
@@ -262,19 +262,40 @@ fun WatchlistTabContent(
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
     }
+    val freeProviderIds = remember(allProviders) {
+        allProviders.filter { it.costPerMonth == 0.0 }.map { it.id }.toSet()
+    }
 
     var selectedPlatformId by remember { mutableStateOf<String?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("added") } // "added", "alpha", "rating"
+    var showFreeOnly by remember { mutableStateOf(false) }
+    var selectedGenre by remember { mutableStateOf<String?>(null) }
+
+    val allGenres = remember(watchlistItems) {
+        watchlistItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
+    }
 
     // Filter items according to state
-    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId) {
+    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, selectedGenre) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
 
             if (selectedPlatformId != null) {
                 if (item.providersList.contains(selectedPlatformId) != true) return@filter false
+            }
+
+            if (selectedGenre != null) {
+                if (item.genres?.contains(selectedGenre!!, ignoreCase = true) != true) return@filter false
+            }
+
+            if (showFreeOnly) {
+                val provs = item.providersList
+                if (provs.none { freeProviderIds.contains(it) }) return@filter false
             }
 
             if (filterOnlyMyServices) {
@@ -304,58 +325,7 @@ fun WatchlistTabContent(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // TMDB Key Warning Box for new users
-        val isKeyConfigured = tmdbApiKey.isNotEmpty() && tmdbApiKey != "MY_TMDB_API_KEY"
-        if (!isKeyConfigured) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .clickable { onOpenSettings() },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = "Warning",
-                        tint = MaterialTheme.colorScheme.onErrorContainer,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "TMDB Integration Pending",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Text(
-                            "Streaming matching is inactive. Tap here or setup in Settings to add your key.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(
-                        onClick = onOpenSettings,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.onErrorContainer,
-                            contentColor = MaterialTheme.colorScheme.errorContainer
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                    ) {
-                        Text("Setup", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
+        // ... (TMDB Key Warning Box)
 
         // Search & Sorting controls
         Row(
@@ -471,6 +441,42 @@ fun WatchlistTabContent(
             }
         }
 
+        // Genre Horizontal Ribbon Filter
+        if (allGenres.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Genres:",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(end = 4.dp)
+                )
+
+                FilterChip(
+                    selected = selectedGenre == null,
+                    onClick = { selectedGenre = null },
+                    label = { Text("All Genres", fontSize = 11.sp) }
+                )
+
+                allGenres.forEach { genre ->
+                    FilterChip(
+                        selected = selectedGenre == genre,
+                        onClick = {
+                            selectedGenre = if (selectedGenre == genre) null else genre
+                        },
+                        label = { Text(genre, fontSize = 11.sp) }
+                    )
+                }
+            }
+        }
+
         // Filter Selection Pills + Sync button
         Row(
             modifier = Modifier
@@ -480,19 +486,35 @@ fun WatchlistTabContent(
             verticalAlignment = Alignment.CenterVertically
         ) {
             FilterChip(
-                selected = !filterOnlyMyServices,
-                onClick = { onFilterToggle(false) },
-                label = { Text("All Entries") },
-                leadingIcon = { Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                selected = !filterOnlyMyServices && !showFreeOnly,
+                onClick = { 
+                    onFilterToggle(false)
+                    showFreeOnly = false
+                },
+                label = { Text("All", fontSize = 11.sp) },
                 modifier = Modifier.testTag("filter_all_chip")
             )
 
             FilterChip(
                 selected = filterOnlyMyServices,
-                onClick = { onFilterToggle(true) },
-                label = { Text("Available on My Services") },
-                leadingIcon = { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                onClick = { 
+                    onFilterToggle(!filterOnlyMyServices)
+                    if (!filterOnlyMyServices) showFreeOnly = false
+                },
+                label = { Text("My Services", fontSize = 11.sp) },
+                leadingIcon = { if (filterOnlyMyServices) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
                 modifier = Modifier.testTag("filter_subscribed_chip")
+            )
+
+            FilterChip(
+                selected = showFreeOnly,
+                onClick = { 
+                    showFreeOnly = !showFreeOnly
+                    if (showFreeOnly) onFilterToggle(false)
+                },
+                label = { Text("Free w/ Ads", fontSize = 11.sp) },
+                leadingIcon = { if (showFreeOnly) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
+                modifier = Modifier.testTag("filter_free_chip")
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -653,7 +675,33 @@ fun MediaItemCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.SemiBold
                             )
+                            
+                            if (!item.genres.isNullOrEmpty()) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "•",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = item.genres,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
+                    } else if (!item.genres.isNullOrEmpty()) {
+                        Text(
+                            text = item.genres,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
                     }
 
                     if (item.status == MediaStatus.PENDING_METADATA.name) {
@@ -1061,9 +1109,11 @@ fun ManageServicesTabContent(
 fun AddMediaDialog(
     allProviders: List<StreamingProvider>,
     onDismiss: () -> Unit,
-    onAdd: (String, List<String>) -> Unit
+    onAdd: (String, List<String>, String?, String?) -> Unit
 ) {
     var titlesInput by remember { mutableStateOf("") }
+    var userNotes by remember { mutableStateOf("") }
+    var importSource by remember { mutableStateOf("") }
     val selectedProviders = remember { mutableStateListOf<String>() }
     val parsedTitles = remember(titlesInput) {
         titlesInput
@@ -1078,7 +1128,7 @@ fun AddMediaDialog(
         title = { Text("Add Title(s)", fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
@@ -1087,10 +1137,28 @@ fun AddMediaDialog(
                     label = { Text("Movie / Show Titles") },
                     placeholder = { Text("One title per line\nSeverance\nDune: Part Two\nThe Godfather") },
                     singleLine = false,
-                    minLines = 4,
-                    maxLines = 8,
+                    minLines = 3,
+                    maxLines = 6,
                     modifier = Modifier.fillMaxWidth().testTag("add_input_title"),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+                )
+
+                OutlinedTextField(
+                    value = userNotes,
+                    onValueChange = { userNotes = it },
+                    label = { Text("Personal Notes (Optional)") },
+                    placeholder = { Text("e.g. Danny recommended this") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = importSource,
+                    onValueChange = { importSource = it },
+                    label = { Text("Source / Origins (Optional)") },
+                    placeholder = { Text("e.g. Podcast: The Big Picture") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
                 )
 
                 Text(
@@ -1889,6 +1957,34 @@ fun MovieDetailsBottomSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 20.sp
             )
+
+            // User Personal Notes & Source Section
+            if (!item.userNotes.isNullOrEmpty() || !item.importSource.isNullOrEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                
+                Text(
+                    text = "Personal Context & Origins",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                if (!item.userNotes.isNullOrEmpty()) {
+                    Text(
+                        text = "Notes: ${item.userNotes}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (!item.importSource.isNullOrEmpty()) {
+                    Text(
+                        text = "Imported From: ${item.importSource}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
 
             // Agent Research / Trivia Section
             if (!item.trivia.isNullOrEmpty()) {

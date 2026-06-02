@@ -179,6 +179,19 @@ D AvailabilitySyncWorker: Found 33 items to sync.</pre></p>
         </div>
 
         <div class="changelog-entry">
+            <h3>(This session) &nbsp; Feat: Advanced Filtering & Personal Context Vault</h3>
+            <p><strong>Problem:</strong> The app was missing granular discovery tools like genre filtering and rating-based sorting. Additionally, there was no way to track personal notes or the original recommendation source (e.g., specific podcast episodes) for imported titles.<br>
+            <strong>Fix:</strong> 
+            <ul>
+                <li><strong>Personal Context:</strong> Migrated database to <strong>v4</strong>, adding <code>userNotes</code>, <code>importSource</code>, and <code>genres</code> fields. The CSV parser now supports 5th and 6th columns for these values.</li>
+                <li><strong>Discovery Engine:</strong> Added a dynamic <strong>Genre Filter Ribbon</strong> and a dedicated <strong>"Free w/ Ads"</strong> filter chip (targeting Tubi, Freevee, etc.).</li>
+                <li><strong>Sorting:</strong> Implemented <strong>"Highest Rated"</strong> sorting based on real TMDB vote averages.</li>
+                <li><strong>UI Enrichment:</strong> The Movie Details sheet now features a "Personal Context & Origins" section alongside the Monospace Agent Research vault.</li>
+            </ul>
+            <strong>Verified:</strong> Successfully imported a test CSV with custom notes and verified the "Agentic Research" section now triggers for existing items upon sync.</p>
+        </div>
+
+        <div class="changelog-entry">
             <h3>(This session) &nbsp; Feat: Watchlist Pre-Watch Synthesis Agent</h3>
             <p><strong>Problem:</strong> The app lacked deep contextual insights for movies added to the watchlist, requiring manual research to understand "why" a title was recommended or what its cultural significance was.<br>
             <strong>Fix:</strong> Expanded the <code>AvailabilitySyncWorker</code> into a full-scale research agent. In addition to availability, it now pulls movie keywords and cast details via new TMDB endpoints. This data is synthesized into a structured "Agentic Research Strategy" card (complete with YAML frontmatter) and persisted in a new <code>trivia</code> field in the Room database. The Movie Details sheet was updated with a monospaced "Research Vault" section to display these insights, helping users decide what to watch with professional-grade context.</p>

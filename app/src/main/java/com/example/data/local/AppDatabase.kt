@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -47,6 +47,14 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE media_items ADD COLUMN trivia TEXT")
+            }
+        }
+
+        private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN userNotes TEXT")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN importSource TEXT")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN genres TEXT")
             }
         }
     }
@@ -96,6 +104,8 @@ abstract class AppDatabase : RoomDatabase() {
                     status = com.example.data.model.MediaStatus.WATCHLIST.name,
                     addedAt = parseDateToTimestamp(row.date),
                     providerIds = null,
+                    userNotes = row.notes,
+                    importSource = row.source,
                     overview = "Imported watchlist item \"${row.name}\" from Letterboxd account watchlist record."
                 )
             }
@@ -113,6 +123,8 @@ abstract class AppDatabase : RoomDatabase() {
                     status = com.example.data.model.MediaStatus.WATCHED.name,
                     addedAt = parseDateToTimestamp(row.date),
                     providerIds = null,
+                    userNotes = row.notes,
+                    importSource = row.source,
                     overview = "Imported movie logged as watched on ${row.date} from Letterboxd archive."
                 )
             }
@@ -130,7 +142,7 @@ abstract class AppDatabase : RoomDatabase() {
                         providerId = providerId,
                         watchedAt = parseDateToTimestamp(row.date),
                         durationMinutes = 120, // 2 hour movie standard length
-                        notes = "Seeded watch session log from Letterboxd movie theater check-in archive."
+                        notes = "Seeded watch session log from Letterboxd movie theater check-in archive. ${row.notes ?: ""}"
                     )
                 }
                 dao.insertWatchSessions(watchSessions)
@@ -186,7 +198,9 @@ abstract class AppDatabase : RoomDatabase() {
                                                     date = currentRow.getOrNull(0) ?: "",
                                                     name = currentRow.getOrNull(1) ?: "",
                                                     year = currentRow.getOrNull(2) ?: "",
-                                                    uri = currentRow.getOrNull(3) ?: ""
+                                                    uri = currentRow.getOrNull(3) ?: "",
+                                                    notes = currentRow.getOrNull(4),
+                                                    source = currentRow.getOrNull(5)
                                                 ))
                                             }
                                         }
@@ -207,7 +221,9 @@ abstract class AppDatabase : RoomDatabase() {
                                             date = currentRow.getOrNull(0) ?: "",
                                             name = currentRow.getOrNull(1) ?: "",
                                             year = currentRow.getOrNull(2) ?: "",
-                                            uri = currentRow.getOrNull(3) ?: ""
+                                            uri = currentRow.getOrNull(3) ?: "",
+                                            notes = currentRow.getOrNull(4),
+                                            source = currentRow.getOrNull(5)
                                         ))
                                     }
                                 }
@@ -230,6 +246,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        private data class CsvRow(val date: String, val name: String, val year: String, val uri: String)
+        private data class CsvRow(
+            val date: String, 
+            val name: String, 
+            val year: String, 
+            val uri: String,
+            val notes: String? = null,
+            val source: String? = null
+        )
     }
 }

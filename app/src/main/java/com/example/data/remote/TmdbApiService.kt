@@ -18,7 +18,8 @@ data class TmdbSearchResult(
     @Json(name = "overview") val overview: String?,
     @Json(name = "poster_path") val posterPath: String?,
     @Json(name = "vote_average") val voteAverage: Double?,
-    @Json(name = "release_date") val releaseDate: String?
+    @Json(name = "release_date") val releaseDate: String?,
+    @Json(name = "genre_ids") val genreIds: List<Int>? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -89,4 +90,20 @@ interface TmdbApiService {
         @Path("movie_id") movieId: Int,
         @Query("api_key") apiKey: String
     ): TmdbCreditsResponse
+
+    @GET("genre/movie/list")
+    suspend fun getGenreList(
+        @Query("api_key") apiKey: String
+    ): TmdbGenreListResponse
 }
+
+@JsonClass(generateAdapter = true)
+data class TmdbGenreListResponse(
+    @Json(name = "genres") val genres: List<TmdbGenre>
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbGenre(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String
+)
