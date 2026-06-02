@@ -42,6 +42,28 @@ data class TmdbProvider(
     @Json(name = "logo_path") val logoPath: String? = null
 )
 
+@JsonClass(generateAdapter = true)
+data class TmdbKeywordsResponse(
+    @Json(name = "keywords") val keywords: List<TmdbKeyword>
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbKeyword(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCreditsResponse(
+    @Json(name = "cast") val cast: List<TmdbCastMember>
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCastMember(
+    @Json(name = "name") val name: String,
+    @Json(name = "character") val character: String
+)
+
 interface TmdbApiService {
     @GET("search/movie")
     suspend fun searchMovie(
@@ -55,4 +77,16 @@ interface TmdbApiService {
         @Path("movie_id") movieId: Int,
         @Query("api_key") apiKey: String
     ): TmdbWatchProvidersResponse
+
+    @GET("movie/{movie_id}/keywords")
+    suspend fun getKeywords(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbKeywordsResponse
+
+    @GET("movie/{movie_id}/credits")
+    suspend fun getCredits(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbCreditsResponse
 }

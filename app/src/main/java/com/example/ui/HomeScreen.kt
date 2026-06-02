@@ -1890,6 +1890,47 @@ fun MovieDetailsBottomSheet(
                 lineHeight = 20.sp
             )
 
+            // Agent Research / Trivia Section
+            if (!item.trivia.isNullOrEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Agentic Research Strategy",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = "Research Notes",
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = item.trivia,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 18.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
             // Action Items

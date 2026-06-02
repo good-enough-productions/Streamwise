@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,11 +35,18 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
+                .addMigrations(MIGRATION_2_3)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
                 INSTANCE = instance
                 instance
+            }
+        }
+
+        private val MIGRATION_2_3 = object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN trivia TEXT")
             }
         }
     }

@@ -22,6 +22,8 @@ data class MediaItem(
     val imageUrl: String? = null, // Poster path URL
     val rating: Double? = null,
     val overview: String? = null,
+    // Agent-synthesized cultural trivia, focus topics, and research notes for pre-watch strategy
+    val trivia: String? = null,
     // Comma-separated list of active provider IDs (e.g., "netflix,hulu,max") available for this media item
     val providerIds: String? = null
 ) {

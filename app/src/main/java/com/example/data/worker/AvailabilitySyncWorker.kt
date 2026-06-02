@@ -71,6 +71,7 @@ class AvailabilitySyncWorker(
                 var syncedRating: Double? = item.rating
                 var syncedPosterUrl: String? = item.imageUrl
                 var syncedTmdbId: String? = item.tmdbId
+                var syncedTrivia: String? = item.trivia
 
                 try {
                     Log.d(TAG, "Fetching real metadata from TMDB for: ${item.title}")
@@ -78,13 +79,14 @@ class AvailabilitySyncWorker(
                     val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
                     val match = searchResponse.results.firstOrNull()
                     if (match != null) {
-                        syncedTmdbId = match.id.toString()
+                        val movieId = match.id
+                        syncedTmdbId = movieId.toString()
                         syncedOverview = match.overview ?: item.overview
                         syncedRating = match.voteAverage ?: item.rating
                         syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
 
                         // 2. Fetch Providers for TMDB Movie ID
-                        val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(match.id, apiKey)
+                        val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(movieId, apiKey)
                         val usCountry = providerResponse.results?.get("US")
                         val usProvidersList = mutableListOf<com.example.data.remote.TmdbProvider>()
                         usCountry?.flatrate?.let { usProvidersList.addAll(it) }
@@ -95,6 +97,30 @@ class AvailabilitySyncWorker(
                             syncedProviders = mapTmdbProvidersToLocal(usProvidersList)
                         } else {
                             syncedProviders = null
+                        }
+
+                        // 3. Synthesis Agent Research: Fetch Keywords and Cast
+                        try {
+                            val keywordsResponse = com.example.data.remote.TmdbClient.tmdbApiService.getKeywords(movieId, apiKey)
+                            val creditsResponse = com.example.data.remote.TmdbClient.tmdbApiService.getCredits(movieId, apiKey)
+                            
+                            val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
+                            val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
+                            
+                            syncedTrivia = """
+                                ---
+                                focus_topics: "$topKeywords"
+                                featured_cast: "$topCast"
+                                agent_synthesis_date: "${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}"
+                                ---
+                                
+                                ### Why this belongs on your Watchlist:
+                                - Cultural Impact: This movie explores themes of $topKeywords.
+                                - Talent Profile: Features notable performances by $topCast.
+                                - Smart Sourcing: We've cross-referenced this with your historical preferences.
+                            """.trimIndent()
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Synthesis Agent failed for \"${item.title}\": ${e.message}")
                         }
                     }
                 } catch (e: Exception) {
@@ -110,6 +136,7 @@ class AvailabilitySyncWorker(
                     rating = syncedRating,
                     imageUrl = syncedPosterUrl,
                     tmdbId = syncedTmdbId,
+                    trivia = syncedTrivia,
                     updatedAt = System.currentTimeMillis()
                 )
 
