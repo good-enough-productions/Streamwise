@@ -71,6 +71,9 @@ interface MediaDao {
     @Query("SELECT * FROM watch_sessions ORDER BY watchedAt DESC")
     fun getAllWatchSessions(): Flow<List<WatchSession>>
 
+    @Query("SELECT * FROM watch_sessions ORDER BY watchedAt DESC")
+    suspend fun getAllWatchSessionsList(): List<WatchSession>
+
 
     // --- ROI & Monthly Analytics Queries ---
 

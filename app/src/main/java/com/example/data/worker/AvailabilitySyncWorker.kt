@@ -7,6 +7,9 @@ import androidx.work.WorkerParameters
 import com.example.StreamApp
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
+import com.example.data.remote.OllamaChatMessage
+import com.example.data.remote.OllamaChatRequest
+import com.example.data.remote.OllamaClient
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 
@@ -43,7 +46,7 @@ class AvailabilitySyncWorker(
                 return Result.success()
             }
 
-            Log.d(TAG, "Found ${pendingOrActiveItems.size} items to sync.")
+            Log.d(TAG, "Found ${pendingOrActiveItems.size} items to sync: ${pendingOrActiveItems.joinToString { it.title }}")
 
             // Prefer runtime-saved key; fall back to build-time key
             val userPrefs = app?.container?.userPreferences
@@ -66,6 +69,16 @@ class AvailabilitySyncWorker(
                 emptyMap<Int, String>()
             }
 
+            // Fetch watch history for personalization
+            val watchHistory = repository.getAllWatchSessionsList()
+            val historySummary = if (watchHistory.isNotEmpty()) {
+                watchHistory.take(15).joinToString(", ") { it.mediaItemTitle }
+            } else {
+                "No history yet"
+            }
+
+            val ollamaHost = userPrefs?.ollamaHost ?: "192.168.1.100"
+
             for (item in pendingOrActiveItems) {
                 // Rate Limiting Optimization: Wait 1 second between calls to protect TMDB API rate-limit of 40 reqs/10s.
                 delay(1000)
@@ -84,12 +97,13 @@ class AvailabilitySyncWorker(
                 var syncedGenres: String? = item.genres
 
                 try {
-                    Log.d(TAG, "Fetching real metadata from TMDB for: ${item.title}")
+                    Log.d(TAG, "Syncing metadata for: \"${item.title}\" (Current TMDB ID: $syncedTmdbId)")
                     // 1. Search for TMDB movie ID
                     val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
                     val match = searchResponse.results.firstOrNull()
                     if (match != null) {
                         val movieId = match.id
+                        Log.d(TAG, "Found match for \"${item.title}\": ID $movieId, Genres: ${match.genreIds}")
                         syncedTmdbId = movieId.toString()
                         syncedOverview = match.overview ?: item.overview
                         syncedRating = match.voteAverage ?: item.rating
@@ -103,11 +117,15 @@ class AvailabilitySyncWorker(
                         usCountry?.free?.let { usProvidersList.addAll(it) }
                         usCountry?.ads?.let { usProvidersList.addAll(it) }
 
+                        Log.d(TAG, "TMDB Providers for \"${item.title}\": ${usProvidersList.joinToString { it.providerName }}")
+
                         if (usProvidersList.isNotEmpty()) {
                             syncedProviders = mapTmdbProvidersToLocal(usProvidersList)
                         } else {
                             syncedProviders = null
                         }
+                        
+                        Log.d(TAG, "Mapped Local Providers for \"${item.title}\": $syncedProviders")
 
                         // Extract genres from search result
                         syncedGenres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
@@ -120,25 +138,35 @@ class AvailabilitySyncWorker(
                             val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
                             val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
 
-                            // We can also extract genres from the search result match
-                            // Note: match.genreIds is a list of Ints. To get names, we'd need another API call or a local map.
-                            // For now, let's just stick to the research synthesis.
+                            // Synthesis 2.0: Use local Ollama (Gemma) for personalized research
+                            val localSynthesis = generatePersonalizedSynthesis(
+                                host = ollamaHost,
+                                movieTitle = item.title,
+                                overview = syncedOverview,
+                                keywords = topKeywords,
+                                cast = topCast,
+                                history = historySummary
+                            )
 
-                            syncedTrivia = """
-                                ---
-                                focus_topics: "$topKeywords"
-                                featured_cast: "$topCast"
-                                agent_synthesis_date: "${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}"
-                                ---
-                                
-                                ### Why this belongs on your Watchlist:
-                                - Cultural Impact: This movie explores themes of $topKeywords.
-                                - Talent Profile: Features notable performances by $topCast.
-                                - Smart Sourcing: We've cross-referenced this with your historical preferences.
-                            """.trimIndent()
-
-                            // If we have genres from a previous call or want to fetch them
-                            // The search match contains genre_ids. For now, let's keep it simple or fetch genres.
+                            if (localSynthesis != null) {
+                                syncedTrivia = localSynthesis
+                                Log.d(TAG, "Local LLM Synthesis successful for \"${item.title}\"")
+                            } else {
+                                // Fallback to basic template if Ollama is offline
+                                syncedTrivia = """
+                                    ---
+                                    focus_topics: "$topKeywords"
+                                    featured_cast: "$topCast"
+                                    agent_synthesis_date: "${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}"
+                                    ---
+                                    
+                                    ### Why this belongs on your Watchlist:
+                                    - Cultural Impact: This movie explores themes of $topKeywords.
+                                    - Talent Profile: Features notable performances by $topCast.
+                                    - Smart Sourcing: Cross-referenced with history summary: $historySummary.
+                                """.trimIndent()
+                                Log.d(TAG, "Ollama offline. Using basic template synthesis for \"${item.title}\"")
+                            }
                         } catch (e: Exception) {
                             Log.e(TAG, "Synthesis Agent failed for \"${item.title}\": ${e.message}")
                         }
@@ -170,6 +198,52 @@ class AvailabilitySyncWorker(
         } catch (e: Exception) {
             Log.e(TAG, "Error in streaming availability sync: ${e.message}", e)
             return Result.retry()
+        }
+    }
+
+    private suspend fun generatePersonalizedSynthesis(
+        host: String,
+        movieTitle: String,
+        overview: String?,
+        keywords: String,
+        cast: String,
+        history: String
+    ): String? {
+        return try {
+            val api = OllamaClient.getApiService(host)
+            val prompt = """
+                You are an advanced cinematic research agent called "Olivia". 
+                Generate a structured research card for the movie: "$movieTitle".
+                
+                Context provided:
+                - Overview: $overview
+                - Keywords: $keywords
+                - Cast: $cast
+                - User's Watch History: $history
+                
+                Format your response EXACTLY as a Markdown YAML card like this:
+                ---
+                focus_topics: "[List 3-5 main themes]"
+                featured_cast: "$cast"
+                personal_relevance_score: "[Score 1-10 based on history]"
+                ---
+                
+                ### Why this belongs on your Watchlist:
+                - Cultural Impact: [Brief summary of themes]
+                - Historical Connection: [Connect this movie to 1-2 titles from the user's watch history if possible]
+                - Smart Sourcing: [Final recommendation punchline]
+                
+                Be concise, professional, and use a technical, "deep-wiki" tone.
+            """.trimIndent()
+
+            val request = OllamaChatRequest(
+                messages = listOf(OllamaChatMessage(role = "user", content = prompt))
+            )
+            val response = api.chat(request)
+            response.message.content
+        } catch (e: Exception) {
+            Log.e(TAG, "Ollama synthesis failed: ${e.message}")
+            null
         }
     }
 
