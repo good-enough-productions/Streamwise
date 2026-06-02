@@ -1224,7 +1224,7 @@ fun AddMediaDialog(
             Button(
                 onClick = {
                     if (parsedTitles.isNotEmpty()) {
-                        onAdd(titlesInput, selectedProviders.toList())
+                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource)
                     }
                 },
                 enabled = parsedTitles.isNotEmpty(),
