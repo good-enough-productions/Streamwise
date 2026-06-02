@@ -177,6 +177,12 @@ D AppDatabase: Inserted 285 watched movies from CSV successfully.
 D AppDatabase: Seeded 285 historical watch sessions from CSV successfully.
 D AvailabilitySyncWorker: Found 33 items to sync.</pre></p>
         </div>
+
+        <div class="changelog-entry">
+            <h3>(This session) &nbsp; Feat: Room CSV Pre-Parser Refactor</h3>
+            <p><strong>Problem:</strong> The app's database initialization logic relied on a fragile string-splitting approach (<code>splitCsvLine</code>) for parsing the bundled Letterboxd CSV files. This method failed to properly handle escaped quotes (e.g., <code>""</code>) and commas nested deeply within multi-line fields, risking corrupted movie titles during the seed process.<br>
+            <strong>Fix:</strong> Replaced the brittle <code>splitCsvLine</code> with a robust character-by-character RFC 4180 compliant parser. The new logic uses <code>reader.mark()</code> and <code>reader.reset()</code> to safely parse nested quotes, handles embedded commas flawlessly, and seamlessly processes fields containing newlines. The database version was intentionally <em>not</em> bumped to preserve any existing user watch history/intents — the new parser will cleanly apply on fresh installs or future database wipes.</p>
+        </div>
     </div>
 
     <!-- ============================================================ -->
