@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streamwise - Master Backlog & Founder Terminal</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #080c14;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass {
+      background: rgba(13, 20, 35, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-light {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .accent-glow-indigo {
+      box-shadow: 0 0 40px -10px rgba(99, 102, 241, 0.25);
+    }
+    .accent-glow-emerald {
+      box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.25);
+    }
+    /* Simple Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #080c14;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 99px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+  </style>
+</head>
+<body class="text-gray-100 min-h-screen flex overflow-hidden">
+
+  <!-- ================= FLOATING LEFT NAV PANE ================= -->
+  <aside class="fixed left-4 top-4 bottom-4 w-64 glass rounded-3xl p-5 flex flex-col justify-between z-50 transition-all duration-300 shadow-2xl">
+    <div class="flex flex-col gap-6">
+      <!-- App Branding -->
+      <div class="flex items-center gap-3 px-2">
+        <div class="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <i data-lucide="play-circle" class="w-6 h-6 text-white animate-pulse"></i>
+        </div>
+        <div>
+          <h1 class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">Streamwise</h1>
+          <p class="text-[10px] text-indigo-300 font-bold uppercase tracking-wider">Founder Command</p>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="flex flex-col gap-1">
+        <button onclick="switchTab('pacing')" id="nav-pacing" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all bg-indigo-600 text-white shadow-lg shadow-indigo-600/20">
+          <i data-lucide="brain" class="w-4 h-4"></i>
+          <span>Vibe Token Budget</span>
+        </button>
+        <button onclick="switchTab('backlog')" id="nav-backlog" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-white/5 transition-all">
+          <i data-lucide="list-todo" class="w-4 h-4"></i>
+          <span>Product Backlog</span>
+        </button>
+        <button onclick="switchTab('cast-sandbox')" id="nav-cast-sandbox" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-white/5 transition-all">
+          <i data-lucide="tv-2" class="w-4 h-4"></i>
+          <span>Casting & TV Sandbox</span>
+        </button>
+        <button onclick="switchTab('pipeline')" id="nav-pipeline" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-white/5 transition-all">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>Pre-Watch Pipeline</span>
+        </button>
+        <button onclick="switchTab('collab')" id="nav-collab" class="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-white/5 transition-all">
+          <i data-lucide="message-square" class="w-4 h-4"></i>
+          <span>Sticky Note Canvas</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Active Session Meta / Partner Profile -->
+    <div class="flex flex-col gap-4 border-t border-white/5 pt-4">
+      <div class="flex items-center gap-3 px-2">
+        <div class="h-9 w-9 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center">
+          <span class="text-cyan-400 text-xs font-extrabold">O</span>
+        </div>
+        <div>
+          <div class="text-xs font-bold text-gray-200">Olivia Ecosystem</div>
+          <div class="text-[10px] text-emerald-400 flex items-center gap-1 font-semibold">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 inline-block animate-ping"></span>
+            Cloudflare Gateway
+          </div>
+        </div>
+      </div>
+      <div class="text-[10px] text-gray-500 px-2 leading-relaxed">
+        Building for Danny & Maezie's digital legacy. Local stack, absolute privacy.
+      </div>
+    </div>
+  </aside>
+
+  <!-- ================= MAIN CONTENT CONTAINER ================= -->
+  <main class="ml-80 flex-1 py-8 pr-8 pl-4 h-screen overflow-y-auto">
+
+    <!-- ================= TOAST NOTIFICATION CONTAINER ================= -->
+    <div id="toast" class="fixed top-6 right-6 z-50 transform translate-y-10 opacity-0 pointer-events-none transition-all duration-300 bg-indigo-600 border border-indigo-400/30 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3">
+      <i data-lucide="info" class="w-5 h-5 text-indigo-200"></i>
+      <span id="toast-text" class="text-sm font-medium"></span>
+    </div>
+
+    <!-- ================= TAB: COGNITIVE PACING (TOKEN SAVER) ================= -->
+    <section id="tab-pacing" class="tab-content flex flex-col gap-8">
+      <div class="flex justify-between items-start">
+        <div>
+          <span class="text-xs font-bold uppercase tracking-widest text-indigo-400">GH Copilot Pro Best Practices</span>
+          <h2 class="text-3xl font-extrabold text-white mt-1">Smart Vibe Coding & Pacing</h2>
+          <p class="text-gray-400 text-sm mt-1">Design first, execute incrementally. Protect your high-reasoning context window and keep token usage lightweight.</p>
+        </div>
+        <div class="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full text-xs font-bold">
+          <i data-lucide="zap" class="w-4 h-4 animate-bounce"></i>
+          Strategic Pacing Mode
+        </div>
+      </div>
+
+      <!-- Token Pacing Blueprint Cards -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Rule 1: Structural Specs First -->
+        <div class="glass p-6 rounded-2xl flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
+              <i data-lucide="git-pull-request" class="w-5 h-5"></i>
+            </div>
+            <h3 class="font-bold text-base text-white">1. Blueprint Before Prompt</h3>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            Never feed the LLM a 1,000-line code file blindly asking to "fix this". Instead, extract the exact data structure (e.g., your Room <code>MediaDao.kt</code> interfaces) and draft your logic as architectural pseudocode first.
+          </p>
+          <div class="mt-auto pt-4 border-t border-white/5 flex justify-between items-center text-[10px] text-gray-500 mono">
+            <span>SAVINGS: ~70% context load</span>
+            <span class="text-emerald-400 font-semibold">High Leverage</span>
+          </div>
+        </div>
+
+        <!-- Rule 2: Keep State Localized -->
+        <div class="glass p-6 rounded-2xl flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
+              <i data-lucide="layers" class="w-5 h-5"></i>
+            </div>
+            <h3 class="font-bold text-base text-white">2. Pure State Scaffolding</h3>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            Separate Jetpack Compose UI layout layers from active DB operations. Model states as pure immutability classes. Test state transitions in isolation before integrating DB triggers inside your WorkManager.
+          </p>
+          <div class="mt-auto pt-4 border-t border-white/5 flex justify-between items-center text-[10px] text-gray-500 mono">
+            <span>SAVINGS: Fewer recomposes</span>
+            <span class="text-emerald-400 font-semibold">Clean Code</span>
+          </div>
+        </div>
+
+        <!-- Rule 3: Leverage Model Strengths -->
+        <div class="glass p-6 rounded-2xl flex flex-col gap-3">
+          <div class="flex items-center gap-3">
+            <div class="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
+              <i data-lucide="cpu" class="w-5 h-5"></i>
+            </div>
+            <h3 class="font-bold text-base text-white">3. Model Tier Mapping</h3>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            Use lightweight, cost-effective models (like Gemini 3.0 Flash) for routine formatting and TMDB API mappings. Reserve heavy models (Gemini 3.0 Pro) exclusively for advanced semantic synthesis and database triggers.
+          </p>
+          <div class="mt-auto pt-4 border-t border-white/5 flex justify-between items-center text-[10px] text-gray-500 mono">
+            <span>SAVINGS: Preserves premium limits</span>
+            <span class="text-indigo-400 font-semibold">Smart Sourcing</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Vibe Coding Strategy Blueprint Interactive Tool -->
+      <div class="glass p-6 rounded-2xl accent-glow-indigo">
+        <h3 class="font-bold text-lg text-white mb-2 flex items-center gap-2">
+          <i data-lucide="sliders-horizontal" class="text-indigo-400 w-5 h-5"></i>
+          Interactive Vibe Coding Optimization Checklist
+        </h3>
+        <p class="text-xs text-gray-400 mb-6">Select your planned task to calculate estimated context-burn and get a streamlined path before writing code.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div class="flex flex-col gap-4">
+            <div>
+              <label class="text-xs font-bold text-gray-400 uppercase">Step 1: Choose Your Current Scope</label>
+              <select id="pacing-scope-select" onchange="calculateTokenSavings()" class="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500 mt-1">
+                <option value="csv-parser">Refactoring AppDatabase CSV Parser (Seeding Fix)</option>
+                <option value="casting-intent">Adding UPnP/DLNA Casting Intent to Phone Screen</option>
+                <option value="agent-trigger">Constructing Pre-Watch Background Agents</option>
+                <option value="social-web">Publishing Local SQLite data to Shared Knowledge Web</option>
+              </select>
+            </div>
+
+            <div class="space-y-2">
+              <div class="text-xs font-bold text-gray-400 uppercase">Step 2: Apply Pacing Guardrails</div>
+              <label class="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 cursor-pointer">
+                <input type="checkbox" id="guard-pseudocode" checked onchange="calculateTokenSavings()" class="rounded border-white/10 text-indigo-600 focus:ring-0">
+                <div class="text-xs text-gray-300">
+                  <span class="font-bold block">Draft exact pseudo-specification first</span>
+                  <span class="text-[10px] text-gray-500">Isolates specific target classes without loading whole project models.</span>
+                </div>
+              </label>
+              <label class="flex items-center gap-3 p-3 bg-white/5 rounded-xl border border-white/5 cursor-pointer">
+                <input type="checkbox" id="guard-isolated" checked onchange="calculateTokenSavings()" class="rounded border-white/10 text-indigo-600 focus:ring-0">
+                <div class="text-xs text-gray-300">
+                  <span class="font-bold block">Isolate state logic from external API layers</span>
+                  <span class="text-[10px] text-gray-500">Mocks the data response directly in Room database queries.</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="p-6 bg-black/40 rounded-2xl border border-white/5 flex flex-col justify-between">
+            <div>
+              <h4 class="text-xs font-extrabold text-gray-400 uppercase tracking-widest mb-4">Pacing Engine Calculations</h4>
+              <div class="space-y-4">
+                <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                  <span class="text-xs text-gray-300">Target Model Tier:</span>
+                  <span id="pacing-model" class="text-xs text-indigo-400 font-bold font-mono">Gemini 3.0 Flash</span>
+                </div>
+                <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                  <span class="text-xs text-gray-300">Est. Context Footprint:</span>
+                  <span id="pacing-footprint" class="text-xs text-white font-bold font-mono">~3,400 Tokens</span>
+                </div>
+                <div class="flex justify-between items-center border-b border-white/5 pb-2">
+                  <span class="text-xs text-gray-300">Token Efficiency Boost:</span>
+                  <span id="pacing-savings" class="text-xs text-emerald-400 font-extrabold font-mono">82% Saved</span>
+                </div>
+              </div>
+            </div>
+            
+            <button onclick="showPacingToast()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-3 rounded-xl mt-6">
+              Lock In Strategy & Scaffold Code Layout
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TAB: CO-FOUNDER BACKLOG MANAGER ================= -->
+    <section id="nav-target-backlog" class="tab-content hidden flex flex-col gap-8">
+      <div>
+        <span class="text-xs font-bold uppercase tracking-widest text-indigo-400">Danny & Olivia Workspace</span>
+        <h2 class="text-3xl font-extrabold text-white mt-1">Streamwise Product Backlog</h2>
+        <p class="text-gray-400 text-sm mt-1">Our strategic repository of planned modifications. Click a task to change priority or toggle details.</p>
+      </div>
+
+      <!-- Active Backlog Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6" id="backlog-items-container">
+        <!-- Backlog cards will be generated dynamically by JS below -->
+      </div>
+
+      <!-- Backlog Item Creator Panel -->
+      <div class="glass p-6 rounded-2xl">
+        <h3 class="font-bold text-base text-white mb-4">Add Custom Item to Collaborative Backlog</h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <input type="text" id="new-task-title" placeholder="Feature Title..." class="bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+          <input type="text" id="new-task-desc" placeholder="Feature Description..." class="bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500 md:col-span-2">
+          <button onclick="addNewBacklogItem()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-3 rounded-xl">
+            Add to Active Backlog
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TAB: CASTING & TV SANDBOX ================= -->
+    <section id="tab-cast-sandbox" class="tab-content hidden flex flex-col gap-8">
+      <div>
+        <span class="text-xs font-bold uppercase tracking-widest text-indigo-400">Media Command Center</span>
+        <h2 class="text-3xl font-extrabold text-white mt-1">Casting Engine & Active TV Bridge</h2>
+        <p class="text-gray-400 text-sm mt-1">Simulate launching phone discovery directly onto a mock local TV client while capturing metadata on your Proxmox server.</p>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <!-- Smartphone Command Panel -->
+        <div class="lg:col-span-4 glass p-6 rounded-2xl flex flex-col gap-6">
+          <div class="flex items-center justify-between border-b border-white/5 pb-4">
+            <h3 class="font-bold text-base text-white flex items-center gap-2">
+              <i data-lucide="smartphone" class="text-indigo-400 w-5 h-5"></i>
+              Danny's Phone Client
+            </h3>
+            <span class="text-[10px] bg-indigo-500/10 text-indigo-300 font-bold px-2 py-0.5 rounded-full">Active Host</span>
+          </div>
+
+          <div class="flex flex-col gap-3">
+            <div class="text-xs font-bold text-gray-400 uppercase">1. Discover Item & Select Player</div>
+            <div class="p-3 bg-black/40 border border-white/10 rounded-xl flex items-center justify-between">
+              <span class="text-xs text-white font-semibold">Living Room TV (Plex/UPnP)</span>
+              <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3">
+            <div class="text-xs font-bold text-gray-400 uppercase">2. Select Stream Resource Link</div>
+            <input type="text" id="cast-stream-url" value="plex://library/metadata/23948" class="bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <button onclick="triggerMockCastToTV()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20">
+            <i data-lucide="tv" class="w-4 h-4"></i>
+            Launch on living Room TV
+          </button>
+        </div>
+
+        <!-- TV Projection Screen -->
+        <div class="lg:col-span-8 flex flex-col gap-6">
+          <div class="glass p-6 rounded-2xl flex-1 flex flex-col accent-glow-emerald border-emerald-500/10">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold text-base text-white flex items-center gap-2">
+                <i data-lucide="monitor" class="text-emerald-400 w-5 h-5 animate-pulse"></i>
+                Simulated living Room Screen State
+              </h3>
+              <div class="flex gap-2">
+                <span id="cast-tv-status" class="text-[10px] bg-white/5 text-gray-400 px-2 py-1 rounded-full font-bold uppercase tracking-wider">Idle</span>
+              </div>
+            </div>
+
+            <!-- TV Screen Mock Box -->
+            <div class="flex-1 bg-slate-950 border border-white/5 rounded-2xl p-6 flex flex-col justify-between min-h-[300px] relative overflow-hidden transition-all duration-300" id="tv-projection-screen">
+              <div class="absolute inset-0 bg-gradient-to-tr from-slate-950/90 to-slate-900 opacity-60 z-0"></div>
+              
+              <!-- Cast Overlay Info -->
+              <div class="z-10 flex flex-col justify-between h-full flex-1" id="tv-screen-content">
+                <div class="flex items-center gap-3">
+                  <div class="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center text-white">
+                    <i data-lucide="tv-2" class="w-6 h-6"></i>
+                  </div>
+                  <div>
+                    <h4 class="text-sm font-bold text-gray-400">Plex UPnP Target Ready</h4>
+                    <p class="text-xs text-gray-500">Waiting for phone launch intent broadcast...</p>
+                  </div>
+                </div>
+
+                <div class="text-center py-12 flex flex-col items-center gap-2">
+                  <i data-lucide="cast" class="w-12 h-12 text-gray-700"></i>
+                  <span class="text-xs text-gray-600 font-bold uppercase tracking-widest">Client Listening on Port 1900</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TAB: PRE-WATCH BACKGROUND PIPELINE ================= -->
+    <section id="tab-pipeline" class="tab-content hidden flex flex-col gap-8">
+      <div>
+        <span class="text-xs font-bold uppercase tracking-widest text-indigo-400">Pre-Watch Research Strategy</span>
+        <h2 class="text-3xl font-extrabold text-white mt-1">Pre-Watch Agentic Research Pipeline</h2>
+        <p class="text-gray-400 text-sm mt-1">Don't wait until you finish watching. Run background research agents immediately when adding to watchlist.</p>
+      </div>
+
+      <!-- Strategy Walkthrough -->
+      <div class="glass p-6 rounded-2xl accent-glow-indigo">
+        <h3 class="font-bold text-lg text-white mb-4">Why Pre-Watch Synthesis Changes the Game</h3>
+        <p class="text-xs text-gray-300 leading-relaxed mb-4">
+          When we add a movie to our watchlist, we are in our peak analytical state—deciding if the movie deserves our limited attention budget. Rather than just parsing details when *finished*, we trigger structured pre-render pipelines the moment the watchlist item is added.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="p-4 bg-white/5 border border-white/10 rounded-xl">
+            <div class="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-bold mb-2">1</div>
+            <h4 class="text-xs font-bold text-white mb-1">Add to Watchlist</h4>
+            <p class="text-[11px] text-gray-400">A direct database trigger triggers an Olivia HTTP endpoint on Proxmox.</p>
+          </div>
+          <div class="p-4 bg-white/5 border border-white/10 rounded-xl">
+            <div class="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-bold mb-2">2</div>
+            <h4 class="text-xs font-bold text-white mb-1">TMDB + Trivia Scraping</h4>
+            <p class="text-[11px] text-gray-400">Background agents scrape cast details, cultural impact trivia, and spoiler-free warnings.</p>
+          </div>
+          <div class="p-4 bg-white/5 border border-white/10 rounded-xl">
+            <div class="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-bold mb-2">3</div>
+            <h4 class="text-xs font-bold text-white mb-1">Pre-Render Notes</h4>
+            <p class="text-[11px] text-gray-400">The agents build structured YAML metadata cards in your Obsidian Knowledge vault.</p>
+          </div>
+          <div class="p-4 bg-white/5 border border-white/10 rounded-xl">
+            <div class="h-8 w-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 font-bold mb-2">4</div>
+            <h4 class="text-xs font-bold text-white mb-1">Interactive Wiki Card</h4>
+            <p class="text-[11px] text-gray-400">A customized dashboard card provides a deep-dive overview before press-play.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pre-Watch Simulator -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="glass p-6 rounded-2xl flex flex-col gap-4">
+          <h3 class="font-bold text-base text-white">Trigger Pre-Watch Search</h3>
+          <div class="flex gap-2">
+            <input type="text" id="pipeline-search-val" value="The Matrix" class="flex-1 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500">
+            <button onclick="simulatePreWatchPipeline()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-3 rounded-xl flex items-center gap-2">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              Query
+            </button>
+          </div>
+          <p class="text-[11px] text-gray-500">Simulates Olivia's MCP deep-wiki agent scanning cultural databases to seed your Obsidian page.</p>
+        </div>
+
+        <div class="glass p-6 rounded-2xl">
+          <h3 class="font-bold text-base text-white mb-3">Pre-Rendered Obsidian Frontmatter Card</h3>
+          <div class="bg-black/40 border border-white/10 rounded-xl p-4 max-h-48 overflow-y-auto">
+            <pre id="pre-watch-output" class="mono text-[11px] text-indigo-300 leading-relaxed">---
+title: "The Matrix"
+tmdb_id: 603
+genres: "Sci-Fi, Action"
+pre_watch_scaped: true
+focus_topics: "The simulation hypothesis, early 2000s cyberpunk fashion, philosophy of Baudrillard"
+---
+
+### Why this belongs on your Watchlist:
+- Synthesizing past entries of *Severance* and *Dark*, this is the root ancestor of your cognitive puzzlebox tracking cluster.
+- Highly recommended to watch with Maezie's future developmental archives in mind (classic cybersecurity metaphors).</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TAB: INTERACTIVE COLLABORATION CANVAS ================= -->
+    <section id="tab-collab" class="tab-content hidden flex flex-col gap-8">
+      <div>
+        <span class="text-xs font-bold uppercase tracking-widest text-indigo-400">Founder Interactive Sandbox</span>
+        <h2 class="text-3xl font-extrabold text-white mt-1">Sticky Note Canvas</h2>
+        <p class="text-gray-400 text-sm mt-1">Click anywhere on the visual interface storyboard layout below to drop a sticky note. We can use this to hold Q&A, comment on code, or bookmark ideas.</p>
+      </div>
+
+      <div class="flex flex-col lg:flex-row gap-6">
+        <!-- Interactive Layout Sandbox -->
+        <div class="flex-1 glass p-6 rounded-2xl relative min-h-[400px] border-dashed border-2 border-indigo-500/20" id="collab-board" onclick="placeStickyNote(event)">
+          <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
+            <i data-lucide="layout" class="w-48 h-48 text-indigo-400"></i>
+          </div>
+          
+          <!-- Mock Elements to drop comments on -->
+          <div class="absolute top-10 left-10 p-3 bg-indigo-950/50 border border-indigo-400/20 rounded-xl pointer-events-auto">
+            <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Cast/TV API Endpoint</div>
+            <div class="text-[11px] text-gray-300 font-mono mt-1">/api/cast/tv?device_id=LivingRoom</div>
+          </div>
+
+          <div class="absolute bottom-10 right-10 p-3 bg-emerald-950/50 border border-emerald-400/20 rounded-xl pointer-events-auto">
+            <div class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Olivia Webhook Trigger</div>
+            <div class="text-[11px] text-gray-300 font-mono mt-1">POST /api/mcp/deep-wiki-index</div>
+          </div>
+
+          <!-- Helper instructions -->
+          <div class="absolute bottom-4 left-4 bg-indigo-950/60 border border-indigo-500/20 text-indigo-300 text-[10px] font-bold px-3 py-1.5 rounded-full pointer-events-none">
+            ✦ Click anywhere above to drop a collaborative comment pin!
+          </div>
+        </div>
+
+        <!-- Sticky Notes Ledger -->
+        <div class="w-full lg:w-80 glass p-6 rounded-2xl flex flex-col gap-4">
+          <div class="border-b border-white/5 pb-2">
+            <h3 class="font-bold text-base text-white">Active Board Comments</h3>
+            <p class="text-xs text-gray-500">Track collaborative discussion notes directly on the board.</p>
+          </div>
+          <div class="flex-1 flex flex-col gap-3 overflow-y-auto max-h-[300px]" id="stickies-ledger">
+            <div class="p-3 bg-indigo-950/20 border border-indigo-500/10 rounded-xl flex flex-col gap-1">
+              <div class="flex justify-between items-center text-[10px] font-bold text-indigo-400">
+                <span>Sticky Pin #1</span>
+                <span>(x: 10, y: 10)</span>
+              </div>
+              <p class="text-xs text-gray-300">"Let's make sure this cast command has a fallback fallback if the Kodi UPnP engine is asleep."</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ================= INTERACTIVE WORKSPACE JS ================= -->
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // Unified Backlog Store
+    let backlogTasks = [
+      {
+        id: 1,
+        title: "Room CSV Pre-Parser Refactor",
+        desc: "Build a robust RFC 4180 character-by-character scanner for CSV import to bypass raw comma title corruption on AppDatabase initialization.",
+        layer: "Architecture",
+        effort: "Medium",
+        impact: "High",
+        progress: "The Pros"
+      },
+      {
+        id: 2,
+        title: "UPnP casting Engine Integration",
+        desc: "Implement local SSDP discovery and Simple Service Discovery Protocol triggers to launch streaming resources directly onto TVs.",
+        layer: "Device Casting",
+        effort: "High",
+        impact: "Extremely High",
+        progress: "Trying & Failing"
+      },
+      {
+        id: 3,
+        title: "Watchlist Pre-Watch Synthesis Agent",
+        desc: "Trigger an Olivia MCP deep-wiki research background task as soon as a movie is placed in the Watchlist state. Saves pre-rendered summaries.",
+        layer: "Agentic Pipeline",
+        effort: "Medium",
+        impact: "High",
+        progress: "Youth League"
+      },
+      {
+        id: 4,
+        title: "Private Social recommendation vault",
+        desc: "Construct a secure static site pre-renderer for family recommendation vaults (perfect to share with your partner and log toddler developmental progress).",
+        layer: "Social Integration",
+        effort: "Low",
+        impact: "High",
+        progress: "Learning the Rules"
+      }
+    ];
+
+    // Initialize Page
+    document.addEventListener("DOMContentLoaded", () => {
+      renderBacklog();
+      calculateTokenSavings();
+    });
+
+    // Toast Alert system
+    function triggerToast(text) {
+      const toast = document.getElementById('toast');
+      const toastText = document.getElementById('toast-text');
+      toastText.innerText = text;
+      toast.classList.remove('translate-y-10', 'opacity-0', 'pointer-events-none');
+      setTimeout(() => {
+        toast.classList.add('translate-y-10', 'opacity-0', 'pointer-events-none');
+      }, 3000);
+    }
+
+    // Tab Navigation Logic
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.add('hidden');
+      });
+      
+      // Map targeting since ID name differences are present
+      let targetId = tabId === 'backlog' ? 'nav-target-backlog' : 'tab-' + tabId;
+      document.getElementById(targetId).classList.remove('hidden');
+
+      // Update Navigation button classes
+      document.querySelectorAll('nav button').forEach(button => {
+        button.className = "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold text-gray-400 hover:text-white hover:bg-white/5 transition-all";
+      });
+
+      const activeBtn = document.getElementById('nav-' + tabId);
+      if (activeBtn) {
+        activeBtn.className = "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all bg-indigo-600 text-white shadow-lg shadow-indigo-600/20";
+      }
+    }
+
+    // Dynamic Backlog Renderer
+    function renderBacklog() {
+      const container = document.getElementById('backlog-items-container');
+      container.innerHTML = '';
+
+      backlogTasks.forEach(task => {
+        const card = document.createElement('div');
+        card.className = "glass p-6 rounded-2xl flex flex-col justify-between hover:border-indigo-500/30 transition-all cursor-pointer";
+        card.onclick = () => promoteTaskProgress(task.id);
+        card.innerHTML = `
+          <div>
+            <div class="flex justify-between items-center mb-3">
+              <span class="text-[10px] font-mono text-indigo-400 font-bold uppercase tracking-wider">${task.layer}</span>
+              <span class="text-[9px] bg-indigo-500/15 text-indigo-300 font-extrabold px-2 py-0.5 rounded-full uppercase">${task.progress}</span>
+            </div>
+            <h4 class="font-bold text-white text-base">${task.title}</h4>
+            <p class="text-xs text-gray-400 mt-2 leading-relaxed">${task.desc}</p>
+          </div>
+          <div class="mt-6 pt-4 border-t border-white/5 flex justify-between items-center">
+            <span class="text-[10px] text-gray-500">Effort: <strong class="text-gray-300">${task.effort}</strong></span>
+            <span class="text-[10px] text-gray-500">Impact: <strong class="text-emerald-400">${task.impact}</strong></span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // Promote Backlog Task State
+    const roadmapSteps = ["Watching Others", "Learning the Rules", "Trying & Failing", "Youth League", "The Pros"];
+    function promoteTaskProgress(taskId) {
+      const task = backlogTasks.find(t => t.id === taskId);
+      if (task) {
+        let currentIdx = roadmapSteps.indexOf(task.progress);
+        let nextIdx = (currentIdx + 1) % roadmapSteps.length;
+        task.progress = roadmapSteps[nextIdx];
+        renderBacklog();
+        triggerToast(`Promoted "${task.title}" to ${task.progress}!`);
+      }
+    }
+
+    // Add task to backlog
+    function addNewBacklogItem() {
+      const titleInput = document.getElementById('new-task-title');
+      const descInput = document.getElementById('new-task-desc');
+
+      if (!titleInput.value || !descInput.value) {
+        triggerToast("Please provide both a Title and Description.");
+        return;
+      }
+
+      const newTask = {
+        id: backlogTasks.length + 1,
+        title: titleInput.value,
+        desc: descInput.value,
+        layer: "Interactive Extension",
+        effort: "Medium",
+        impact: "High",
+        progress: "Watching Others"
+      };
+
+      backlogTasks.push(newTask);
+      titleInput.value = '';
+      descInput.value = '';
+      renderBacklog();
+      triggerToast("Added custom backlog item securely!");
+    }
+
+    // Token pacing optimizer calculation logic
+    function calculateTokenSavings() {
+      const scope = document.getElementById('pacing-scope-select').value;
+      const guardPseudocode = document.getElementById('guard-pseudocode').checked;
+      const guardIsolated = document.getElementById('guard-isolated').checked;
+
+      let baseFootprint = 18000; // base whole project ingestion token weight
+      let multiplier = 1.0;
+
+      if (scope === 'csv-parser') {
+        baseFootprint = 12000;
+      } else if (scope === 'casting-intent') {
+        baseFootprint = 16000;
+      } else if (scope === 'agent-trigger') {
+        baseFootprint = 15000;
+      } else if (scope === 'social-web') {
+        baseFootprint = 11000;
+      }
+
+      if (guardPseudocode) multiplier *= 0.35;
+      if (guardIsolated) multiplier *= 0.55;
+
+      const finalFootprint = Math.round(baseFootprint * multiplier);
+      const savings = Math.round((1 - (finalFootprint / baseFootprint)) * 100);
+
+      document.getElementById('pacing-footprint').innerText = `~${finalFootprint.toLocaleString()} Tokens`;
+      document.getElementById('pacing-savings').innerText = `${savings}% Saved`;
+      document.getElementById('pacing-model').innerText = finalFootprint < 4000 ? "Gemini 3.0 Flash" : "Gemini 3.0 Pro";
+    }
+
+    function showPacingToast() {
+      triggerToast("Strategic roadmap built! We are ready to execute with zero token waste.");
+    }
+
+    // Simulated Phone Casting Intent to living room screen
+    function triggerMockCastToTV() {
+      const targetUrl = document.getElementById('cast-stream-url').value;
+      const tvScreen = document.getElementById('tv-projection-screen');
+      const tvContent = document.getElementById('tv-screen-content');
+      const tvStatus = document.getElementById('cast-tv-status');
+
+      triggerToast("Broadcasting discovery casting broadcast... (UPnP/DLNA M-SEARCH)");
+
+      tvStatus.innerText = "Connecting...";
+      tvStatus.className = "text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-full font-bold uppercase tracking-wider animate-pulse";
+
+      setTimeout(() => {
+        // Project streaming UI onto virtual Living Room Screen
+        tvStatus.innerText = "ACTIVE CASTING";
+        tvStatus.className = "text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-full font-bold uppercase tracking-wider";
+
+        tvContent.innerHTML = `
+          <div class="flex justify-between items-start w-full">
+            <div class="flex items-center gap-3">
+              <div class="h-10 w-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white">
+                <i data-lucide="play" class="w-6 h-6 fill-current"></i>
+              </div>
+              <div>
+                <h4 class="text-sm font-bold text-white">Severance (Season 2)</h4>
+                <p class="text-xs text-emerald-400 font-semibold">Active Resource Target: ${targetUrl}</p>
+              </div>
+            </div>
+            <span class="text-[10px] bg-emerald-500/10 text-emerald-300 font-bold px-2 py-0.5 rounded-full">Stream Link Verified</span>
+          </div>
+
+          <div class="text-center py-6">
+            <div class="text-2xl font-black text-white tracking-widest uppercase">STREAMING ACTIVE</div>
+            <p class="text-xs text-gray-500 mt-1">Olivia metadata trigger pushed to local vault: ~/Obsidian/Vault/Severance_S2.md</p>
+          </div>
+
+          <div class="flex justify-between items-center text-xs text-gray-500">
+            <span>Audio Stream: Dolby 5.1</span>
+            <button onclick="stopCastingMock()" class="bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg">
+              Kill Cast
+            </button>
+          </div>
+        `;
+        lucide.createIcons();
+      }, 1400);
+    }
+
+    function stopCastingMock() {
+      const tvContent = document.getElementById('tv-screen-content');
+      const tvStatus = document.getElementById('cast-tv-status');
+
+      tvStatus.innerText = "Idle";
+      tvStatus.className = "text-[10px] bg-white/5 text-gray-400 px-2 py-1 rounded-full font-bold uppercase tracking-wider";
+
+      tvContent.innerHTML = `
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center text-white">
+            <i data-lucide="tv-2" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h4 class="text-sm font-bold text-gray-400">Plex UPnP Target Ready</h4>
+            <p class="text-xs text-gray-500">Waiting for phone launch intent broadcast...</p>
+          </div>
+        </div>
+
+        <div class="text-center py-12 flex flex-col items-center gap-2">
+          <i data-lucide="cast" class="w-12 h-12 text-gray-700"></i>
+          <span class="text-xs text-gray-600 font-bold uppercase tracking-widest">Client Listening on Port 1900</span>
+        </div>
+      `;
+      lucide.createIcons();
+      triggerToast("Casting session closed safely.");
+    }
+
+    // Simulate watch-list pre-search
+    function simulatePreWatchPipeline() {
+      const queryVal = document.getElementById('pipeline-search-val').value;
+      const display = document.getElementById('pre-watch-output');
+
+      display.innerText = ` Olivia Agent Triggered...\n Connecting to TMDB API & Cultural Tropes DB...\n Compiling Structured metadata...`;
+
+      setTimeout(() => {
+        display.innerText = `---
+title: "${queryVal}"
+pre_watch_researched: true
+date_added_watchlist: "2026-06-01"
+metacritic_general_sentiment: "Generally Acclaimed"
+recommendation_justification: "Analyzed your historic logs of similar cinema archetypes. This contains strong elements of retro-futurism that align with your custom library profiles."
+---
+
+### Pre-Watch Agent Tropes Index:
+1. **The Hero's Quest Metaphor:** Heavy psychological character progression.
+2. **Techno-Paranoia:** Directly feeds into your self-hosted digital notes collection.`;
+      }, 1200);
+    }
+
+    // Place Collaboration Sticky Notes
+    let pinCounter = 1;
+    function placeStickyNote(event) {
+      // Prevent double triggers inside elements
+      if (event.target !== document.getElementById('collab-board')) return;
+
+      const board = document.getElementById('collab-board');
+      const rect = board.getBoundingClientRect();
+      const x = Math.round(event.clientX - rect.left);
+      const y = Math.round(event.clientY - rect.top);
+
+      const commentText = prompt("Enter your collaborative note or question for this sandbox element:");
+      if (!commentText) return;
+
+      // Render Pin on Sandbox Board
+      const pin = document.createElement('div');
+      pin.className = "absolute h-6 w-6 bg-indigo-500 border-2 border-white rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-xl cursor-pointer hover:scale-110 transition-all z-30";
+      pin.style.left = (x - 12) + "px";
+      pin.style.top = (y - 12) + "px";
+      pin.innerText = pinCounter;
+      board.appendChild(pin);
+
+      // Render in sidebar ledger
+      const ledger = document.getElementById('stickies-ledger');
+      const item = document.createElement('div');
+      item.className = "p-3 bg-indigo-950/40 border border-indigo-500/20 rounded-xl flex flex-col gap-1";
+      item.innerHTML = `
+        <div class="flex justify-between items-center text-[10px] font-bold text-indigo-400">
+          <span>Sticky Pin #${pinCounter}</span>
+          <span>(x: ${x}, y: ${y})</span>
+        </div>
+        <p class="text-xs text-gray-200">"${commentText}"</p>
+      `;
+      ledger.appendChild(item);
+
+      pinCounter++;
+      triggerToast("Dropped sticky comment note on layout sandbox!");
+    }
+  </script>
+</body>
+</html>

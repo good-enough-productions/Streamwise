@@ -136,32 +136,74 @@ abstract class AppDatabase : RoomDatabase() {
             try {
                 context.assets.open(fileName).use { inputStream ->
                     BufferedReader(InputStreamReader(inputStream)).use { reader ->
-                        var line: String? = reader.readLine()
-                        // Check if it's the header, skip if so
-                        if (line != null && line.contains("Name", ignoreCase = true)) {
-                            // Header skipped
-                        } else if (line != null) {
-                            val parts = splitCsvLine(line!!)
-                            if (parts.size >= 3) {
-                                list.add(CsvRow(
-                                    date = parts.getOrNull(0) ?: "",
-                                    name = parts.getOrNull(1) ?: "",
-                                    year = parts.getOrNull(2) ?: "",
-                                    uri = parts.getOrNull(3) ?: ""
-                                ))
+                        var inQuotes = false
+                        val currentField = StringBuilder()
+                        val currentRow = mutableListOf<String>()
+                        var isHeader = true
+                        
+                        var charInt: Int
+                        while (reader.read().also { charInt = it } != -1) {
+                            val c = charInt.toChar()
+                            if (inQuotes) {
+                                if (c == '"') {
+                                    reader.mark(1)
+                                    val nextChar = reader.read()
+                                    if (nextChar == '"'.code) {
+                                        currentField.append('"')
+                                    } else {
+                                        inQuotes = false
+                                        reader.reset()
+                                    }
+                                } else {
+                                    currentField.append(c)
+                                }
+                            } else {
+                                if (c == '"') {
+                                    inQuotes = true
+                                } else if (c == ',') {
+                                    currentRow.add(currentField.toString().trim())
+                                    currentField.setLength(0)
+                                } else if (c == '\r') {
+                                    // Ignore CR
+                                } else if (c == '\n') {
+                                    currentRow.add(currentField.toString().trim())
+                                    currentField.setLength(0)
+                                    
+                                    if (currentRow.isNotEmpty() && currentRow.any { it.isNotBlank() }) {
+                                        if (isHeader && currentRow.any { it.contains("Name", ignoreCase = true) }) {
+                                            isHeader = false
+                                        } else if (!isHeader || !currentRow.any { it.contains("Name", ignoreCase = true) }) {
+                                            isHeader = false
+                                            if (currentRow.size >= 3) {
+                                                list.add(CsvRow(
+                                                    date = currentRow.getOrNull(0) ?: "",
+                                                    name = currentRow.getOrNull(1) ?: "",
+                                                    year = currentRow.getOrNull(2) ?: "",
+                                                    uri = currentRow.getOrNull(3) ?: ""
+                                                ))
+                                            }
+                                        }
+                                    }
+                                    currentRow.clear()
+                                } else {
+                                    currentField.append(c)
+                                }
                             }
                         }
-                        while (reader.readLine().also { line = it } != null) {
-                            val currentLine = line ?: continue
-                            if (currentLine.isBlank()) continue
-                            val parts = splitCsvLine(currentLine)
-                            if (parts.size >= 3) {
-                                list.add(CsvRow(
-                                    date = parts.getOrNull(0) ?: "",
-                                    name = parts.getOrNull(1) ?: "",
-                                    year = parts.getOrNull(2) ?: "",
-                                    uri = parts.getOrNull(3) ?: ""
-                                ))
+                        // Handle the last line if it doesn't end with a newline
+                        if (currentField.isNotEmpty() || currentRow.isNotEmpty()) {
+                            currentRow.add(currentField.toString().trim())
+                            if (currentRow.isNotEmpty() && currentRow.any { it.isNotBlank() }) {
+                                if (!isHeader || !currentRow.any { it.contains("Name", ignoreCase = true) }) {
+                                    if (currentRow.size >= 3) {
+                                        list.add(CsvRow(
+                                            date = currentRow.getOrNull(0) ?: "",
+                                            name = currentRow.getOrNull(1) ?: "",
+                                            year = currentRow.getOrNull(2) ?: "",
+                                            uri = currentRow.getOrNull(3) ?: ""
+                                        ))
+                                    }
+                                }
                             }
                         }
                     }
@@ -170,24 +212,6 @@ abstract class AppDatabase : RoomDatabase() {
                 Log.e("AppDatabase", "Error parsing CSV file: $fileName", e)
             }
             return list
-        }
-
-        private fun splitCsvLine(line: String): List<String> {
-            val result = mutableListOf<String>()
-            val currentStr = StringBuilder()
-            var inQuotes = false
-            for (char in line) {
-                if (char == '"') {
-                    inQuotes = !inQuotes
-                } else if (char == ',' && !inQuotes) {
-                    result.add(currentStr.toString().trim())
-                    currentStr.setLength(0)
-                } else {
-                    currentStr.append(char)
-                }
-            }
-            result.add(currentStr.toString().trim())
-            return result
         }
 
         private fun parseDateToTimestamp(dateStr: String): Long {
