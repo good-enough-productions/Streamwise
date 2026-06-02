@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -55,6 +55,15 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE media_items ADD COLUMN userNotes TEXT")
                 db.execSQL("ALTER TABLE media_items ADD COLUMN importSource TEXT")
                 db.execSQL("ALTER TABLE media_items ADD COLUMN genres TEXT")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Ensure free services are in the providers table for users who upgraded
+                db.execSQL("INSERT OR IGNORE INTO streaming_providers (id, name, costPerMonth, isActive, updatedAt) VALUES ('tubi', 'Tubi', 0.0, 1, ${System.currentTimeMillis()})")
+                db.execSQL("INSERT OR IGNORE INTO streaming_providers (id, name, costPerMonth, isActive, updatedAt) VALUES ('freevee', 'Freevee', 0.0, 1, ${System.currentTimeMillis()})")
+                db.execSQL("INSERT OR IGNORE INTO streaming_providers (id, name, costPerMonth, isActive, updatedAt) VALUES ('pluto', 'Pluto TV', 0.0, 1, ${System.currentTimeMillis()})")
             }
         }
     }
