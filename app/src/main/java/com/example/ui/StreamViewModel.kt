@@ -30,7 +30,13 @@ class StreamViewModel(
     // --- State Expositions ---
 
     // All registered media items
+    // Watchlist items (PENDING_METADATA or WATCHLIST or INTENDING_TO_WATCH)
     val allMediaItems: StateFlow<List<MediaItem>> = repository.allMediaItems
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Watched history items (WATCHED)
+    val watchedItems: StateFlow<List<MediaItem>> = repository.allMediaItems
+        .map { items -> items.filter { it.status == MediaStatus.WATCHED.name } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // All streaming providers

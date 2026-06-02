@@ -139,14 +139,21 @@ fun HomeScreen(
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Watchlist") },
+                    text = { Text("Watchlist", fontSize = 11.sp) },
                     icon = { Icon(Icons.Default.List, contentDescription = "Watchlist tab") },
                     modifier = Modifier.testTag("tab_watchlist")
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Budget ROI") },
+                    text = { Text("Watched", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.Check, contentDescription = "Watched history tab") },
+                    modifier = Modifier.testTag("tab_watched")
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    text = { Text("ROI Stats", fontSize = 11.sp) },
                     icon = { Icon(Icons.Default.Star, contentDescription = "ROI stats tab") },
                     modifier = Modifier.testTag("tab_budget")
                 )
@@ -172,7 +179,17 @@ fun HomeScreen(
                         onOpenSettings = { showSettingsDialog = true },
                         onMovieClick = { detailMovieItem = it }
                     )
-                    1 -> MonthlyRoiContent(
+                    1 -> {
+                        val watchedItems by viewModel.watchedItems.collectAsState()
+                        WatchedTabContent(
+                            watchedItems = watchedItems,
+                            allProviders = allProviders,
+                            onMovieClick = { detailMovieItem = it },
+                            onDeleteClick = { viewModel.deleteItem(it) },
+                            onSyncClick = { viewModel.triggerImmediateSync() }
+                        )
+                    }
+                    2 -> MonthlyRoiContent(
                         monthlyStats = monthlyStats,
                         allProviders = allProviders
                     )
@@ -724,6 +741,60 @@ fun MediaItemCard(
                         }
                     }
 
+                    // Vibe Match & Source Badges
+                    Row(
+                        modifier = Modifier.padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Extract relevance score from YAML trivia if present
+                        val relevanceScore = remember(item.trivia) {
+                            item.trivia?.lines()
+                                ?.find { it.contains("personal_relevance_score:") }
+                                ?.substringAfter(":")
+                                ?.trim()
+                                ?.replace("\"", "")
+                                ?.replace("'", "")
+                                ?.replace("[", "")
+                                ?.replace("]", "")
+                        }
+
+                        if (!relevanceScore.isNullOrEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Favorite, null, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Match: $relevanceScore/10", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                }
+                            }
+                        }
+
+                        if (!item.importSource.isNullOrEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = item.importSource,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
                     if (!item.overview.isNullOrEmpty()) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
@@ -844,8 +915,154 @@ fun MediaItemCard(
     }
 }
 
-// ==========================================
-// COMPOSABLE: Budget ROI Analyzer
+@Composable
+fun WatchedTabContent(
+    watchedItems: List<MediaItem>,
+    allProviders: List<StreamingProvider>,
+    onMovieClick: (MediaItem) -> Unit,
+    onDeleteClick: (MediaItem) -> Unit,
+    onSyncClick: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var sortBy by remember { mutableStateOf("timeline") } // "timeline", "alpha", "rating"
+    var selectedGenre by remember { mutableStateOf<String?>(null) }
+
+    val allGenres = remember(watchedItems) {
+        watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
+    }
+
+    val filteredItems = remember(watchedItems, searchQuery, selectedGenre) {
+        watchedItems.filter { item ->
+            val matchesSearch = item.title.contains(searchQuery, ignoreCase = true)
+            val matchesGenre = selectedGenre == null || item.genres?.contains(selectedGenre!!, ignoreCase = true) == true
+            matchesSearch && matchesGenre
+        }
+    }
+
+    val processedItems = remember(filteredItems, sortBy) {
+        when (sortBy) {
+            "alpha" -> filteredItems.sortedBy { it.title.lowercase() }
+            "rating" -> filteredItems.sortedByDescending { it.rating ?: 0.0 }
+            else -> filteredItems.sortedByDescending { it.watchedAt ?: it.updatedAt }
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        // Search & Sorting controls
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                label = { Text("Search history...") },
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(52.dp),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            // Sort Selector
+            var sortExpanded by remember { mutableStateOf(false) }
+            Box(modifier = Modifier.weight(1.2f)) {
+                OutlinedButton(
+                    onClick = { sortExpanded = true },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    val sortLabel = when (sortBy) {
+                        "alpha" -> "A-Z"
+                        "rating" -> "Rating"
+                        else -> "Timeline"
+                    }
+                    Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(sortLabel, fontSize = 12.sp)
+                }
+                DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
+                    DropdownMenuItem(text = { Text("Watched Timeline") }, onClick = { sortBy = "timeline"; sortExpanded = false })
+                    DropdownMenuItem(text = { Text("Alphabetical A-Z") }, onClick = { sortBy = "alpha"; sortExpanded = false })
+                    DropdownMenuItem(text = { Text("Highest Rated") }, onClick = { sortBy = "rating"; sortExpanded = false })
+                }
+            }
+        }
+
+        // Genre Horizontal Ribbon
+        if (allGenres.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedGenre == null,
+                    onClick = { selectedGenre = null },
+                    label = { Text("All Genres", fontSize = 11.sp) }
+                )
+                allGenres.forEach { genre ->
+                    FilterChip(
+                        selected = selectedGenre == genre,
+                        onClick = { selectedGenre = if (selectedGenre == genre) null else genre },
+                        label = { Text(genre, fontSize = 11.sp) }
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${processedItems.size} Titles Logged",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = onSyncClick) {
+                Icon(Icons.Default.Refresh, contentDescription = "Enrich metadata", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+        }
+
+        if (processedItems.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Your cinematic vault is empty.", color = MaterialTheme.colorScheme.outline)
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                items(processedItems, key = { it.id }) { item ->
+                    MediaItemCard(
+                        item = item,
+                        allProviders = allProviders,
+                        onWatchClick = { /* No-op for watched */ },
+                        onDeleteClick = { onDeleteClick(item) },
+                        onMovieClick = { onMovieClick(item) }
+                    )
+                }
+            }
+        }
+    }
+}
 // ==========================================
 @Composable
 fun MonthlyRoiContent(
