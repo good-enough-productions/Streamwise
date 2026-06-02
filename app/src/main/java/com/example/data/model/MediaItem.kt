@@ -30,6 +30,8 @@ data class MediaItem(
     val importSource: String? = null,
     // Comma-separated list of genres (e.g., "Sci-Fi, Drama")
     val genres: String? = null,
+    // Latest timestamp when this movie was watched
+    val watchedAt: Long? = null,
     // Comma-separated list of active provider IDs (e.g., "netflix,hulu,max") available for this media item
     val providerIds: String? = null
 ) {

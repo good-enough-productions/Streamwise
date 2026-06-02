@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -60,10 +60,15 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_4_5 = object : androidx.room.migration.Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Ensure free services are in the providers table for users who upgraded
                 db.execSQL("INSERT OR IGNORE INTO streaming_providers (id, name, costPerMonth, isActive, updatedAt) VALUES ('tubi', 'Tubi', 0.0, 1, ${System.currentTimeMillis()})")
                 db.execSQL("INSERT OR IGNORE INTO streaming_providers (id, name, costPerMonth, isActive, updatedAt) VALUES ('freevee', 'Freevee', 0.0, 1, ${System.currentTimeMillis()})")
                 db.execSQL("INSERT OR IGNORE INTO streaming_providers (id, name, costPerMonth, isActive, updatedAt) VALUES ('pluto', 'Pluto TV', 0.0, 1, ${System.currentTimeMillis()})")
+            }
+        }
+
+        private val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN watchedAt INTEGER")
             }
         }
     }
@@ -126,11 +131,13 @@ abstract class AppDatabase : RoomDatabase() {
             Log.d("AppDatabase", "Seeding initial Letterboxd watched history entries and monthly watch sessions from CSV...")
             val historyRows = parseCsv(context, "watched_history.csv")
             val historyItems = historyRows.map { row ->
+                val watchTimestamp = parseDateToTimestamp(row.date)
                 MediaItem(
                     title = row.name,
                     sharedUrl = row.uri,
                     status = com.example.data.model.MediaStatus.WATCHED.name,
-                    addedAt = parseDateToTimestamp(row.date),
+                    addedAt = watchTimestamp,
+                    watchedAt = watchTimestamp, // Populate new watchedAt column
                     providerIds = null,
                     userNotes = row.notes,
                     importSource = row.source,
