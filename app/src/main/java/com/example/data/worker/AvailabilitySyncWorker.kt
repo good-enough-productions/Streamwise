@@ -131,6 +131,27 @@ class AvailabilitySyncWorker(
                         
                         Log.d(TAG, "Mapped Local Providers for \"${item.title}\": $syncedProviders")
 
+                        // 2.1 Availability Notification Logic: Check if it's now available on an ACTIVE service
+                        if (syncedProviders != null) {
+                            val activeProviders = repository.allProviders.first().filter { it.isActive }
+                            val oldProviders = item.providersList.toSet()
+                            val newProviders = syncedProviders.split(",").map { it.trim() }.toSet()
+                            
+                            val newlyAvailableOn = newProviders.filter { pId ->
+                                !oldProviders.contains(pId) && activeProviders.any { it.id == pId }
+                            }
+
+                            if (newlyAvailableOn.isNotEmpty()) {
+                                val firstProv = activeProviders.find { it.id == newlyAvailableOn.first() }
+                                com.example.ui.NotificationHelper.showAvailabilityNotification(
+                                    applicationContext,
+                                    item.title,
+                                    firstProv?.name ?: newlyAvailableOn.first()
+                                )
+                                Log.d(TAG, "Triggered availability notification for: \"${item.title}\" on ${firstProv?.name}")
+                            }
+                        }
+
                         // Extract genres from search result
                         syncedGenres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
 
