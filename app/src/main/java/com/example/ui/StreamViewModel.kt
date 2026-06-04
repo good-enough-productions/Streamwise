@@ -23,13 +23,14 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import org.json.JSONObject
 
 class StreamViewModel(
     application: Application,
     private val repository: MediaRepository,
     private val userPreferences: UserPreferencesManager
 ) : AndroidViewModel(application) {
+
+    private val TAG = "StreamViewModel"
 
     // --- State Expositions ---
 
@@ -67,6 +68,28 @@ class StreamViewModel(
     private val _ollamaHost = MutableStateFlow(userPreferences.ollamaHost)
     val ollamaHost: StateFlow<String> = _ollamaHost.asStateFlow()
 
+    // Persisted GitHub Token
+    private val _githubToken = MutableStateFlow(userPreferences.githubToken)
+    val githubToken: StateFlow<String> = _githubToken.asStateFlow()
+
+    fun saveTmdbApiKey(key: String) {
+        userPreferences.tmdbApiKey = key
+        _tmdbApiKey.value = key.trim()
+        _statusMessage.value = if (key.isBlank()) "TMDB API key cleared." else "TMDB API key saved."
+    }
+
+    fun saveOllamaHost(host: String) {
+        userPreferences.ollamaHost = host
+        _ollamaHost.value = host.trim()
+        _statusMessage.value = "Local Ollama host updated: $host"
+    }
+
+    fun saveGithubToken(token: String) {
+        userPreferences.githubToken = token
+        _githubToken.value = token.trim()
+        _statusMessage.value = "GitHub token saved for Self-Evolving workflows."
+    }
+
     // Casting State
     val discoveredDevices: StateFlow<List<CastDevice>> = CastingManager.discoveredDevices
 
@@ -93,11 +116,24 @@ class StreamViewModel(
                 val watchlist = allMediaItems.value.filter { it.status == MediaStatus.WATCHLIST.name }.take(20).joinToString(", ") { it.title }
 
                 val systemPrompt = """
-                    You are Olivia, an advanced cinematic research agent. 
-                    The user's watch history includes: $watchHistory
-                    The user's current watchlist includes: $watchlist
-                    Help the user pick what to watch, answer questions about their library, or give recommendations based on their history.
-                    Keep responses concise, helpful, and formatted in Markdown.
+                    You are Olivia, an advanced cinematic research agent and app co-developer.
+                    
+                    USER DATA:
+                    - History: $watchHistory
+                    - Watchlist: $watchlist
+                    
+                    RESPONSIBILITIES:
+                    1. Answer questions about the user's movie library or recommend films.
+                    2. SELF-EVOLUTION: If the user suggests a new feature, bug fix, or code change for THIS Android app (Streamwise), you must output a structured GitHub Issue block at the VERY END of your response.
+                    
+                    Format for app feedback:
+                    Sure, I can help build that! 
+                    <github_issue>
+                    {
+                      "title": "Short descriptive title of the feature",
+                      "body": "Detailed description of what to build and how it might be implemented."
+                    }
+                    </github_issue>
                 """.trimIndent()
 
                 val api = com.example.data.remote.OllamaClient.getApiService(ollamaHost.value)
@@ -109,8 +145,22 @@ class StreamViewModel(
                 )
                 val response = api.chat(request)
                 
-                // Append Olivia's reply
-                currentChat.add(response.message)
+                var replyContent = response.message.content
+                
+                // Intercept Self-Evolution Request
+                if (replyContent.contains("<github_issue>")) {
+                    val jsonStr = replyContent.substringAfter("<github_issue>").substringBefore("</github_issue>").trim()
+                    replyContent = replyContent.replace(Regex("<github_issue>.*</github_issue>", RegexOption.DOT_MATCHES_ALL), "").trim()
+                    
+                    if (githubToken.value.isNotEmpty()) {
+                        createGithubIssue(jsonStr)
+                        replyContent += "\n\n*(Agentic Protocol: I have submitted this feature request directly to the GitHub repository to trigger the autonomous coding pipeline.)*"
+                    } else {
+                        replyContent += "\n\n*(Agentic Protocol: I generated the feature request, but your GitHub Token is missing in Settings. Please add it to enable Self-Evolving capabilities.)*"
+                    }
+                }
+
+                currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", replyContent))
                 _chatMessages.value = currentChat
             } catch (e: Exception) {
                 currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", "Error connecting to local Ollama instance: ${e.message}"))
@@ -118,6 +168,34 @@ class StreamViewModel(
             } finally {
                 _isChatLoading.value = false
             }
+        }
+    }
+
+    private fun createGithubIssue(jsonPayload: String) {
+        try {
+            val url = URL("https://api.github.com/repos/good-enough-productions/Streamwise/issues")
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "POST"
+            connection.setRequestProperty("Authorization", "Bearer ${githubToken.value}")
+            connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
+            connection.setRequestProperty("Content-Type", "application/json")
+            connection.doOutput = true
+
+            connection.outputStream.use { os ->
+                val input = jsonPayload.toByteArray(Charsets.UTF_8)
+                os.write(input, 0, input.size)
+            }
+
+            val responseCode = connection.responseCode
+            android.util.Log.d(TAG, "GitHub Issue Creation Response: $responseCode")
+            if (responseCode in 200..299) {
+                _statusMessage.value = "Feature request submitted to GitHub successfully!"
+            } else {
+                _statusMessage.value = "Failed to create GitHub issue: $responseCode"
+            }
+            connection.disconnect()
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "GitHub Issue Error", e)
         }
     }
 
@@ -180,18 +258,6 @@ class StreamViewModel(
             CastingManager.castUrl(device, url)
             _statusMessage.value = "Casting \"${mediaItem.title}\" to ${device.name}..."
         }
-    }
-
-    fun saveTmdbApiKey(key: String) {
-        userPreferences.tmdbApiKey = key
-        _tmdbApiKey.value = key.trim()
-        _statusMessage.value = if (key.isBlank()) "TMDB API key cleared." else "TMDB API key saved."
-    }
-
-    fun saveOllamaHost(host: String) {
-        userPreferences.ollamaHost = host
-        _ollamaHost.value = host.trim()
-        _statusMessage.value = "Local Ollama host updated: $host"
     }
 
     /**
