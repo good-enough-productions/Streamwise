@@ -260,6 +260,7 @@ fun HomeScreen(
         // Settings Dialog (Overlay)
         if (showSettingsDialog) {
             val ollamaHost by viewModel.ollamaHost.collectAsState()
+            val githubToken by viewModel.githubToken.collectAsState()
             SettingsDialog(
                 allProviders = allProviders,
                 onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
@@ -267,6 +268,8 @@ fun HomeScreen(
                 onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
                 ollamaHost = ollamaHost,
                 onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
+                githubToken = githubToken,
+                onSaveGithubToken = { viewModel.saveGithubToken(it) },
                 onDismiss = { showSettingsDialog = false }
             )
         }

@@ -18,9 +18,14 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getString(KEY_OLLAMA_HOST, "192.168.86.217") ?: "192.168.86.217"
         set(value) { prefs.edit().putString(KEY_OLLAMA_HOST, value.trim()).apply() }
 
+    var githubToken: String
+        get() = prefs.getString(KEY_GITHUB_TOKEN, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_GITHUB_TOKEN, value.trim()).apply() }
+
     companion object {
         private const val PREFS_NAME = "user_preferences"
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
         private const val KEY_OLLAMA_HOST = "ollama_host"
+        private const val KEY_GITHUB_TOKEN = "github_token"
     }
 }
