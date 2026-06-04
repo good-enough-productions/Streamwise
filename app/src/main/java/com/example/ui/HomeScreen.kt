@@ -58,7 +58,7 @@ fun HomeScreen(
     val tmdbApiKey by viewModel.tmdbApiKey.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Budget ROI
+    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Agent
     var filterOnlyMyServices by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -86,6 +86,16 @@ fun HomeScreen(
                 },
                 actions = {
                     IconButton(
+                        onClick = { viewModel.exportToObsidian() },
+                        modifier = Modifier.testTag("export_obsidian_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Export to Obsidian",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(
                         onClick = { showSettingsDialog = true },
                         modifier = Modifier.testTag("settings_gear_button")
                     ) {
@@ -112,7 +122,7 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            if (selectedTab == 0) {
+            if (selectedTab == 0 || selectedTab == 1) {
                 ExtendedFloatingActionButton(
                     text = { Text("Add Title") },
                     icon = { Icon(Icons.Default.Add, contentDescription = "Add media item") },
@@ -132,9 +142,10 @@ fun HomeScreen(
                 .padding(innerPadding)
         ) {
             // Main navigation tabs for modular layout
-            TabRow(
+            ScrollableTabRow(
                 selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp)
+                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+                edgePadding = 0.dp
             ) {
                 Tab(
                     selected = selectedTab == 0,
@@ -156,6 +167,13 @@ fun HomeScreen(
                     text = { Text("ROI Stats", fontSize = 11.sp) },
                     icon = { Icon(Icons.Default.Star, contentDescription = "ROI stats tab") },
                     modifier = Modifier.testTag("tab_budget")
+                )
+                Tab(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    text = { Text("Agent", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.Person, contentDescription = "AI Agent tab") },
+                    modifier = Modifier.testTag("tab_agent")
                 )
             }
 
@@ -193,6 +211,15 @@ fun HomeScreen(
                         monthlyStats = monthlyStats,
                         allProviders = allProviders
                     )
+                    3 -> {
+                        val chatMessages by viewModel.chatMessages.collectAsState()
+                        val isChatLoading by viewModel.isChatLoading.collectAsState()
+                        AgentChatTabContent(
+                            chatMessages = chatMessages,
+                            isLoading = isChatLoading,
+                            onSendMessage = { viewModel.sendChatMessage(it) }
+                        )
+                    }
                 }
             }
         }
@@ -246,9 +273,12 @@ fun HomeScreen(
 
         // Expanded Movie Details Bottom Sheet
         if (detailMovieItem != null) {
+            val discoveredDevices by viewModel.discoveredDevices.collectAsState()
             MovieDetailsBottomSheet(
                 item = detailMovieItem!!,
                 allProviders = allProviders,
+                discoveredDevices = discoveredDevices,
+                onCastClick = { device, item -> viewModel.castToDevice(device, item) },
                 onDismiss = { detailMovieItem = null },
                 onWatchClick = {
                     viewModel.startIntendingToWatch(detailMovieItem!!)
@@ -1968,11 +1998,13 @@ fun SettingsDialog(
                         val context = LocalContext.current
                         var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
                         val scrollState = rememberScrollState()
-                        val readmeText = remember {
+                        
+                        // Founder's Manual Loader
+                        val manualHtml = remember {
                             try {
-                                context.assets.open("README.md").bufferedReader().readText()
+                                context.assets.open("readme.html").bufferedReader().readText()
                             } catch (e: Exception) {
-                                "README file not found."
+                                "Manual file not found."
                             }
                         }
 
@@ -1988,7 +2020,7 @@ fun SettingsDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Synthesis 2.0 uses your local Ollama instance (Gemma 2) to analyze watch history for personalized research.",
+                                "Synthesis 2.0 uses your local Ollama instance (Gemma 4) to analyze watch history for personalized research.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -2007,7 +2039,7 @@ fun SettingsDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Save Ollama Host")
                             }
@@ -2015,15 +2047,24 @@ fun SettingsDialog(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
                             Text(
-                                "About Streamwise",
+                                "Founder's Manual & Roadmap",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             
+                            // Basic HTML renderer (strips tags for standard Text view, 
+                            // though full WebView would be better for complex styles)
+                            val cleanText = remember(manualHtml) {
+                                manualHtml.replace(Regex("<[^>]*>"), "")
+                                    .replace("&nbsp;", " ")
+                                    .trim()
+                            }
+                            
                             Text(
-                                text = readmeText,
+                                text = cleanText,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                             )
                         }
                     }
@@ -2042,6 +2083,8 @@ fun SettingsDialog(
 fun MovieDetailsBottomSheet(
     item: MediaItem,
     allProviders: List<StreamingProvider>,
+    discoveredDevices: List<CastDevice>,
+    onCastClick: (CastDevice, MediaItem) -> Unit,
     onDismiss: () -> Unit,
     onWatchClick: () -> Unit,
     onDeleteClick: () -> Unit
@@ -2128,6 +2171,43 @@ fun MovieDetailsBottomSheet(
                 }
             }
 
+            // --- UNIVERSAL CASTING ENGINE ---
+            if (discoveredDevices.isNotEmpty()) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                Text(
+                    text = "Cast to Living Room Device",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    discoveredDevices.forEach { device ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.3f)),
+                            modifier = Modifier.clickable { onCastClick(device, item) }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.PlayArrow, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(device.name, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text(device.ip, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Stream availability
             Text(
                 text = "Currently Available On:",
@@ -2180,7 +2260,7 @@ fun MovieDetailsBottomSheet(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = provider?.name ?: pId.capitalize(),
+                                    text = provider?.name ?: pId.replaceFirstChar { it.uppercase() },
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = if (isSubscribed) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
@@ -2324,3 +2404,126 @@ fun MovieDetailsBottomSheet(
         }
     }
 }
+
+// ==========================================
+// COMPOSABLE: Agent Chat Tab
+// ==========================================
+@Composable
+fun AgentChatTabContent(
+    chatMessages: List<com.example.data.remote.OllamaChatMessage>,
+    isLoading: Boolean,
+    onSendMessage: (String) -> Unit
+) {
+    var inputMessage by remember { mutableStateOf("") }
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+
+    LaunchedEffect(chatMessages.size) {
+        if (chatMessages.isNotEmpty()) {
+            listState.animateScrollToItem(chatMessages.size - 1)
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        // Welcome Card
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text("Olivia (Gemma 4)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Ask me about your Vault, or ask for recommendations based on your history.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+
+        // Chat History
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(chatMessages.filter { it.role != "system" }) { msg ->
+                val isUser = msg.role == "user"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(
+                            topStart = 16.dp,
+                            topEnd = 16.dp,
+                            bottomStart = if (isUser) 16.dp else 4.dp,
+                            bottomEnd = if (isUser) 4.dp else 16.dp
+                        ),
+                        color = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.widthIn(max = 280.dp)
+                    ) {
+                        Text(
+                            text = msg.content,
+                            color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                        )
+                    }
+                }
+            }
+            if (isLoading) {
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier.widthIn(max = 280.dp)
+                        ) {
+                            Text(
+                                "Thinking...",
+                                color = MaterialTheme.colorScheme.outline,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Input Field
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = inputMessage,
+                onValueChange = { inputMessage = it },
+                placeholder = { Text("What should I watch tonight?") },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(24.dp),
+                maxLines = 4
+            )
+            FloatingActionButton(
+                onClick = {
+                    onSendMessage(inputMessage)
+                    inputMessage = ""
+                },
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(56.dp),
+                shape = CircleShape,
+                elevation = FloatingActionButtonDefaults.elevation(0.dp)
+            ) {
+                Icon(Icons.Default.Send, contentDescription = "Send message")
+            }
+        }
+    }
+}
+

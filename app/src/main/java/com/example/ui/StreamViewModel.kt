@@ -17,6 +17,7 @@ import com.example.data.model.MediaStatus
 import com.example.data.model.StreamingProvider
 import com.example.data.repository.MediaRepository
 import com.example.data.worker.AvailabilitySyncWorker
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -62,6 +63,121 @@ class StreamViewModel(
     // Persisted Ollama Host
     private val _ollamaHost = MutableStateFlow(userPreferences.ollamaHost)
     val ollamaHost: StateFlow<String> = _ollamaHost.asStateFlow()
+
+    // Casting State
+    val discoveredDevices: StateFlow<List<CastDevice>> = CastingManager.discoveredDevices
+
+    // Chatbot State
+    private val _chatMessages = MutableStateFlow<List<com.example.data.remote.OllamaChatMessage>>(emptyList())
+    val chatMessages: StateFlow<List<com.example.data.remote.OllamaChatMessage>> = _chatMessages.asStateFlow()
+
+    private val _isChatLoading = MutableStateFlow(false)
+    val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
+
+    fun sendChatMessage(userMessage: String) {
+        if (userMessage.isBlank()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isChatLoading.value = true
+            
+            // Append user message
+            val currentChat = _chatMessages.value.toMutableList()
+            currentChat.add(com.example.data.remote.OllamaChatMessage("user", userMessage))
+            _chatMessages.value = currentChat
+
+            try {
+                // Fetch context
+                val watchHistory = watchedItems.value.take(20).joinToString(", ") { it.title }
+                val watchlist = allMediaItems.value.filter { it.status == MediaStatus.WATCHLIST.name }.take(20).joinToString(", ") { it.title }
+
+                val systemPrompt = """
+                    You are Olivia, an advanced cinematic research agent. 
+                    The user's watch history includes: $watchHistory
+                    The user's current watchlist includes: $watchlist
+                    Help the user pick what to watch, answer questions about their library, or give recommendations based on their history.
+                    Keep responses concise, helpful, and formatted in Markdown.
+                """.trimIndent()
+
+                val api = com.example.data.remote.OllamaClient.getApiService(ollamaHost.value)
+                val requestMessages = mutableListOf(com.example.data.remote.OllamaChatMessage("system", systemPrompt))
+                requestMessages.addAll(currentChat)
+
+                val request = com.example.data.remote.OllamaChatRequest(
+                    messages = requestMessages
+                )
+                val response = api.chat(request)
+                
+                // Append Olivia's reply
+                currentChat.add(response.message)
+                _chatMessages.value = currentChat
+            } catch (e: Exception) {
+                currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", "Error connecting to local Ollama instance: ${e.message}"))
+                _chatMessages.value = currentChat
+            } finally {
+                _isChatLoading.value = false
+            }
+        }
+    }
+
+    fun exportToObsidian() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val allItems = repository.allMediaItems.first()
+                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val exportDir = File(downloadsDir, "StreamwiseVault")
+                if (!exportDir.exists()) exportDir.mkdirs()
+
+                allItems.forEach { item ->
+                    val safeTitle = item.title.replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                    val file = File(exportDir, "$safeTitle.md")
+                    
+                    val content = java.lang.StringBuilder().apply {
+                        appendLine("---")
+                        appendLine("title: \"${item.title}\"")
+                        appendLine("status: \"${item.status}\"")
+                        if (item.rating != null) appendLine("rating: ${item.rating}")
+                        if (!item.genres.isNullOrEmpty()) appendLine("genres: \"${item.genres}\"")
+                        if (!item.importSource.isNullOrEmpty()) appendLine("source: \"${item.importSource}\"")
+                        appendLine("---")
+                        appendLine()
+                        appendLine("# ${item.title}")
+                        appendLine()
+                        if (!item.overview.isNullOrEmpty()) {
+                            appendLine("## Overview")
+                            appendLine(item.overview)
+                            appendLine()
+                        }
+                        if (!item.userNotes.isNullOrEmpty()) {
+                            appendLine("## Personal Notes")
+                            appendLine(item.userNotes)
+                            appendLine()
+                        }
+                        if (!item.trivia.isNullOrEmpty()) {
+                            appendLine(item.trivia)
+                        }
+                    }
+                    file.writeText(content.toString())
+                }
+                
+                _statusMessage.value = "Exported ${allItems.size} titles to Downloads/StreamwiseVault"
+            } catch (e: Exception) {
+                _statusMessage.value = "Export failed: ${e.message}"
+            }
+        }
+    }
+
+    fun startDeviceDiscovery() {
+        viewModelScope.launch {
+            CastingManager.discoverDevices(getApplication())
+        }
+    }
+
+    fun castToDevice(device: CastDevice, mediaItem: MediaItem) {
+        viewModelScope.launch {
+            val url = mediaItem.sharedUrl ?: return@launch
+            CastingManager.castUrl(device, url)
+            _statusMessage.value = "Casting \"${mediaItem.title}\" to ${device.name}..."
+        }
+    }
 
     fun saveTmdbApiKey(key: String) {
         userPreferences.tmdbApiKey = key

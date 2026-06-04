@@ -131,25 +131,27 @@ class AvailabilitySyncWorker(
                         
                         Log.d(TAG, "Mapped Local Providers for \"${item.title}\": $syncedProviders")
 
-                        // 2.1 Availability Notification Logic: Check if it's now available on an ACTIVE service
+                        // 2.1 Availability Notification Logic: Check if it's now available on an accessible service
+                        // Trigger if newly available on any ACTIVE subscription OR any FREE service (Tubi, Freevee, etc.)
                         if (syncedProviders != null) {
                             val allProvidersList = repository.allStreamingProviders.first()
-                            val activeProviders = allProvidersList.filter { it.isActive }
+                            // Accessibile = Paid & Active OR Cost is 0.0
+                            val accessibleProviders = allProvidersList.filter { it.isActive || it.costPerMonth == 0.0 }
                             val oldProviders = item.providersList.toSet()
                             val newProviders = syncedProviders.split(",").map { it.trim() }.toSet()
                             
                             val newlyAvailableOn = newProviders.filter { pId ->
-                                !oldProviders.contains(pId) && activeProviders.any { it.id == pId }
+                                !oldProviders.contains(pId) && accessibleProviders.any { it.id == pId }
                             }
 
                             if (newlyAvailableOn.isNotEmpty()) {
-                                val firstProv = activeProviders.find { it.id == newlyAvailableOn.first() }
+                                val firstProv = accessibleProviders.find { it.id == newlyAvailableOn.first() }
                                 com.example.ui.NotificationHelper.showAvailabilityNotification(
                                     applicationContext,
                                     item.title,
                                     firstProv?.name ?: newlyAvailableOn.first()
                                 )
-                                Log.d(TAG, "Triggered availability notification for: \"${item.title}\" on ${firstProv?.name}")
+                                Log.d(TAG, "Triggered availability notification for: \"${item.title}\" on ${firstProv?.name} (Free/Active check)")
                             }
                         }
 
