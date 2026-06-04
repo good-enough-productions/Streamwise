@@ -1826,6 +1826,8 @@ fun SettingsDialog(
     onSaveTmdbApiKey: (String) -> Unit,
     ollamaHost: String,
     onSaveOllamaHost: (String) -> Unit,
+    githubToken: String,
+    onSaveGithubToken: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: TMDB API Key, 2: AI (Ollama) & About
@@ -2000,6 +2002,8 @@ fun SettingsDialog(
                     2 -> {
                         val context = LocalContext.current
                         var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
+                        var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
+                        var showToken by remember { mutableStateOf(false) }
                         val scrollState = rememberScrollState()
                         
                         // Founder's Manual Loader
@@ -2050,6 +2054,48 @@ fun SettingsDialog(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
                             Text(
+                                "Synthesis 4.0: Self-Evolving App",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Connect a GitHub Personal Access Token to allow the Agent Chat to submit feature requests directly to the repository.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            OutlinedTextField(
+                                value = tokenInput,
+                                onValueChange = { tokenInput = it },
+                                label = { Text("GitHub Token (PAT)") },
+                                placeholder = { Text("ghp_...") },
+                                singleLine = true,
+                                visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                                trailingIcon = {
+                                    IconButton(onClick = { showToken = !showToken }) {
+                                        Icon(
+                                            imageVector = if (showToken) Icons.Default.Clear else Icons.Default.Search,
+                                            contentDescription = if (showToken) "Hide token" else "Show token"
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Button(
+                                onClick = { onSaveGithubToken(tokenInput) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save GitHub Token")
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            Text(
                                 "Founder's Manual & Roadmap",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
@@ -2077,6 +2123,7 @@ fun SettingsDialog(
         confirmButton = {}
     )
 }
+
 
 // ==========================================
 // COMPOSABLE: Movie Details Bottom Sheet
