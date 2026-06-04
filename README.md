@@ -2,68 +2,76 @@
 <img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
 </div>
 
-# Run and deploy your AI Studio app
+# Streamwise: Your Agentic Streaming Companion
 
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/7d6cb489-a977-49ca-bd7c-0dbcff292f1a
-
-## Run Locally
-
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
-
-
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+Streamwise is a self-evolving Android application designed to track your cinematic journey across all streaming services. It features **"Olivia,"** an advanced local research agent, and a deep ROI-tracking system for your subscriptions.
 
 ---
 
-## CI/CD — Auto-build & Deploy to Phone
+## 🚀 Quick Start Guide
 
-Every push to `main` triggers a GitHub Actions workflow that builds the debug APK and installs it wirelessly on your phone.
-
-Because ADB needs to reach your phone over local Wi-Fi, the workflow runs on a **self-hosted runner** (your Windows machine). One-time setup below.
-
-### 1 · Install the self-hosted runner
-
-1. Go to your repo → **Settings → Actions → Runners → New self-hosted runner**
-2. Select **Windows / x64** and follow the download + configure commands shown
-3. Run `./run.cmd` once to verify it connects, then install it as a service:
-   ```powershell
-   ./svc.ps1 install
-   ./svc.ps1 start
+### 1. Initial Setup (Android Studio)
+1. **Open Project:** Launch Android Studio and open the `Streamwise` folder.
+2. **Environment Config:** Create a `.env` file in the root directory:
+   ```env
+   GEMINI_API_KEY=your_gemini_key
+   TMDB_API_KEY=your_tmdb_key
    ```
-   The runner will now start automatically with Windows and pick up jobs in the background.
+3. **Build & Run:** Hit the green "Play" button to install on your phone or emulator.
 
-### 2 · Enable wireless debugging on your phone
+---
 
-1. **Settings → About phone** — tap **Build number** 7× to enable Developer Options
-2. **Settings → Developer Options → Wireless debugging** — toggle on
-3. Tap **Wireless debugging** → note the **IP address and Port** shown at the top (e.g. `192.168.1.42:5555`)
-4. Pair once from your PC (only needed after a factory reset):
-   ```powershell
-   # Tap "Pair device with pairing code" on the phone, then:
-   adb pair 192.168.1.42:<pairing-port>   # enter the 6-digit code shown
-   adb connect 192.168.1.42:5555          # confirm it says "connected"
+## 🤖 The "Olivia" Agent & Local AI
+Olivia provides "Agentic Research Strategies" for every movie on your watchlist. She runs locally on your machine for maximum privacy.
+
+### Setup Ollama (Local Brain)
+1. **Install Ollama:** Download from [ollama.com](https://ollama.com).
+2. **Download Model:** Open your terminal and run:
+   ```bash
+   ollama run gemma4:e2b
    ```
+3. **Configure the App:**
+   - Go to the **Settings** (Gear icon) in the app.
+   - Enter your laptop's **Local IP Address** (e.g., `192.168.86.217`).
+   - Olivia will now start researching your movies in the background!
 
-### 3 · Add repo secrets
+---
 
-In your repo → **Settings → Secrets and variables → Actions → Secrets**:
+## 📱 Wireless Debugging & Auto-Deploy
+Streamwise is built for rapid iteration. Every push to GitHub triggers an automatic install on your physical phone over your home Wi-Fi.
 
-| Name | Value |
-|------|-------|
-| `GEMINI_API_KEY` | your Gemini API key |
-| `TMDB_API_KEY` | your TMDB API key |
+### Enable Wireless Debugging
+1. **Developer Options:** Go to *Settings > About Phone* and tap **Build Number** 7 times.
+2. **Toggle On:** Go to *Settings > System > Developer Options > Wireless Debugging* and turn it **ON**.
+3. **Stay Stable:** 
+   - Keep the phone **plugged into a charger** to prevent power-saving from killing the connection.
+   - Keep the **Wireless Debugging screen open** while the Agent is deploying updates.
 
-> No IP/port variables needed — the runner discovers your phone automatically via ADB wireless debugging (mDNS).
+---
 
-### 4 · Push and watch it deploy
+## 🎬 Master the Interface
 
-Push any commit to `main`. Visit the **Actions** tab to watch the build and see the APK install live on your phone. You can also trigger it manually with **Run workflow**.
+### The 4 Main Tabs
+1. **Watchlist:** Your upcoming queue. Tap **Refresh (↺)** to sync latest metadata and Agent research.
+2. **Watched:** Your historical library. Long-press to see Olivia's insights on why you loved it.
+3. **ROI Stats:** Track how much value you're getting from Netflix, Hulu, etc., based on watch time.
+4. **Agent (Chat):** Speak directly with Olivia. You can ask for recommendations or even **request new app features** (which she will submit to GitHub as real issues!).
 
-The built APK is also uploaded as a downloadable artifact (retained 7 days) in case you want to sideload it on another device.
+---
+
+## 🛠 Troubleshooting
+
+### "Sync Pending" or No Images?
+- Ensure your **TMDB API Key** is set in the Settings tab.
+- Tap the **Refresh (↺)** icon in the Watchlist.
+- If you just cleared app data, it may take 1-2 minutes for Olivia to re-process the list.
+
+### Agent Connection Blocked?
+- We have enabled **Cleartext Traffic** for local IPs. Ensure your phone and laptop are on the **same Wi-Fi network**.
+- Verify that Ollama is actually running in your laptop's system tray.
+- If response times are slow, we've extended the timeout to **5 minutes** to support complex local model reasoning.
+
+---
+
+## 🏗 Architectural Architecture
+For deep-dive documentation on the "Self-Evolution" loop, GitHub integration, and Room database schemas, see [**GEMINI.md**](./GEMINI.md).
