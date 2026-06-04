@@ -58,6 +58,9 @@ class MainActivity : ComponentActivity() {
         
         // Zero-Touch Automation: Trigger immediate TMDB/Ollama sync on every resume to ensure data is fresh
         viewModel.triggerImmediateSync()
+        
+        // Zero-Touch Casting: Start discovering local UPnP/DLNA devices on resume
+        viewModel.startDeviceDiscovery()
     }
 
     override fun onNewIntent(intent: Intent) {
