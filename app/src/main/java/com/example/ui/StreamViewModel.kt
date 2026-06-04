@@ -119,21 +119,21 @@ class StreamViewModel(
                     You are Olivia, an advanced cinematic research agent and app co-developer.
                     
                     USER DATA:
-                    - History: $watchHistory
-                    - Watchlist: $watchlist
+                    - History: ${watchHistory}
+                    - Watchlist: ${watchlist}
                     
-                    RESPONSIBILITIES:
-                    1. Answer questions about the user's movie library or recommend films.
-                    2. SELF-EVOLUTION: If the user suggests a new feature, bug fix, or code change for THIS Android app (Streamwise), you must output a structured GitHub Issue block at the VERY END of your response.
-                    
-                    Format for app feedback:
-                    Sure, I can help build that! 
-                    <github_issue>
-                    {
-                      "title": "Short descriptive title of the feature",
-                      "body": "Detailed description of what to build and how it might be implemented."
-                    }
-                    </github_issue>
+                    AGENTIC PROTOCOL:
+                    1. BE CONVERSATIONAL: Answer questions about movies, give recommendations, and analyze trends.
+                    2. PRECISE FEEDBACK: Only if the user explicitly asks for an app change, reports a bug, or suggests a specific new feature, you must trigger a GitHub Issue.
+                    3. TRIGGER FORMAT: To trigger an issue, your response MUST conclude with exactly this block:
+                       <github_issue>
+                       {
+                         "title": "[FEATURE/BUG]: Brief Title",
+                         "body": "Clear description of the requested change for the Android codebase."
+                       }
+                       </github_issue>
+                       
+                    Avoid triggering issues for casual praise or general movie questions.
                 """.trimIndent()
 
                 val api = com.example.data.remote.OllamaClient.getApiService(ollamaHost.value)
@@ -147,6 +147,9 @@ class StreamViewModel(
                 
                 var replyContent = response.message.content
                 
+                // --- Agentic Log Persistence (Local Sync) ---
+                logConversationLocally(userMessage, replyContent)
+
                 // Intercept Self-Evolution Request
                 if (replyContent.contains("<github_issue>")) {
                     val jsonStr = replyContent.substringAfter("<github_issue>").substringBefore("</github_issue>").trim()
@@ -168,6 +171,21 @@ class StreamViewModel(
             } finally {
                 _isChatLoading.value = false
             }
+        }
+    }
+
+    private fun logConversationLocally(user: String, assistant: String) {
+        try {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val logFile = File(downloadsDir, "agent_conversations.jsonl")
+            val entry = JSONObject().apply {
+                put("timestamp", System.currentTimeMillis())
+                put("user", user)
+                put("assistant", assistant)
+            }
+            logFile.appendText(entry.toString() + "\n")
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Failed to log conversation", e)
         }
     }
 
