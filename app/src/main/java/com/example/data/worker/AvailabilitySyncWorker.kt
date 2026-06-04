@@ -133,7 +133,8 @@ class AvailabilitySyncWorker(
 
                         // 2.1 Availability Notification Logic: Check if it's now available on an ACTIVE service
                         if (syncedProviders != null) {
-                            val activeProviders = repository.allProviders.first().filter { it.isActive }
+                            val allProvidersList = repository.allProviders.first()
+                            val activeProviders = allProvidersList.filter { it.isActive }
                             val oldProviders = item.providersList.toSet()
                             val newProviders = syncedProviders.split(",").map { it.trim() }.toSet()
                             
