@@ -261,11 +261,14 @@ fun HomeScreen(
         if (showSettingsDialog) {
             val ollamaHost by viewModel.ollamaHost.collectAsState()
             val githubToken by viewModel.githubToken.collectAsState()
+            val watchmodeApiKey by viewModel.watchmodeApiKey.collectAsState()
             SettingsDialog(
                 allProviders = allProviders,
                 onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
                 tmdbApiKey = tmdbApiKey,
                 onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
+                watchmodeApiKey = watchmodeApiKey,
+                onSaveWatchmodeApiKey = { viewModel.saveWatchmodeApiKey(it) },
                 ollamaHost = ollamaHost,
                 onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
                 githubToken = githubToken,
@@ -1781,7 +1784,9 @@ fun ProviderSelector(
     selectedId: String?,
     onSelect: (String) -> Unit
 ) {
-    val activeList = remember(allProviders) { allProviders.filter { it.isActive } }
+    val activeList = remember(allProviders) { 
+        allProviders.filter { it.isActive || it.costPerMonth == 0.0 } 
+    }
     
     if (activeList.isEmpty()) {
         Text("No active platforms configured. Setting log as standard watch time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
@@ -1824,13 +1829,15 @@ fun SettingsDialog(
     onProviderToggle: (String, Boolean) -> Unit,
     tmdbApiKey: String,
     onSaveTmdbApiKey: (String) -> Unit,
+    watchmodeApiKey: String,
+    onSaveWatchmodeApiKey: (String) -> Unit,
     ollamaHost: String,
     onSaveOllamaHost: (String) -> Unit,
     githubToken: String,
     onSaveGithubToken: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: TMDB API Key, 2: AI (Ollama) & About
+    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: APIs (TMDB/Watchmode), 2: AI (Ollama) & About
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1865,7 +1872,7 @@ fun SettingsDialog(
                     Tab(
                         selected = activeSubTab == 1,
                         onClick = { activeSubTab = 1 },
-                        text = { Text("TMDB", fontSize = 11.sp) }
+                        text = { Text("APIs", fontSize = 11.sp) }
                     )
                     Tab(
                         selected = activeSubTab == 2,
@@ -1933,8 +1940,10 @@ fun SettingsDialog(
                         }
                     }
                     1 -> {
-                        var keyInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
-                        var showKey by remember { mutableStateOf(false) }
+                        var tmdbInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
+                        var wmInput by remember(watchmodeApiKey) { mutableStateOf(watchmodeApiKey) }
+                        var showTmdb by remember { mutableStateOf(false) }
+                        var showWm by remember { mutableStateOf(false) }
                         val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                         val scrollState = rememberScrollState()
 
@@ -1945,57 +1954,82 @@ fun SettingsDialog(
                                 .verticalScroll(scrollState)
                         ) {
                             Text(
-                                "The Movie Database Integration",
+                                "Provider Data Sources",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
-                            Text(
-                                "Streaming availability check matches actual flatrate, free, and ad-supported platforms via the TMDB API.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            Button(
-                                onClick = { uriHandler.openUri("https://www.themoviedb.org/settings/api") },
-                                modifier = Modifier.fillMaxWidth().testTag("get_key_link_button"),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer),
-                                shape = RoundedCornerShape(10.dp)
+                            
+                            // TMDB Section
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Get TMDB API Key Link", fontSize = 12.sp)
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("TMDB API (Primary)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Provides metadata, posters, and primary streaming status.", style = MaterialTheme.typography.bodySmall)
+                                    
+                                    OutlinedTextField(
+                                        value = tmdbInput,
+                                        onValueChange = { tmdbInput = it },
+                                        label = { Text("TMDB Key") },
+                                        singleLine = true,
+                                        visualTransformation = if (showTmdb) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingIcon = {
+                                            IconButton(onClick = { showTmdb = !showTmdb }) {
+                                                Icon(imageVector = if (showTmdb) Icons.Default.Clear else Icons.Default.Search, contentDescription = null)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    
+                                    Button(
+                                        onClick = { onSaveTmdbApiKey(tmdbInput) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Save TMDB Key", fontSize = 12.sp)
+                                    }
+                                }
                             }
 
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                            OutlinedTextField(
-                                value = keyInput,
-                                onValueChange = { keyInput = it },
-                                label = { Text("TMDB API Key") },
-                                placeholder = { Text("Paste key here") },
-                                singleLine = true,
-                                visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { showKey = !showKey }) {
-                                        Icon(
-                                            imageVector = if (showKey) Icons.Default.Clear else Icons.Default.Search,
-                                            contentDescription = if (showKey) "Hide key" else "Show key"
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth().testTag("dialog_settings_tmdb_api_key_input")
-                            )
-
-                            Button(
-                                onClick = {
-                                    onSaveTmdbApiKey(keyInput)
-                                },
-                                modifier = Modifier.fillMaxWidth().testTag("dialog_settings_save_api_key"),
-                                shape = RoundedCornerShape(10.dp)
+                            // Watchmode Section
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Save TMDB Key")
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Watchmode API (Fallback)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Deep-link availability source. Used when TMDB data is missing.", style = MaterialTheme.typography.bodySmall)
+                                    
+                                    OutlinedTextField(
+                                        value = wmInput,
+                                        onValueChange = { wmInput = it },
+                                        label = { Text("Watchmode Key") },
+                                        singleLine = true,
+                                        visualTransformation = if (showWm) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingIcon = {
+                                            IconButton(onClick = { showWm = !showWm }) {
+                                                Icon(imageVector = if (showWm) Icons.Default.Clear else Icons.Default.Search, contentDescription = null)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    
+                                    Button(
+                                        onClick = { onSaveWatchmodeApiKey(wmInput) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                    ) {
+                                        Text("Save Watchmode Key", fontSize = 12.sp)
+                                    }
+                                    
+                                    TextButton(onClick = { uriHandler.openUri("https://api.watchmode.com/") }) {
+                                        Text("Get Watchmode API Key", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
                             }
                         }
                     }

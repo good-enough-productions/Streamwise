@@ -83,6 +83,9 @@ class AvailabilitySyncWorker(
 
             val ollamaHost = userPrefs?.ollamaHost ?: "192.168.1.100"
 
+            val watchmodeKey = userPrefs?.watchmodeApiKey ?: ""
+            val isWatchmodeConfigured = watchmodeKey.isNotEmpty()
+
             for (item in pendingOrActiveItems) {
                 // Rate Limiting Optimization: Wait 1 second between calls to protect TMDB API rate-limit of 40 reqs/10s.
                 delay(1000)
@@ -126,7 +129,25 @@ class AvailabilitySyncWorker(
                         if (usProvidersList.isNotEmpty()) {
                             syncedProviders = mapTmdbProvidersToLocal(usProvidersList)
                         } else {
-                            syncedProviders = null
+                            // FALLBACK: If TMDB has no provider data, check Watchmode if configured
+                            if (isWatchmodeConfigured) {
+                                try {
+                                    Log.d(TAG, "TMDB had no providers for \"${item.title}\". Querying Watchmode fallback...")
+                                    val wmSearch = com.example.data.remote.WatchmodeClient.instance.searchTitle(watchmodeKey, searchValue = item.title)
+                                    val wmMatch = wmSearch.results.firstOrNull()
+                                    if (wmMatch != null) {
+                                        val wmSources = com.example.data.remote.WatchmodeClient.instance.getTitleSources(wmMatch.id, watchmodeKey)
+                                        if (wmSources.isNotEmpty()) {
+                                            syncedProviders = mapWatchmodeProvidersToLocal(wmSources)
+                                            Log.d(TAG, "Watchmode match found! Sources: ${wmSources.joinToString { it.name }} -> Mapped: $syncedProviders")
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Watchmode fallback failed for \"${item.title}\": ${e.message}")
+                                }
+                            } else {
+                                syncedProviders = null
+                            }
                         }
                         
                         Log.d(TAG, "Mapped Local Providers for \"${item.title}\": $syncedProviders")
@@ -273,6 +294,30 @@ class AvailabilitySyncWorker(
             Log.e(TAG, "Ollama synthesis failed: ${e.message}")
             null
         }
+    }
+
+    private fun mapWatchmodeProvidersToLocal(sources: List<com.example.data.remote.WatchmodeSource>): String? {
+        val localIds = mutableListOf<String>()
+        for (source in sources) {
+            val name = source.name.lowercase()
+            // Watchmode type: "sub", "free", "rent", "buy"
+            // Only care about streaming (sub/free)
+            if (source.type != "sub" && source.type != "free") continue
+
+            when {
+                name.contains("netflix") -> localIds.add("netflix")
+                name.contains("hulu") -> localIds.add("hulu")
+                name.contains("max") || name.contains("hbo") -> localIds.add("max")
+                name.contains("disney") -> localIds.add("disney")
+                name.contains("amazon") || name.contains("prime video") -> localIds.add("prime")
+                name.contains("apple tv") -> localIds.add("apple")
+                name.contains("tubi") -> localIds.add("tubi")
+                name.contains("freevee") -> localIds.add("freevee")
+                name.contains("pluto") -> localIds.add("pluto")
+            }
+        }
+        val result = localIds.distinct().joinToString(",")
+        return if (result.isEmpty()) null else result
     }
 
     private fun mapTmdbProvidersToLocal(providers: List<com.example.data.remote.TmdbProvider>): String? {
