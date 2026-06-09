@@ -65,6 +65,10 @@ class StreamViewModel(
     private val _tmdbApiKey = MutableStateFlow(userPreferences.tmdbApiKey)
     val tmdbApiKey: StateFlow<String> = _tmdbApiKey.asStateFlow()
 
+    // Persisted Watchmode API key
+    private val _watchmodeApiKey = MutableStateFlow(userPreferences.watchmodeApiKey)
+    val watchmodeApiKey: StateFlow<String> = _watchmodeApiKey.asStateFlow()
+
     // Persisted Ollama Host
     private val _ollamaHost = MutableStateFlow(userPreferences.ollamaHost)
     val ollamaHost: StateFlow<String> = _ollamaHost.asStateFlow()
@@ -77,6 +81,12 @@ class StreamViewModel(
         userPreferences.tmdbApiKey = key
         _tmdbApiKey.value = key.trim()
         _statusMessage.value = if (key.isBlank()) "TMDB API key cleared." else "TMDB API key saved."
+    }
+
+    fun saveWatchmodeApiKey(key: String) {
+        userPreferences.watchmodeApiKey = key
+        _watchmodeApiKey.value = key.trim()
+        _statusMessage.value = if (key.isBlank()) "Watchmode API key cleared." else "Watchmode API key saved."
     }
 
     fun saveOllamaHost(host: String) {

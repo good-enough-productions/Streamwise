@@ -22,9 +22,14 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getString(KEY_GITHUB_TOKEN, "") ?: ""
         set(value) { prefs.edit().putString(KEY_GITHUB_TOKEN, value.trim()).apply() }
 
+    var watchmodeApiKey: String
+        get() = prefs.getString(KEY_WATCHMODE_API_KEY, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_WATCHMODE_API_KEY, value).apply()
+
     companion object {
         private const val PREFS_NAME = "user_preferences"
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
+        private const val KEY_WATCHMODE_API_KEY = "watchmode_api_key"
         private const val KEY_OLLAMA_HOST = "ollama_host"
         private const val KEY_GITHUB_TOKEN = "github_token"
     }
