@@ -75,3 +75,36 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 
 ## 🏗 Architectural Architecture
 For deep-dive documentation on the "Self-Evolution" loop, GitHub integration, and Room database schemas, see [**GEMINI.md**](./GEMINI.md).
+
+
+## Recommended Enhancements (from Scraped Articles)
+
+The following opportunities were identified during a review of scraped technical articles:
+
+- **[Gemini task automation is slow, clunky, and super ]()** (Relevance: High)
+  - *Concepts/Tools:* Model Context Protocol (MCP)
+  - *Action:* Review article for best practices on this project.
+- **[Tom's Guide- Google just unlocked 'Agent Mode' for]()** (Relevance: High)
+  - *Concepts/Tools:* Agentic Design Patterns, Home Automation, Vibe Coding, Home Assistant, NotebookLM
+  - *Action:* Review article for best practices on this project.
+- **[The Verge- Why does the Googlebook exist-]()** (Relevance: High)
+  - *Concepts/Tools:* Vibe Coding
+  - *Action:* Review article for best practices on this project.
+- **[Stop Wasting Tokens- A Smarter Alternative to JSON]()** (Relevance: Medium)
+  - *Concepts/Tools:* Agentic Design Patterns, LLM Engineering, Vibe Coding, Claude Code, FastAPI, Python
+  - *Action:* Review article for best practices on this project.
+- **[How to Use Google Chrome’s New AI-Powered ‘Skills’ | WIRED](https://share.google/YFweRkIOJUymRBi5r)** (Relevance: Medium)
+  - *Concepts/Tools:* Agentic Design Patterns, Vibe Coding
+  - *Action:* Review article for best practices on this project.
+- **[I Just Vibe Coded a Global Mass Surveillance Site in 2 Hours With OpenAI's Codex. It Was Terrifyingly Easy | PCMag](https://share.google/uSbjV8IzAeXDMV2vb)** (Relevance: High)
+  - *Concepts/Tools:* Agentic Design Patterns, Vibe Coding, Claude Code
+  - *Action:* Review article for best practices on this project.
+- **[Google Brings Enterprise AI Agent Tools Under One Roof](https://share.google/NO74YHvcEZx0SozJf)** (Relevance: Medium)
+  - *Concepts/Tools:* Model Context Protocol (MCP), Agentic Design Patterns, LLM Engineering
+  - *Action:* Review article for best practices on this project.
+- **[Self-Hosted LLMs in the Real World: Limits, Workarounds, and Hard Lessons - KDnuggets](https://share.google/1ovRMys6HeqsNJKYO)** (Relevance: High)
+  - *Concepts/Tools:* Agentic Design Patterns, LLM Engineering, Local AI & Self-Hosting, Vibe Coding, Ollama, Claude Code, Python
+  - *Action:* Review article for best practices on this project.
+- **[Using Nano Banana 2 to Design an Android Phone in One Prompt - Tech Advisor](https://share.google/KG4RVn9ROut4DWW4T)** (Relevance: Medium)
+  - *Concepts/Tools:* LLM Engineering
+  - *Action:* Review article for best practices on this project.
