@@ -86,6 +86,9 @@ interface MediaDao {
             sp.id AS providerId, 
             sp.name AS providerName, 
             sp.costPerMonth AS costPerMonth, 
+            sp.userCostPerMonth AS userCostPerMonth,
+            sp.subscriptionStartDate AS subscriptionStartDate,
+            sp.trialEndDate AS trialEndDate,
             sp.isActive AS isActive,
             COALESCE(SUM(ws.durationMinutes), 0) AS totalMinutes
         FROM streaming_providers sp
@@ -106,13 +109,19 @@ data class ProviderUsageStats(
     val providerId: String,
     val providerName: String,
     val costPerMonth: Double,
+    val userCostPerMonth: Double?,
+    val subscriptionStartDate: Long?,
+    val trialEndDate: Long?,
     val isActive: Boolean,
     val totalMinutes: Long
 ) {
     val totalHours: Double
         get() = totalMinutes / 60.0
 
+    val effectiveCostPerMonth: Double
+        get() = userCostPerMonth ?: costPerMonth
+
     // Financial ROI: Higher ratio = better. Lower hours watched = high cost per hour = prime cancel candidate!
     val costPerHour: Double
-        get() = if (totalHours > 0.0) costPerMonth / totalHours else costPerMonth
+        get() = if (totalHours > 0.0) effectiveCostPerMonth / totalHours else effectiveCostPerMonth
 }

@@ -264,7 +264,7 @@ fun HomeScreen(
             val watchmodeApiKey by viewModel.watchmodeApiKey.collectAsState()
             SettingsDialog(
                 allProviders = allProviders,
-                onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
+                onProviderUpdate = { id, active, cost, start, end -> viewModel.updateStreamingProviderSettings(id, active, cost, start, end) },
                 tmdbApiKey = tmdbApiKey,
                 onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
                 watchmodeApiKey = watchmodeApiKey,
@@ -357,7 +357,7 @@ fun WatchlistTabContent(
             if (filterOnlyMyServices) {
                 // Return items having at least one of their available platforms as locally active/subscribed
                 val provs = item.providersList
-                provs.isEmpty() || provs.any { activeProviderIds.contains(it) }
+                provs.isNotEmpty() && provs.any { activeProviderIds.contains(it) }
             } else {
                 true
             }
@@ -1106,11 +1106,15 @@ fun MonthlyRoiContent(
     allProviders: List<StreamingProvider>
 ) {
     val activeSubscribed = remember(allProviders) { allProviders.filter { it.isActive } }
-    val totalCost = remember(activeSubscribed) { activeSubscribed.sumOf { it.costPerMonth } }
+    val totalCost = remember(activeSubscribed) { activeSubscribed.sumOf { it.userCostPerMonth ?: it.costPerMonth } }
     
     // Sort active channels by costPerHour descending (worst value!) to bubble up prime pausing candidates.
     val worstValueProviders = remember(monthlyStats) {
         monthlyStats.sortedByDescending { it.costPerHour }
+    }
+    
+    val potentialSavings = remember(worstValueProviders) {
+        worstValueProviders.filter { it.totalHours < 3.0 && it.isActive }.sumOf { it.effectiveCostPerMonth }
     }
 
     LazyColumn(
@@ -1144,7 +1148,25 @@ fun MonthlyRoiContent(
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    if (potentialSavings > 0) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        ) {
+                            Text(
+                                "Potential Savings: $${String.format("%.2f", potentialSavings)}/mo if you pause underutilized services.",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         "You must watch at least 3 hours per service per month to justify these costs. Services are ranked below from least optimized to highest value.",
                         style = MaterialTheme.typography.bodySmall,
@@ -1216,7 +1238,7 @@ fun MonthlyRoiContent(
                                         containerColor = MaterialTheme.colorScheme.error,
                                         contentColor = MaterialTheme.colorScheme.onError
                                     ) {
-                                        Text("UNJUSTIFIED", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+                                        Text("CANCEL CANDIDATE", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
                                     }
                                 }
                             }
@@ -1826,7 +1848,7 @@ fun ProviderSelector(
 @Composable
 fun SettingsDialog(
     allProviders: List<StreamingProvider>,
-    onProviderToggle: (String, Boolean) -> Unit,
+    onProviderUpdate: (String, Boolean, Double?, Long?, Long?) -> Unit,
     tmdbApiKey: String,
     onSaveTmdbApiKey: (String) -> Unit,
     watchmodeApiKey: String,
@@ -1896,46 +1918,19 @@ fun SettingsDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Toggle active services you currently pay for. Free services (Tubi, Freevee, Pluto TV) are free and enabled by default.",
+                                "Toggle active services and configure custom trial pricing to improve ROI calculations.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             
                             allProviders.forEach { provider ->
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                                    ),
-                                    shape = RoundedCornerShape(10.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column {
-                                            Text(
-                                                text = provider.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            Text(
-                                                text = if (provider.costPerMonth > 0) "$${provider.costPerMonth}/mo" else "Free Platform ($0.0)",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.outline
-                                            )
-                                        }
-                                        Switch(
-                                            checked = provider.isActive,
-                                            onCheckedChange = { onProviderToggle(provider.id, it) },
-                                            modifier = Modifier.testTag("dialog_switch_${provider.id}")
-                                        )
+                                ProviderSettingsCard(
+                                    provider = provider,
+                                    onUpdate = { active, cost, start, end -> 
+                                        onProviderUpdate(provider.id, active, cost, start, end)
                                     }
-                                }
+                                )
                             }
                         }
                     }
@@ -2606,6 +2601,124 @@ fun AgentChatTabContent(
                 elevation = FloatingActionButtonDefaults.elevation(0.dp)
             ) {
                 Icon(Icons.Default.Send, contentDescription = "Send message")
+            }
+        }
+    }
+}
+
+@Composable
+fun ProviderSettingsCard(
+    provider: StreamingProvider,
+    onUpdate: (Boolean, Double?, Long?, Long?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val isTrialWarning = remember(provider.trialEndDate) {
+        if (provider.trialEndDate != null) {
+            val daysLeft = (provider.trialEndDate - System.currentTimeMillis()) / (1000 * 60 * 60 * 24)
+            daysLeft in 0..3
+        } else false
+    }
+    val isExpired = remember(provider.trialEndDate) {
+        if (provider.trialEndDate != null) {
+            System.currentTimeMillis() > provider.trialEndDate
+        } else false
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+        colors = CardDefaults.cardColors(
+            containerColor = if (isExpired) MaterialTheme.colorScheme.errorContainer.copy(alpha=0.2f) 
+                             else if (isTrialWarning) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha=0.4f)
+                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        shape = RoundedCornerShape(10.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = provider.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    val costLabel = if (provider.costPerMonth == 0.0) "Free Platform ($0.0)"
+                        else if (provider.userCostPerMonth != null) "Custom: $${provider.userCostPerMonth}/mo"
+                        else "$${provider.costPerMonth}/mo"
+                    Text(
+                        text = costLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    if (isExpired) {
+                        Text(
+                            text = "TRIAL EXPIRED",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else if (isTrialWarning) {
+                        Text(
+                            text = "TRIAL ENDING SOON",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                Switch(
+                    checked = provider.isActive,
+                    onCheckedChange = { onUpdate(it, provider.userCostPerMonth, provider.subscriptionStartDate, provider.trialEndDate) },
+                    modifier = Modifier.testTag("dialog_switch_${provider.id}")
+                )
+            }
+            
+            if (expanded && provider.costPerMonth > 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                var customCostInput by remember { mutableStateOf(provider.userCostPerMonth?.toString() ?: "") }
+                OutlinedTextField(
+                    value = customCostInput,
+                    onValueChange = { customCostInput = it },
+                    label = { Text("Custom Monthly Price (e.g. 0.99 for trial)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // For simplicity we use a text input for days until trial ends to compute the timestamp
+                var trialDaysInput by remember { mutableStateOf("") }
+                OutlinedTextField(
+                    value = trialDaysInput,
+                    onValueChange = { trialDaysInput = it },
+                    label = { Text("Days until trial ends (leave blank if none)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(onClick = { expanded = false }) { Text("Cancel") }
+                    Button(onClick = {
+                        val parsedCost = customCostInput.toDoubleOrNull()
+                        val parsedDays = trialDaysInput.toLongOrNull()
+                        val newEndDate = if (parsedDays != null) System.currentTimeMillis() + (parsedDays * 24 * 60 * 60 * 1000) else provider.trialEndDate
+                        
+                        onUpdate(provider.isActive, parsedCost, provider.subscriptionStartDate, newEndDate)
+                        expanded = false
+                    }) {
+                        Text("Save Details")
+                    }
+                }
             }
         }
     }

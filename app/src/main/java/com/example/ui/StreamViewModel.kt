@@ -111,6 +111,20 @@ class StreamViewModel(
     private val _isChatLoading = MutableStateFlow(false)
     val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
 
+    init {
+        // Deactivate expired trials automatically
+        viewModelScope.launch(Dispatchers.IO) {
+            allProviders.collect { providers ->
+                val now = System.currentTimeMillis()
+                providers.forEach { provider ->
+                    if (provider.isActive && provider.trialEndDate != null && provider.trialEndDate < now) {
+                        repository.updateStreamingProvider(provider.copy(isActive = false))
+                    }
+                }
+            }
+        }
+    }
+
     fun sendChatMessage(userMessage: String) {
         if (userMessage.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
@@ -487,6 +501,20 @@ class StreamViewModel(
         viewModelScope.launch {
             val provider = allProviders.value.find { it.id == providerId } ?: return@launch
             val updated = provider.copy(isActive = isActive, updatedAt = System.currentTimeMillis())
+            repository.updateStreamingProvider(updated)
+        }
+    }
+
+    fun updateStreamingProviderSettings(providerId: String, isActive: Boolean, userCost: Double?, startDate: Long?, trialEndDate: Long?) {
+        viewModelScope.launch {
+            val provider = allProviders.value.find { it.id == providerId } ?: return@launch
+            val updated = provider.copy(
+                isActive = isActive, 
+                userCostPerMonth = userCost,
+                subscriptionStartDate = startDate,
+                trialEndDate = trialEndDate,
+                updatedAt = System.currentTimeMillis()
+            )
             repository.updateStreamingProvider(updated)
         }
     }
