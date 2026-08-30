@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -69,6 +69,14 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE media_items ADD COLUMN watchedAt INTEGER")
+            }
+        }
+
+        private val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE streaming_providers ADD COLUMN userCostPerMonth REAL")
+                db.execSQL("ALTER TABLE streaming_providers ADD COLUMN subscriptionStartDate INTEGER")
+                db.execSQL("ALTER TABLE streaming_providers ADD COLUMN trialEndDate INTEGER")
             }
         }
     }
