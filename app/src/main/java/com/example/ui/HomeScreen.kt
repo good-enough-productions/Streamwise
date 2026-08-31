@@ -1,4 +1,4 @@
-﻿package com.example.ui
+package com.example.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
@@ -1191,7 +1191,14 @@ fun MonthlyRoiContent(
         item {
             // Summary Budget card
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .showcaseTarget(
+                        "roi_summary_card",
+                        "Burn Rate & Potential Savings",
+                        "This card aggregates the total custom pricing for all your active services. The 'Potential Savings' metric totals up any service where you've watched less than 3 hours this month.",
+                        "Use this dashboard to confidently cancel services before they bill you again."
+                    ),
                 shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -1482,7 +1489,15 @@ fun AddMediaDialog(
                     singleLine = false,
                     minLines = 3,
                     maxLines = 6,
-                    modifier = Modifier.fillMaxWidth().testTag("add_input_title"),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("add_input_title")
+                        .showcaseTarget(
+                            "add_search_bar",
+                            "Search TMDB",
+                            "Type in any movie or show title. Streamwise will fetch its poster, description, and figure out where you can stream it using the Watchmode API.",
+                            "You can paste a list of titles (one per line) to bulk-add them!"
+                        ),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
                 )
 
@@ -2650,7 +2665,14 @@ fun AgentChatTabContent(
                 value = inputMessage,
                 onValueChange = { inputMessage = it },
                 placeholder = { Text("What should I watch tonight?") },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .showcaseTarget(
+                        "agent_input",
+                        "AI Assistant Prompt",
+                        "Ask the AI for personalized recommendations based on your mood. It's completely private.",
+                        "Use natural language like 'I want a sci-fi movie from the 80s'."
+                    ),
                 shape = RoundedCornerShape(24.dp),
                 maxLines = 4
             )
@@ -2753,7 +2775,14 @@ fun ProviderSettingsCard(
                     label = { Text("Custom Monthly Price (e.g. 0.99 for trial)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .showcaseTarget(
+                            "custom_price_input",
+                            "Custom Subscription Pricing",
+                            "Enter exactly what you are paying right now for this service. If you're on a promo rate, type it in here.",
+                            "Use this to keep your ROI calculations exact. When the promo ends, change it back!"
+                        )
                 )
                 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -2766,7 +2795,14 @@ fun ProviderSettingsCard(
                     label = { Text("Days until trial ends (leave blank if none)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .showcaseTarget(
+                            "trial_days_input",
+                            "Trial Expiration Tracker",
+                            "Set a countdown for free trials. Streamwise will show a warning when it's almost up, and automatically disable the service in your app when it expires.",
+                            "Use this whenever you start a free week or month on a service so you don't forget to cancel!"
+                        )
                 )
                 
                 Spacer(modifier = Modifier.height(8.dp))
