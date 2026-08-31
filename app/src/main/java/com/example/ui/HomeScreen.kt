@@ -1,4 +1,4 @@
-package com.example.ui
+﻿package com.example.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
@@ -114,7 +114,12 @@ fun HomeScreen(
                         onClick = { showSettingsDialog = true },
                         modifier = Modifier
                             .testTag("settings_gear_button")
-                            .showcaseTarget("settings_gear", "Manage Subscriptions", "Update your active services, trial periods, and custom pricing here to calculate your true ROI.")
+                            .showcaseTarget(
+                                "settings_gear", 
+                                "Settings & Subscriptions", 
+                                "Opens the settings menu where you can manage your active streaming services, set custom trial pricing, and configure API keys.",
+                                "Use this whenever you start a new free trial, cancel a service, or need to connect your local AI."
+                            )
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -147,7 +152,12 @@ fun HomeScreen(
                     modifier = Modifier
                         .navigationBarsPadding()
                         .testTag("add_item_fab")
-                        .showcaseTarget("fab_add", "Add Movies & Shows", "Tap here to search TMDB and add content to your Watchlist."),
+                        .showcaseTarget(
+                            "fab_add", 
+                            "Add Movies & Shows", 
+                            "Opens a search window connected to TMDB where you can find and add any movie or TV show to your Watchlist.",
+                            "Use this whenever you hear a recommendation from a friend or see a trailer for something you want to watch later."
+                        ),
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -170,7 +180,14 @@ fun HomeScreen(
                     onClick = { selectedTab = 0 },
                     text = { Text("Watchlist", fontSize = 11.sp) },
                     icon = { Icon(Icons.Default.List, contentDescription = "Watchlist tab") },
-                    modifier = Modifier.testTag("tab_watchlist")
+                    modifier = Modifier
+                        .testTag("tab_watchlist")
+                        .showcaseTarget(
+                            "watchlist_tab", 
+                            "The Watchlist", 
+                            "Your central queue. It pulls live availability data from Watchmode so you know exactly which of your services has the movie right now.",
+                            "Use this as your primary dashboard to see what's ready to watch tonight."
+                        )
                 )
                 Tab(
                     selected = selectedTab == 1,
@@ -186,14 +203,26 @@ fun HomeScreen(
                     icon = { Icon(Icons.Default.Star, contentDescription = "ROI stats tab") },
                     modifier = Modifier
                         .testTag("tab_budget")
-                        .showcaseTarget("roi_tab", "Budget Tracker", "See how much your subscriptions cost per hour watched. Underutilized services will be flagged as Cancel Candidates!")
+                        .showcaseTarget(
+                            "roi_tab", 
+                            "Budget & ROI Tracker", 
+                            "Displays a dashboard of your monthly streaming burn rate. It calculates the cost per hour of each service based on your watch history.",
+                            "Use this at the end of the month to identify 'Cancel Candidates' (services you aren't using enough) and save money."
+                        )
                 )
                 Tab(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
                     text = { Text("Agent", fontSize = 11.sp) },
                     icon = { Icon(Icons.Default.Person, contentDescription = "AI Agent tab") },
-                    modifier = Modifier.testTag("tab_agent")
+                    modifier = Modifier
+                        .testTag("tab_agent")
+                        .showcaseTarget(
+                            "agent_tab", 
+                            "Private AI Chatbot", 
+                            "Connects directly to your home Ollama server (e.g. llama3) to provide completely private, localized recommendations without sending your data to the cloud.",
+                            "Use this when you have no idea what to watch and want hyper-specific suggestions, like 'a 90s thriller on Hulu under 2 hours'."
+                        )
                 )
             }
 
@@ -302,11 +331,7 @@ fun HomeScreen(
             GuideDialog(
                 onDismiss = { showGuideDialog = false },
                 onStartTour = {
-                    showcaseState.startSequence(
-                        "fab_add",
-                        "settings_gear",
-                        "roi_tab"
-                    )
+                    showcaseState.enableGuideMode()
                 }
             )
         }
@@ -332,7 +357,7 @@ fun HomeScreen(
         }
     } // End Scaffold
 
-            if (showcaseState.currentTargetId != null) {
+            if (showcaseState.isGuideModeActive) {
                 ShowcaseOverlay()
             }
         } // End Box
@@ -775,7 +800,7 @@ fun MediaItemCard(
                             if (!item.genres.isNullOrEmpty()) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "•",
+                                    text = "â€¢",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
