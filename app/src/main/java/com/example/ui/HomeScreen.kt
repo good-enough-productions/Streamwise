@@ -62,6 +62,7 @@ fun HomeScreen(
     var filterOnlyMyServices by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showGuideDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
 
     // Clear and display Toast/Status banners beautifully
@@ -92,6 +93,16 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Export to Obsidian",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(
+                        onClick = { showGuideDialog = true },
+                        modifier = Modifier.testTag("guide_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "User Guide",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -275,6 +286,11 @@ fun HomeScreen(
                 onSaveGithubToken = { viewModel.saveGithubToken(it) },
                 onDismiss = { showSettingsDialog = false }
             )
+        }
+        
+        // Guide Dialog
+        if (showGuideDialog) {
+            GuideDialog(onDismiss = { showGuideDialog = false })
         }
 
         // Expanded Movie Details Bottom Sheet
