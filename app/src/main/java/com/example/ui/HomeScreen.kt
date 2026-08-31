@@ -73,9 +73,13 @@ fun HomeScreen(
         }
     }
 
-    Scaffold(
-        modifier = modifier.testTag("home_scaffold"),
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+    val showcaseState = remember { ShowcaseState() }
+
+    CompositionLocalProvider(LocalShowcaseState provides showcaseState) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Scaffold(
+                modifier = modifier.testTag("home_scaffold"),
+                snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -108,7 +112,9 @@ fun HomeScreen(
                     }
                     IconButton(
                         onClick = { showSettingsDialog = true },
-                        modifier = Modifier.testTag("settings_gear_button")
+                        modifier = Modifier
+                            .testTag("settings_gear_button")
+                            .showcaseTarget("settings_gear", "Manage Subscriptions", "Update your active services, trial periods, and custom pricing here to calculate your true ROI.")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
@@ -140,7 +146,8 @@ fun HomeScreen(
                     onClick = { showAddDialog = true },
                     modifier = Modifier
                         .navigationBarsPadding()
-                        .testTag("add_item_fab"),
+                        .testTag("add_item_fab")
+                        .showcaseTarget("fab_add", "Add Movies & Shows", "Tap here to search TMDB and add content to your Watchlist."),
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -177,7 +184,9 @@ fun HomeScreen(
                     onClick = { selectedTab = 2 },
                     text = { Text("ROI Stats", fontSize = 11.sp) },
                     icon = { Icon(Icons.Default.Star, contentDescription = "ROI stats tab") },
-                    modifier = Modifier.testTag("tab_budget")
+                    modifier = Modifier
+                        .testTag("tab_budget")
+                        .showcaseTarget("roi_tab", "Budget Tracker", "See how much your subscriptions cost per hour watched. Underutilized services will be flagged as Cancel Candidates!")
                 )
                 Tab(
                     selected = selectedTab == 3,
@@ -290,7 +299,16 @@ fun HomeScreen(
         
         // Guide Dialog
         if (showGuideDialog) {
-            GuideDialog(onDismiss = { showGuideDialog = false })
+            GuideDialog(
+                onDismiss = { showGuideDialog = false },
+                onStartTour = {
+                    showcaseState.startSequence(
+                        "fab_add",
+                        "settings_gear",
+                        "roi_tab"
+                    )
+                }
+            )
         }
 
         // Expanded Movie Details Bottom Sheet
@@ -312,7 +330,13 @@ fun HomeScreen(
                 }
             )
         }
-    }
+    } // End Scaffold
+
+            if (showcaseState.currentTargetId != null) {
+                ShowcaseOverlay()
+            }
+        } // End Box
+    } // End CompositionLocalProvider
 }
 
 // ==========================================

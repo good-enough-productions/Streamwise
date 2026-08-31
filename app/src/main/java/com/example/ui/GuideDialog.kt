@@ -1,4 +1,4 @@
-﻿package com.example.ui
+package com.example.ui
 
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
 @Composable
-fun GuideDialog(onDismiss: () -> Unit) {
+fun GuideDialog(onDismiss: () -> Unit, onStartTour: () -> Unit) {
     var activeTab by remember { mutableIntStateOf(0) } // 0: User Guide, 1: Changelog
 
     AlertDialog(
@@ -59,7 +59,7 @@ fun GuideDialog(onDismiss: () -> Unit) {
                 val url = if (activeTab == 0) "file:///android_asset/user_guide.html" else "file:///android_asset/changelog.html"
                 
                 AndroidView(
-                    modifier = Modifier.fillMaxSize().padding(top = 8.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp),
                     factory = { context ->
                         WebView(context).apply {
                             webViewClient = WebViewClient()
@@ -73,6 +73,13 @@ fun GuideDialog(onDismiss: () -> Unit) {
                 )
             }
         },
-        confirmButton = {}
+        confirmButton = {
+            Button(onClick = { 
+                onStartTour()
+                onDismiss() 
+            }) {
+                Text("Start Interactive Tour")
+            }
+        }
     )
 }
