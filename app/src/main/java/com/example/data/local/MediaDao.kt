@@ -71,6 +71,9 @@ interface MediaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStreamingProvider(provider: StreamingProvider)
 
+    @Query("DELETE FROM streaming_providers WHERE id = :id")
+    suspend fun deleteStreamingProviderById(id: String)
+
 
     // --- Watch Sessions Queries ---
 
