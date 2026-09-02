@@ -298,9 +298,11 @@ fun HomeScreen(
                     2 -> MonthlyRoiContent(
                         monthlyStats = monthlyStats,
                         allProviders = allProviders,
+                        watchlistItems = watchlistItems,
                         onToggleProvider = { id, active -> viewModel.toggleStreamingProvider(id, active) },
                         onEditProvider = { editingProvider = it },
-                        onAddServiceClick = { showAddServiceDialog = true }
+                        onAddServiceClick = { showAddServiceDialog = true },
+                        onMovieClick = { detailMovieItem = it }
                     )
                     3 -> {
                         val chatMessages by viewModel.chatMessages.collectAsState()
@@ -1387,25 +1389,88 @@ fun WatchedTabContent(
     }
 }
 // ==========================================
+enum class RoiViewTab {
+    WATCHLIST_OPTIMIZER,
+    SPEND_ANALYTICS
+}
+
+data class ProviderWatchlistCoverage(
+    val provider: StreamingProvider,
+    val matchingItems: List<MediaItem>,
+    val count: Int,
+    val costPerTitle: Double?
+)
+
 @Composable
 fun MonthlyRoiContent(
     monthlyStats: List<ProviderUsageStats>,
     allProviders: List<StreamingProvider>,
+    watchlistItems: List<MediaItem>,
     onToggleProvider: (String, Boolean) -> Unit,
     onEditProvider: (StreamingProvider) -> Unit,
-    onAddServiceClick: () -> Unit
+    onAddServiceClick: () -> Unit,
+    onMovieClick: (MediaItem) -> Unit
 ) {
+    var selectedViewTab by remember { mutableStateOf(RoiViewTab.WATCHLIST_OPTIMIZER) }
+    var filterMode by remember { mutableStateOf("ALL") } // ALL, ACTIVE, INACTIVE
+
     val activeSubscribed = remember(allProviders) { allProviders.filter { it.isActive } }
     val inactiveProviders = remember(allProviders) { allProviders.filter { !it.isActive } }
     val totalCost = remember(activeSubscribed) { activeSubscribed.sumOf { it.userCostPerMonth ?: it.costPerMonth } }
     
-    // Sort active channels by costPerHour descending (worst value!) to bubble up prime pausing candidates.
+    // Sort active channels by costPerHour descending (worst value!)
     val worstValueProviders = remember(monthlyStats) {
         monthlyStats.sortedByDescending { it.costPerHour }
     }
     
     val potentialSavings = remember(worstValueProviders) {
         worstValueProviders.filter { it.totalHours < 3.0 && it.isActive }.sumOf { it.effectiveCostPerMonth }
+    }
+
+    // Calculate Watchlist matches per provider for recommendation engine
+    val activeWatchlist = remember(watchlistItems) {
+        watchlistItems.filter { it.status == MediaStatus.WATCHLIST.name }
+    }
+
+    val providerCoverages = remember(allProviders, activeWatchlist) {
+        allProviders.map { provider ->
+            val matchingItems = activeWatchlist.filter { item ->
+                item.providersList.contains(provider.id) ||
+                item.providersList.any { it.contains(provider.id, ignoreCase = true) || provider.name.contains(it, ignoreCase = true) }
+            }
+            val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
+            val costPerTitle = if (matchingItems.isNotEmpty() && effectiveCost > 0) effectiveCost / matchingItems.size else if (effectiveCost == 0.0) 0.0 else null
+            ProviderWatchlistCoverage(
+                provider = provider,
+                matchingItems = matchingItems,
+                count = matchingItems.size,
+                costPerTitle = costPerTitle
+            )
+        }.sortedWith(
+            compareByDescending<ProviderWatchlistCoverage> { it.count }
+                .thenBy { it.costPerTitle ?: Double.MAX_VALUE }
+        )
+    }
+
+    // Identify strategic recommendations:
+    val topInactiveOpportunity = remember(providerCoverages) {
+        providerCoverages.firstOrNull { !it.provider.isActive && it.count > 0 }
+    }
+
+    val topSafeToPause = remember(providerCoverages) {
+        providerCoverages.firstOrNull { coverage ->
+            coverage.provider.isActive && 
+            (coverage.provider.userCostPerMonth ?: coverage.provider.costPerMonth) > 0.0 &&
+            coverage.count <= 1
+        }
+    }
+
+    val filteredCoverages = remember(providerCoverages, filterMode) {
+        when (filterMode) {
+            "ACTIVE" -> providerCoverages.filter { it.provider.isActive }
+            "INACTIVE" -> providerCoverages.filter { !it.provider.isActive }
+            else -> providerCoverages
+        }
     }
 
     var showInactiveSection by remember { mutableStateOf(true) }
@@ -1416,296 +1481,366 @@ fun MonthlyRoiContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Summary Budget Card
+        // 1. Top View Mode Switcher
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .showcaseTarget(
-                        "roi_summary_card",
-                        "Burn Rate & Potential Savings",
-                        "This card aggregates the total custom pricing for all your active services. The 'Potential Savings' metric totals up any service where you've watched less than 3 hours this month.",
-                        "Use this dashboard to confidently cancel services before they bill you again."
-                    ),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "Monthly Streaming Burn Rate",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        "$${String.format("%.2f", totalCost)}",
-                        style = MaterialTheme.typography.headlineLarge,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text(
-                        "${activeSubscribed.size} active subscriptions",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
-                    
-                    if (potentialSavings > 0) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                FilterChip(
+                    selected = selectedViewTab == RoiViewTab.WATCHLIST_OPTIMIZER,
+                    onClick = { selectedViewTab = RoiViewTab.WATCHLIST_OPTIMIZER },
+                    label = { 
+                        Text(
+                            "🎯 Watchlist Match (${activeWatchlist.size})",
+                            fontWeight = if (selectedViewTab == RoiViewTab.WATCHLIST_OPTIMIZER) FontWeight.Bold else FontWeight.Normal
+                        ) 
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                FilterChip(
+                    selected = selectedViewTab == RoiViewTab.SPEND_ANALYTICS,
+                    onClick = { selectedViewTab = RoiViewTab.SPEND_ANALYTICS },
+                    label = { 
+                        Text(
+                            "📊 Spend & Usage",
+                            fontWeight = if (selectedViewTab == RoiViewTab.SPEND_ANALYTICS) FontWeight.Bold else FontWeight.Normal
+                        ) 
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        // ==========================================
+        // TAB A: WATCHLIST COVERAGE & CHURN OPTIMIZER
+        // ==========================================
+        if (selectedViewTab == RoiViewTab.WATCHLIST_OPTIMIZER) {
+            // Recommendation Banners
+            if (topInactiveOpportunity != null && topInactiveOpportunity.count >= 2) {
+                item {
+                    val price = topInactiveOpportunity.provider.userCostPerMonth ?: topInactiveOpportunity.provider.costPerMonth
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text("★", color = MaterialTheme.colorScheme.onTertiary, fontSize = 14.sp)
+                                    }
+                                }
+                                Text(
+                                    "Best Opportunity: ${topInactiveOpportunity.provider.name}",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
                             Text(
-                                "Potential Savings: $${String.format("%.2f", potentialSavings)}/mo on underutilized channels",
+                                "${topInactiveOpportunity.count} movies on your watchlist are available on ${topInactiveOpportunity.provider.name} right now! Subscribe for 1 month at $${String.format("%.2f", price)} ($${String.format("%.2f", topInactiveOpportunity.costPerTitle ?: 0.0)}/movie) to binge them.",
                                 style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                textAlign = TextAlign.Center
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
                             )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Button(
+                                    onClick = { onToggleProvider(topInactiveOpportunity.provider.id, true) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                                ) {
+                                    Text("Activate ${topInactiveOpportunity.provider.name}", fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // 2. Quick Services Ribbon & Add Service Button
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (topSafeToPause != null) {
+                item {
+                    val price = topSafeToPause.provider.userCostPerMonth ?: topSafeToPause.provider.costPerMonth
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text("↓", color = MaterialTheme.colorScheme.onError, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                Text(
+                                    "Safe to Pause: ${topSafeToPause.provider.name}",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                            Text(
+                                "Only ${topSafeToPause.count} movie on your watchlist is on ${topSafeToPause.provider.name}. Pause this subscription to save $${String.format("%.2f", price)}/mo.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                OutlinedButton(
+                                    onClick = { onToggleProvider(topSafeToPause.provider.id, false) },
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Pause ${topSafeToPause.provider.name}", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Filter Chips Header
+            item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        "Quick Subscriptions",
+                        "Providers by Watchlist Match",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
-                    TextButton(
-                        onClick = onAddServiceClick,
-                        modifier = Modifier.testTag("add_service_btn")
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    TextButton(onClick = onAddServiceClick) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Add Service", fontWeight = FontWeight.SemiBold)
                     }
                 }
+            }
 
-                // Horizontal quick toggle chips
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(allProviders, key = { it.id }) { provider ->
-                        val effectivePrice = provider.userCostPerMonth ?: provider.costPerMonth
-                        FilterChip(
-                            selected = provider.isActive,
-                            onClick = { onToggleProvider(provider.id, !provider.isActive) },
-                            label = {
-                                Text(
-                                    text = if (provider.isActive) "${provider.name} ($${String.format("%.2f", effectivePrice)})"
-                                           else "+ ${provider.name}"
-                                )
-                            },
-                            leadingIcon = if (provider.isActive) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else null
-                        )
-                    }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(
+                        selected = filterMode == "ALL",
+                        onClick = { filterMode = "ALL" },
+                        label = { Text("All (${providerCoverages.size})") }
+                    )
+                    FilterChip(
+                        selected = filterMode == "ACTIVE",
+                        onClick = { filterMode = "ACTIVE" },
+                        label = { Text("Active (${providerCoverages.count { it.provider.isActive }})") }
+                    )
+                    FilterChip(
+                        selected = filterMode == "INACTIVE",
+                        onClick = { filterMode = "INACTIVE" },
+                        label = { Text("Inactive (${providerCoverages.count { !it.provider.isActive }})") }
+                    )
                 }
             }
-        }
 
-        // 3. Active Subscriptions Section Header
-        item {
-            Text(
-                "Active Subscriptions & Cost/Hour",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        if (activeSubscribed.isEmpty()) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+            // List of Providers Ranked by Watchlist Match
+            if (filteredCoverages.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                     ) {
                         Text(
-                            "No active subscriptions selected",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Tap any service chip above or click 'Add Service' to start tracking your streaming burn rate and cost per hour.",
-                            style = MaterialTheme.typography.bodySmall,
-                            textAlign = TextAlign.Center,
+                            "No services match this filter.",
+                            modifier = Modifier.padding(24.dp),
                             color = MaterialTheme.colorScheme.outline
                         )
                     }
                 }
-            }
-        } else {
-            items(activeSubscribed, key = { it.id }) { provider ->
-                val stats = monthlyStats.find { it.providerId == provider.id }
-                val totalHours = stats?.totalHours ?: 0.0
-                val costPerHour = stats?.costPerHour ?: (provider.userCostPerMonth ?: provider.costPerMonth)
-                val isPrimeCancelCandidate = totalHours < 3.0
-                val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
-                val isTrial = provider.trialEndDate != null && provider.trialEndDate > System.currentTimeMillis()
-                val daysLeft = provider.trialEndDate?.let { ((it - System.currentTimeMillis()) / 86400000L).coerceAtLeast(0) }
+            } else {
+                items(filteredCoverages, key = { it.provider.id }) { coverage ->
+                    val provider = coverage.provider
+                    val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
+                    val isTrial = provider.trialEndDate != null && provider.trialEndDate > System.currentTimeMillis()
 
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onEditProvider(provider) },
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isPrimeCancelCandidate) {
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                        }
-                    ),
-                    border = if (isPrimeCancelCandidate) {
-                        BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
-                    } else null,
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Column(
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .clickable { onEditProvider(provider) },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (provider.isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        ),
+                        shape = RoundedCornerShape(18.dp),
+                        border = if (provider.isActive) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
                     ) {
-                        // Title row with Status & Actions
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        provider.name,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    if (isTrial) {
+                            // Header Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            provider.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                         Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = MaterialTheme.colorScheme.tertiaryContainer,
-                                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (provider.isActive) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.surfaceVariant,
+                                            contentColor = if (provider.isActive) MaterialTheme.colorScheme.onPrimary
+                                                           else MaterialTheme.colorScheme.onSurfaceVariant
                                         ) {
                                             Text(
-                                                "TRIAL: ${daysLeft}d left",
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
+                                                text = if (isTrial) "TRIAL" else if (provider.isActive) "ACTIVE" else "PAUSED",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Black,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
-                                    } else if (isPrimeCancelCandidate) {
-                                        Badge(
-                                            containerColor = MaterialTheme.colorScheme.error,
-                                            contentColor = MaterialTheme.colorScheme.onError
+                                    }
+                                    Text(
+                                        text = if (effectiveCost == 0.0) "Free with ads"
+                                               else "$${String.format("%.2f", effectiveCost)}/mo" +
+                                                    (coverage.costPerTitle?.let { " · $${String.format("%.2f", it)} / movie" } ?: ""),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    IconButton(
+                                        onClick = { onEditProvider(provider) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Settings,
+                                            contentDescription = "Settings",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+
+                                    if (provider.isActive) {
+                                        Switch(
+                                            checked = true,
+                                            onCheckedChange = { onToggleProvider(provider.id, false) }
+                                        )
+                                    } else {
+                                        Button(
+                                            onClick = { onToggleProvider(provider.id, true) },
+                                            shape = RoundedCornerShape(10.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                            modifier = Modifier.height(34.dp)
                                         ) {
-                                            Text(
-                                                "CANCEL CANDIDATE",
-                                                fontSize = 9.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 4.dp)
-                                            )
+                                            Text("Activate", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
                             }
 
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            // Watchlist Count Banner
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (coverage.count > 0) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             ) {
-                                IconButton(
-                                    onClick = { onEditProvider(provider) },
-                                    modifier = Modifier.size(36.dp)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Icon(
-                                        Icons.Default.Settings,
-                                        contentDescription = "Edit Price/Trial",
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.primary
-                                    )
-                                }
-                                Switch(
-                                    checked = provider.isActive,
-                                    onCheckedChange = { onToggleProvider(provider.id, it) },
-                                    modifier = Modifier.padding(start = 4.dp)
-                                )
-                            }
-                        }
-
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                        // Usage and Financial Metrics
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                Column {
                                     Text(
-                                        "Watched",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                    Text(
-                                        "${String.format("%.1f", totalHours)}h this mo",
+                                        text = if (coverage.count > 0) "${coverage.count} Watchlist Movies Available"
+                                               else "No Watchlist Movies Currently Available",
+                                        fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        "Monthly Cost",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                    Text(
-                                        "$${String.format("%.2f", effectiveCost)}/mo",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
                                 }
                             }
 
-                            Column(horizontalAlignment = Alignment.End) {
+                            // Horizontal preview of matching watchlist titles
+                            if (coverage.matchingItems.isNotEmpty()) {
                                 Text(
-                                    "$${String.format("%.2f", costPerHour)}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    "cost per hour",
+                                    text = "Available on your Watchlist:",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(coverage.matchingItems.take(8)) { movie ->
+                                        AssistChip(
+                                            onClick = { onMovieClick(movie) },
+                                            label = {
+                                                Text(
+                                                    text = movie.title,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    style = MaterialTheme.typography.labelSmall
+                                                )
+                                            }
+                                        )
+                                    }
+                                    if (coverage.matchingItems.size > 8) {
+                                        item {
+                                            AssistChip(
+                                                onClick = { /* No-op */ },
+                                                label = { Text("+${coverage.matchingItems.size - 8} more") }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1713,83 +1848,385 @@ fun MonthlyRoiContent(
             }
         }
 
-        // 4. Inactive / Paused Services Section
-        if (inactiveProviders.isNotEmpty()) {
+        // ==========================================
+        // TAB B: SPEND & COST-PER-HOUR ANALYTICS
+        // ==========================================
+        if (selectedViewTab == RoiViewTab.SPEND_ANALYTICS) {
+            // Summary Budget Card
             item {
-                Row(
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showInactiveSection = !showInactiveSection }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .showcaseTarget(
+                            "roi_summary_card",
+                            "Burn Rate & Potential Savings",
+                            "This card aggregates the total custom pricing for all your active services. The 'Potential Savings' metric totals up any service where you've watched less than 3 hours this month.",
+                            "Use this dashboard to confidently cancel services before they bill you again."
+                        ),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    )
                 ) {
-                    Text(
-                        "Paused / Inactive Services (${inactiveProviders.size})",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    Text(
-                        if (showInactiveSection) "Hide" else "Show",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            "Monthly Streaming Burn Rate",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "$${String.format("%.2f", totalCost)}",
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            "${activeSubscribed.size} active subscriptions",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                        
+                        if (potentialSavings > 0) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                            ) {
+                                Text(
+                                    "Potential Savings: $${String.format("%.2f", potentialSavings)}/mo on underutilized channels",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
-            if (showInactiveSection) {
-                items(inactiveProviders, key = { it.id }) { provider ->
+            // Quick Services Ribbon & Add Service Button
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Quick Subscriptions",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(
+                            onClick = onAddServiceClick,
+                            modifier = Modifier.testTag("add_service_btn")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Add Service", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    // Horizontal quick toggle chips
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(allProviders, key = { it.id }) { provider ->
+                            val effectivePrice = provider.userCostPerMonth ?: provider.costPerMonth
+                            FilterChip(
+                                selected = provider.isActive,
+                                onClick = { onToggleProvider(provider.id, !provider.isActive) },
+                                label = {
+                                    Text(
+                                        text = if (provider.isActive) "${provider.name} ($${String.format("%.2f", effectivePrice)})"
+                                               else "+ ${provider.name}"
+                                    )
+                                },
+                                leadingIcon = if (provider.isActive) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Active Subscriptions Section Header
+            item {
+                Text(
+                    "Active Subscriptions & Cost/Hour",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            if (activeSubscribed.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "No active subscriptions selected",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Tap any service chip above or click 'Add Service' to start tracking your streaming burn rate and cost per hour.",
+                                style = MaterialTheme.typography.bodySmall,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(activeSubscribed, key = { it.id }) { provider ->
+                    val stats = monthlyStats.find { it.providerId == provider.id }
+                    val totalHours = stats?.totalHours ?: 0.0
+                    val costPerHour = stats?.costPerHour ?: (provider.userCostPerMonth ?: provider.costPerMonth)
+                    val isPrimeCancelCandidate = totalHours < 3.0
                     val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
+                    val isTrial = provider.trialEndDate != null && provider.trialEndDate > System.currentTimeMillis()
+                    val daysLeft = provider.trialEndDate?.let { ((it - System.currentTimeMillis()) / 86400000L).coerceAtLeast(0) }
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onEditProvider(provider) },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
-                        shape = RoundedCornerShape(14.dp)
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isPrimeCancelCandidate) {
+                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                            } else {
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                            }
+                        ),
+                        border = if (isPrimeCancelCandidate) {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
+                        } else null,
+                        shape = RoundedCornerShape(18.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    provider.name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    "Paused · $${String.format("%.2f", effectiveCost)}/mo when active",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-
+                            // Title row with Status & Actions
                             Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                IconButton(
-                                    onClick = { onEditProvider(provider) },
-                                    modifier = Modifier.size(32.dp)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            provider.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        if (isTrial) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                            ) {
+                                                Text(
+                                                    "TRIAL: ${daysLeft}d left",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        } else if (isPrimeCancelCandidate) {
+                                            Badge(
+                                                containerColor = MaterialTheme.colorScheme.error,
+                                                contentColor = MaterialTheme.colorScheme.onError
+                                            ) {
+                                                Text(
+                                                    "CANCEL CANDIDATE",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Icon(
-                                        Icons.Default.Settings,
-                                        contentDescription = "Edit",
-                                        modifier = Modifier.size(16.dp),
-                                        tint = MaterialTheme.colorScheme.outline
+                                    IconButton(
+                                        onClick = { onEditProvider(provider) },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Settings,
+                                            contentDescription = "Edit Price/Trial",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Switch(
+                                        checked = provider.isActive,
+                                        onCheckedChange = { onToggleProvider(provider.id, it) },
+                                        modifier = Modifier.padding(start = 4.dp)
                                     )
                                 }
-                                Button(
-                                    onClick = { onToggleProvider(provider.id, true) },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(34.dp)
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                            // Usage and Financial Metrics
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Column {
+                                        Text(
+                                            "Watched",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                        Text(
+                                            "${String.format("%.1f", totalHours)}h this mo",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Column {
+                                        Text(
+                                            "Monthly Cost",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                        Text(
+                                            "$${String.format("%.2f", effectiveCost)}/mo",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        "$${String.format("%.2f", costPerHour)}",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        "cost per hour",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Inactive / Paused Services Section
+            if (inactiveProviders.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showInactiveSection = !showInactiveSection }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "Paused / Inactive Services (${inactiveProviders.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        Text(
+                            if (showInactiveSection) "Hide" else "Show",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                if (showInactiveSection) {
+                    items(inactiveProviders, key = { it.id }) { provider ->
+                        val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onEditProvider(provider) },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        provider.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        "Paused · $${String.format("%.2f", effectiveCost)}/mo when active",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text("Reactivate", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    IconButton(
+                                        onClick = { onEditProvider(provider) },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Settings,
+                                            contentDescription = "Edit",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                    Button(
+                                        onClick = { onToggleProvider(provider.id, true) },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(34.dp)
+                                    ) {
+                                        Text("Reactivate", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
                                 }
                             }
                         }
