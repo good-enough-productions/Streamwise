@@ -27,7 +27,7 @@ class UserPreferencesManager(context: Context) {
         set(value) = prefs.edit().putString(KEY_WATCHMODE_API_KEY, value).apply()
 
     var googleSheetWebhookUrl: String
-        get() = prefs.getString(KEY_GOOGLE_SHEET_WEBHOOK_URL, "") ?: ""
+        get() = prefs.getString(KEY_GOOGLE_SHEET_WEBHOOK_URL, DEFAULT_GOOGLE_SHEET_WEBHOOK_URL) ?: DEFAULT_GOOGLE_SHEET_WEBHOOK_URL
         set(value) = prefs.edit().putString(KEY_GOOGLE_SHEET_WEBHOOK_URL, value.trim()).apply()
 
     var fireTvIp: String
@@ -42,5 +42,8 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_GITHUB_TOKEN = "github_token"
         private const val KEY_GOOGLE_SHEET_WEBHOOK_URL = "google_sheet_webhook_url"
         private const val KEY_FIRE_TV_IP = "fire_tv_ip"
+
+        // Canonical Google Apps Script Webhook URL deployed via clasp ($0/mo)
+        const val DEFAULT_GOOGLE_SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbwTFjzb2NgW_Py8dhNTWY1Qen9y4D93yG0NUvzhkm1jzKfCz_gE01WQryMcNThfSXEKqQ/exec"
     }
 }

@@ -402,13 +402,15 @@ fun HomeScreen(
 
         // Watch Action Sheet (Reworked "Watch Now" action hub)
         if (watchActionItem != null) {
+            val discoveredDevices by viewModel.discoveredDevices.collectAsState()
             WatchActionSheet(
                 item = watchActionItem!!,
                 allProviders = allProviders,
                 fireTvIp = fireTvIp,
+                discoveredDevices = discoveredDevices,
                 onDismiss = { watchActionItem = null },
-                onLaunchFireTv = { item, providerId ->
-                    viewModel.launchOnFireTv(item, providerId)
+                onLaunchFireTv = { item, providerId, targetIp ->
+                    viewModel.launchOnFireTv(item, providerId, targetIp)
                     watchActionItem = null
                 },
                 onLaunchPhone = { item, providerId ->
