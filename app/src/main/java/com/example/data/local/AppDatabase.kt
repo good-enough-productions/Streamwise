@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 7,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -77,6 +77,17 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE streaming_providers ADD COLUMN userCostPerMonth REAL")
                 db.execSQL("ALTER TABLE streaming_providers ADD COLUMN subscriptionStartDate INTEGER")
                 db.execSQL("ALTER TABLE streaming_providers ADD COLUMN trialEndDate INTEGER")
+            }
+        }
+
+        private val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN userRating REAL")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN isRewatch INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN letterboxdUri TEXT")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN syncedToSheet INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN runtimeMinutes INTEGER")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN releaseYear TEXT")
             }
         }
     }
@@ -123,6 +134,8 @@ abstract class AppDatabase : RoomDatabase() {
                 MediaItem(
                     title = row.name,
                     sharedUrl = row.uri,
+                    letterboxdUri = row.uri,
+                    releaseYear = row.year,
                     status = com.example.data.model.MediaStatus.WATCHLIST.name,
                     addedAt = parseDateToTimestamp(row.date),
                     providerIds = null,
@@ -143,6 +156,8 @@ abstract class AppDatabase : RoomDatabase() {
                 MediaItem(
                     title = row.name,
                     sharedUrl = row.uri,
+                    letterboxdUri = row.uri,
+                    releaseYear = row.year,
                     status = com.example.data.model.MediaStatus.WATCHED.name,
                     addedAt = watchTimestamp,
                     watchedAt = watchTimestamp, // Populate new watchedAt column

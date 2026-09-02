@@ -131,4 +131,81 @@ class MediaRepository(private val mediaDao: MediaDao) {
 
         return mediaDao.getMonthlyUsageStats(startTimestamp, endTimestamp)
     }
+
+    suspend fun getWatchedMediaItemsList(): List<MediaItem> {
+        return mediaDao.getWatchedMediaItemsList()
+    }
+
+    suspend fun getUnsyncedMediaItems(): List<MediaItem> {
+        return mediaDao.getUnsyncedMediaItems()
+    }
+
+    suspend fun markItemsSynced(items: List<MediaItem>) {
+        items.forEach { item ->
+            mediaDao.updateMediaItem(item.copy(syncedToSheet = true))
+        }
+    }
+
+    suspend fun getMediaItemByTitle(title: String): MediaItem? {
+        return mediaDao.getMediaItemByTitle(title)
+    }
+
+    suspend fun logWatchedMovieDirectly(
+        title: String,
+        year: String? = null,
+        userRating: Double? = null,
+        isRewatch: Boolean = false,
+        providerId: String? = null,
+        durationMinutes: Int = 120,
+        notes: String? = null,
+        letterboxdUri: String? = null
+    ): MediaItem {
+        val now = System.currentTimeMillis()
+        val existing = mediaDao.getMediaItemByTitle(title)
+        val savedItem: MediaItem
+
+        if (existing != null) {
+            savedItem = existing.copy(
+                status = MediaStatus.WATCHED.name,
+                watchedAt = now,
+                updatedAt = now,
+                userRating = userRating ?: existing.userRating,
+                isRewatch = isRewatch,
+                userNotes = notes ?: existing.userNotes,
+                releaseYear = year ?: existing.releaseYear,
+                runtimeMinutes = durationMinutes,
+                letterboxdUri = letterboxdUri ?: existing.letterboxdUri,
+                syncedToSheet = false
+            )
+            mediaDao.updateMediaItem(savedItem)
+        } else {
+            val newItem = MediaItem(
+                title = title,
+                status = MediaStatus.WATCHED.name,
+                addedAt = now,
+                watchedAt = now,
+                updatedAt = now,
+                userRating = userRating,
+                isRewatch = isRewatch,
+                userNotes = notes,
+                releaseYear = year,
+                runtimeMinutes = durationMinutes,
+                letterboxdUri = letterboxdUri,
+                syncedToSheet = false
+            )
+            val newId = mediaDao.insertMediaItem(newItem)
+            savedItem = newItem.copy(id = newId)
+        }
+
+        // Add watch session for monthly subscription ROI calculation
+        val session = WatchSession(
+            mediaItemId = savedItem.id,
+            mediaItemTitle = savedItem.title,
+            providerId = providerId,
+            durationMinutes = durationMinutes,
+            notes = notes ?: "Logged via Streamwise Quick-Log"
+        )
+        mediaDao.insertWatchSession(session)
+        return savedItem
+    }
 }
