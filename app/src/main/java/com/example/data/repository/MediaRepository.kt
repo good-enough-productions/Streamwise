@@ -74,6 +74,14 @@ class MediaRepository(private val mediaDao: MediaDao) {
         mediaDao.insertStreamingProvider(provider)
     }
 
+    suspend fun addStreamingProvider(provider: StreamingProvider) {
+        mediaDao.insertStreamingProvider(provider)
+    }
+
+    suspend fun deleteStreamingProvider(providerId: String) {
+        mediaDao.deleteStreamingProviderById(providerId)
+    }
+
 
     // --- Sessions & Financial ROI Analyzers ---
 

@@ -796,6 +796,37 @@ class StreamViewModel(
                 updatedAt = System.currentTimeMillis()
             )
             repository.updateStreamingProvider(updated)
+            _statusMessage.value = "Updated settings for ${provider.name}."
+        }
+    }
+
+    fun addCustomProvider(name: String, costPerMonth: Double, isTrial: Boolean, trialDays: Int = 7) {
+        viewModelScope.launch {
+            val trimmedName = name.trim()
+            if (trimmedName.isBlank()) return@launch
+            val id = trimmedName.lowercase().replace(Regex("[^a-z0-9]"), "_").trim('_')
+            val now = System.currentTimeMillis()
+            val trialEnd = if (isTrial) now + (trialDays * 86400000L) else null
+            val newProvider = StreamingProvider(
+                id = id.ifBlank { "custom_${System.currentTimeMillis()}" },
+                name = trimmedName,
+                costPerMonth = costPerMonth,
+                userCostPerMonth = costPerMonth,
+                subscriptionStartDate = now,
+                trialEndDate = trialEnd,
+                isActive = true,
+                updatedAt = now
+            )
+            repository.addStreamingProvider(newProvider)
+            _statusMessage.value = "Added \"${newProvider.name}\" to your subscriptions!"
+        }
+    }
+
+    fun deleteStreamingProvider(providerId: String) {
+        viewModelScope.launch {
+            val provider = allProviders.value.find { it.id == providerId }
+            repository.deleteStreamingProvider(providerId)
+            _statusMessage.value = "Removed ${provider?.name ?: "service"} from subscriptions."
         }
     }
 

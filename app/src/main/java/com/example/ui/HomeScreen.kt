@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -73,6 +74,8 @@ fun HomeScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
+    var editingProvider by remember { mutableStateOf<StreamingProvider?>(null) }
+    var showAddServiceDialog by remember { mutableStateOf(false) }
 
     // Clear and display Toast/Status banners beautifully
     LaunchedEffect(statusMessage) {
@@ -294,7 +297,10 @@ fun HomeScreen(
                     }
                     2 -> MonthlyRoiContent(
                         monthlyStats = monthlyStats,
-                        allProviders = allProviders
+                        allProviders = allProviders,
+                        onToggleProvider = { id, active -> viewModel.toggleStreamingProvider(id, active) },
+                        onEditProvider = { editingProvider = it },
+                        onAddServiceClick = { showAddServiceDialog = true }
                     )
                     3 -> {
                         val chatMessages by viewModel.chatMessages.collectAsState()
@@ -464,6 +470,34 @@ fun HomeScreen(
                 watchedCount = watchlistItems.count { it.status == MediaStatus.WATCHED.name },
                 onDismiss = { showFeedbackDialog = false },
                 onSubmitSuccess = { /* toast handled */ }
+            )
+        }
+
+        // Edit Subscription / Pricing / Trial Sheet
+        if (editingProvider != null) {
+            SubscriptionEditSheet(
+                provider = editingProvider!!,
+                onDismiss = { editingProvider = null },
+                onSave = { id, isActive, cost, start, trial ->
+                    viewModel.updateStreamingProviderSettings(id, isActive, cost, start, trial)
+                    editingProvider = null
+                },
+                onDelete = { id ->
+                    viewModel.deleteStreamingProvider(id)
+                    editingProvider = null
+                }
+            )
+        }
+
+        // Add Custom / Preset Service Dialog
+        if (showAddServiceDialog) {
+            AddServiceDialog(
+                existingProviderNames = allProviders.map { it.name },
+                onDismiss = { showAddServiceDialog = false },
+                onAdd = { name, cost, isTrial, trialDays ->
+                    viewModel.addCustomProvider(name, cost, isTrial, trialDays)
+                    showAddServiceDialog = false
+                }
             )
         }
     } // End Scaffold
@@ -1356,9 +1390,13 @@ fun WatchedTabContent(
 @Composable
 fun MonthlyRoiContent(
     monthlyStats: List<ProviderUsageStats>,
-    allProviders: List<StreamingProvider>
+    allProviders: List<StreamingProvider>,
+    onToggleProvider: (String, Boolean) -> Unit,
+    onEditProvider: (StreamingProvider) -> Unit,
+    onAddServiceClick: () -> Unit
 ) {
     val activeSubscribed = remember(allProviders) { allProviders.filter { it.isActive } }
+    val inactiveProviders = remember(allProviders) { allProviders.filter { !it.isActive } }
     val totalCost = remember(activeSubscribed) { activeSubscribed.sumOf { it.userCostPerMonth ?: it.costPerMonth } }
     
     // Sort active channels by costPerHour descending (worst value!) to bubble up prime pausing candidates.
@@ -1370,14 +1408,16 @@ fun MonthlyRoiContent(
         worstValueProviders.filter { it.totalHours < 3.0 && it.isActive }.sumOf { it.effectiveCostPerMonth }
     }
 
+    var showInactiveSection by remember { mutableStateOf(true) }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // 1. Summary Budget Card
         item {
-            // Summary Budget card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1393,7 +1433,7 @@ fun MonthlyRoiContent(
                 )
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
@@ -1408,16 +1448,21 @@ fun MonthlyRoiContent(
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
+                    Text(
+                        "${activeSubscribed.size} active subscriptions",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    )
                     
                     if (potentialSavings > 0) {
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.8f),
+                            color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
                             contentColor = MaterialTheme.colorScheme.onErrorContainer
                         ) {
                             Text(
-                                "Potential Savings: $${String.format("%.2f", potentialSavings)}/mo if you pause underutilized services.",
+                                "Potential Savings: $${String.format("%.2f", potentialSavings)}/mo on underutilized channels",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -1425,113 +1470,328 @@ fun MonthlyRoiContent(
                             )
                         }
                     }
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "You must watch at least 3 hours per service per month to justify these costs. Services are ranked below from least optimized to highest value.",
-                        style = MaterialTheme.typography.bodySmall,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
                 }
             }
         }
 
+        // 2. Quick Services Ribbon & Add Service Button
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Quick Subscriptions",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    TextButton(
+                        onClick = onAddServiceClick,
+                        modifier = Modifier.testTag("add_service_btn")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Service", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+
+                // Horizontal quick toggle chips
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(allProviders, key = { it.id }) { provider ->
+                        val effectivePrice = provider.userCostPerMonth ?: provider.costPerMonth
+                        FilterChip(
+                            selected = provider.isActive,
+                            onClick = { onToggleProvider(provider.id, !provider.isActive) },
+                            label = {
+                                Text(
+                                    text = if (provider.isActive) "${provider.name} ($${String.format("%.2f", effectivePrice)})"
+                                           else "+ ${provider.name}"
+                                )
+                            },
+                            leadingIcon = if (provider.isActive) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                            } else null
+                        )
+                    }
+                }
+            }
+        }
+
+        // 3. Active Subscriptions Section Header
         item {
             Text(
-                "Subscription Value Analytics (This Month)",
+                "Active Subscriptions & Cost/Hour",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
         }
 
-        if (worstValueProviders.isEmpty()) {
+        if (activeSubscribed.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(16.dp)
                 ) {
-                    Text(
-                        "To analyze ROI, please configure your active streaming services in the 'My Services' tab.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(24.dp),
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "No active subscriptions selected",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Tap any service chip above or click 'Add Service' to start tracking your streaming burn rate and cost per hour.",
+                            style = MaterialTheme.typography.bodySmall,
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
             }
         } else {
-            items(worstValueProviders, key = { it.providerId }) { stats ->
-                val isPrimeCancelCandidate = stats.totalHours < 3.0
-                
+            items(activeSubscribed, key = { it.id }) { provider ->
+                val stats = monthlyStats.find { it.providerId == provider.id }
+                val totalHours = stats?.totalHours ?: 0.0
+                val costPerHour = stats?.costPerHour ?: (provider.userCostPerMonth ?: provider.costPerMonth)
+                val isPrimeCancelCandidate = totalHours < 3.0
+                val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
+                val isTrial = provider.trialEndDate != null && provider.trialEndDate > System.currentTimeMillis()
+                val daysLeft = provider.trialEndDate?.let { ((it - System.currentTimeMillis()) / 86400000L).coerceAtLeast(0) }
+
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onEditProvider(provider) },
                     colors = CardDefaults.cardColors(
                         containerColor = if (isPrimeCancelCandidate) {
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
                         } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                         }
                     ),
                     border = if (isPrimeCancelCandidate) {
-                        BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
                     } else null,
-                    shape = RoundedCornerShape(16.dp)
+                    shape = RoundedCornerShape(18.dp)
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    stats.providerName,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                if (isPrimeCancelCandidate) {
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Badge(
-                                        containerColor = MaterialTheme.colorScheme.error,
-                                        contentColor = MaterialTheme.colorScheme.onError
-                                    ) {
-                                        Text("CANCEL CANDIDATE", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+                        // Title row with Status & Actions
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        provider.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (isTrial) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        ) {
+                                            Text(
+                                                "TRIAL: ${daysLeft}d left",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    } else if (isPrimeCancelCandidate) {
+                                        Badge(
+                                            containerColor = MaterialTheme.colorScheme.error,
+                                            contentColor = MaterialTheme.colorScheme.onError
+                                        ) {
+                                            Text(
+                                                "CANCEL CANDIDATE",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 4.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
+
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Text(
-                                    "Watched: ${String.format("%.1f", stats.totalHours)}h",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                                Text(
-                                    "Cost: $${stats.costPerMonth}/mo",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline
+                                IconButton(
+                                    onClick = { onEditProvider(provider) },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        contentDescription = "Edit Price/Trial",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Switch(
+                                    checked = provider.isActive,
+                                    onCheckedChange = { onToggleProvider(provider.id, it) },
+                                    modifier = Modifier.padding(start = 4.dp)
                                 )
                             }
                         }
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                "$${String.format("%.2f", stats.costPerHour)}",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Black,
-                                color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                "per hour",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+
+                        // Usage and Financial Metrics
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Column {
+                                    Text(
+                                        "Watched",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    Text(
+                                        "${String.format("%.1f", totalHours)}h this mo",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        "Monthly Cost",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    Text(
+                                        "$${String.format("%.2f", effectiveCost)}/mo",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    "$${String.format("%.2f", costPerHour)}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "cost per hour",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Inactive / Paused Services Section
+        if (inactiveProviders.isNotEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showInactiveSection = !showInactiveSection }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Paused / Inactive Services (${inactiveProviders.size})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        if (showInactiveSection) "Hide" else "Show",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            if (showInactiveSection) {
+                items(inactiveProviders, key = { it.id }) { provider ->
+                    val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onEditProvider(provider) },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    provider.name,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    "Paused · $${String.format("%.2f", effectiveCost)}/mo when active",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                IconButton(
+                                    onClick = { onEditProvider(provider) },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        contentDescription = "Edit",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                Button(
+                                    onClick = { onToggleProvider(provider.id, true) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(34.dp)
+                                ) {
+                                    Text("Reactivate", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         }
                     }
                 }
