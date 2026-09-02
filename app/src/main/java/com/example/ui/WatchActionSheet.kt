@@ -36,14 +36,25 @@ fun WatchActionSheet(
     item: MediaItem,
     allProviders: List<StreamingProvider>,
     fireTvIp: String,
+    discoveredDevices: List<CastDevice> = emptyList(),
     onDismiss: () -> Unit,
-    onLaunchFireTv: (MediaItem, String?) -> Unit,
+    onLaunchFireTv: (MediaItem, String?, String) -> Unit, // passes (item, providerId, targetIp)
     onLaunchPhone: (MediaItem, String?) -> Unit,
     onQuickLog: (MediaItem) -> Unit,
     onPinTonight: (MediaItem) -> Unit
 ) {
     val activeItemProviders = allProviders.filter { item.providersList.contains(it.id) }
     val primaryProvider = activeItemProviders.firstOrNull { it.isActive } ?: activeItemProviders.firstOrNull()
+
+    // Auto-detect target TV: explicit setting IP > discovered Fire TV > any discovered smart TV
+    val autoTv = discoveredDevices.firstOrNull { it.type == "FireTV" || it.name.contains("Fire", ignoreCase = true) }
+        ?: discoveredDevices.firstOrNull()
+    val effectiveTvIp = fireTvIp.ifBlank { autoTv?.ip ?: "" }
+    val tvDisplayName = when {
+        autoTv != null -> autoTv.name
+        fireTvIp.isNotBlank() -> "Fire TV ($fireTvIp)"
+        else -> null
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -79,59 +90,61 @@ fun WatchActionSheet(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            // Action 1: Fire TV Native Launch
-            Card(
-                onClick = { onLaunchFireTv(item, primaryProvider?.id) },
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("watch_sheet_fire_tv_btn")
-            ) {
-                Row(
+            // Action 1: TV Launch (Highlighted if TV detected or configured)
+            if (effectiveTvIp.isNotBlank()) {
+                Card(
+                    onClick = { onLaunchFireTv(item, primaryProvider?.id, effectiveTvIp) },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        .testTag("watch_sheet_fire_tv_btn")
                 ) {
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Send,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Play on Fire TV",
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        Text(
-                            text = if (fireTvIp.isNotBlank()) "Target: $fireTvIp · Opens ${primaryProvider?.name ?: "Stream"}"
-                                   else "Set Fire TV IP in Settings to connect",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Play on ${tvDisplayName ?: "Fire TV"}",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                            Text(
+                                text = "Wakes TV & opens ${primaryProvider?.name ?: "app"} in 4K HDR · Starts watch session timer",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
 
-            // Action 2: Phone Deep-link Launch
+            // Action 2: Phone Deep-link Launch (Promoted to primary if away from TV)
             Card(
                 onClick = { onLaunchPhone(item, primaryProvider?.id) },
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                    containerColor = if (effectiveTvIp.isBlank()) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 ),
                 modifier = Modifier
                     .fillMaxWidth()

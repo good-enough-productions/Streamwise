@@ -132,6 +132,9 @@ class StreamViewModel(
     val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
 
     init {
+        // Automatically scan local Wi-Fi for Fire TVs / Smart TVs on startup
+        startDeviceDiscovery()
+
         // Deactivate expired trials automatically
         viewModelScope.launch(Dispatchers.IO) {
             allProviders.collect { providers ->
@@ -312,6 +315,12 @@ class StreamViewModel(
     fun startDeviceDiscovery() {
         viewModelScope.launch {
             CastingManager.discoverDevices(getApplication())
+            if (_fireTvIp.value.isBlank()) {
+                val autoTv = discoveredDevices.value.firstOrNull { it.type == "FireTV" || it.name.contains("Fire", ignoreCase = true) }
+                if (autoTv != null) {
+                    saveFireTvIp(autoTv.ip)
+                }
+            }
         }
     }
 
@@ -548,17 +557,22 @@ class StreamViewModel(
 
     /**
      * Launches playback natively on Fire TV via local Wi-Fi.
+     * Automatically registers an active watch session and schedules completion check-in.
      */
-    fun launchOnFireTv(item: MediaItem, providerId: String?) {
+    fun launchOnFireTv(item: MediaItem, providerId: String?, targetIp: String? = null) {
         viewModelScope.launch {
+            val ip = targetIp?.ifBlank { null } ?: fireTvIp.value
             val result = FireTvRelay.launchOnFireTv(
-                fireTvIp = fireTvIp.value,
+                fireTvIp = ip,
                 movieTitle = item.title,
                 providerId = providerId,
                 tmdbId = item.tmdbId
             )
             when (result) {
-                is FireTvRelay.LaunchResult.Success -> _statusMessage.value = result.message
+                is FireTvRelay.LaunchResult.Success -> {
+                    startIntendingToWatch(item)
+                    _statusMessage.value = "${result.message} Watch session timer started."
+                }
                 is FireTvRelay.LaunchResult.Error -> _statusMessage.value = result.message
             }
         }

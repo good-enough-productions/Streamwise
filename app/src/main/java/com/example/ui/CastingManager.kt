@@ -95,23 +95,49 @@ object CastingManager {
 
     private fun parseSsdpResponse(response: String, ip: String): CastDevice? {
         val lines = response.lines()
-        val location = lines.find { it.startsWith("LOCATION:", ignoreCase = true) }?.substringAfter(":")?.trim() ?: return null
+        val locationLine = lines.find { it.startsWith("LOCATION:", ignoreCase = true) } ?: return null
+        val location = locationLine.substring(locationLine.indexOf(':') + 1).trim()
         val st = lines.find { it.startsWith("ST:", ignoreCase = true) }?.substringAfter(":")?.trim() ?: ""
-        
-        // Filter for interesting devices: Renderers, Smart TVs, DIAL servers
-        if (!st.contains("device:MediaRenderer", ignoreCase = true) && 
-            !st.contains("dial-multiscreen", ignoreCase = true)) {
+        val server = lines.find { it.startsWith("SERVER:", ignoreCase = true) }?.substringAfter(":")?.trim() ?: ""
+
+        val isFireTv = response.contains("Amazon", ignoreCase = true) || 
+                       response.contains("FireTV", ignoreCase = true) || 
+                       response.contains("AFT", ignoreCase = true) ||
+                       server.contains("Amazon", ignoreCase = true)
+
+        val isDial = st.contains("dial-multiscreen", ignoreCase = true) || location.contains("dial", ignoreCase = true)
+        val isRenderer = st.contains("device:MediaRenderer", ignoreCase = true)
+
+        if (!isFireTv && !isDial && !isRenderer) {
             return null
         }
 
-        // Basic naming heuristic
-        val name = when {
-            st.contains("MediaRenderer") -> "Smart TV / Media Player"
-            st.contains("dial") -> "DIAL Cast Target"
-            else -> "Network Device"
+        var friendlyName = when {
+            isFireTv -> "Amazon Fire TV ($ip)"
+            isDial -> "Smart TV ($ip)"
+            else -> "Smart TV / Media Player"
         }
 
-        return CastDevice(name = name, ip = ip, location = location, type = st)
+        try {
+            if (location.startsWith("http")) {
+                val url = java.net.URL(location)
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 800
+                conn.readTimeout = 800
+                conn.requestMethod = "GET"
+                if (conn.responseCode == 200) {
+                    val xml = conn.inputStream.bufferedReader().readText()
+                    val match = Regex("<friendlyName>(.*?)</friendlyName>", RegexOption.IGNORE_CASE).find(xml)
+                    if (match != null) {
+                        friendlyName = match.groupValues[1]
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Keep heuristic fallback name
+        }
+
+        return CastDevice(name = friendlyName, ip = ip, location = location, type = if (isFireTv) "FireTV" else st)
     }
 
     /**
