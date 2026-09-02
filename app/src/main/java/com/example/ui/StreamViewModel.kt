@@ -77,6 +77,14 @@ class StreamViewModel(
     private val _githubToken = MutableStateFlow(userPreferences.githubToken)
     val githubToken: StateFlow<String> = _githubToken.asStateFlow()
 
+    // Persisted Google Sheet Webhook URL
+    private val _googleSheetWebhookUrl = MutableStateFlow(userPreferences.googleSheetWebhookUrl)
+    val googleSheetWebhookUrl: StateFlow<String> = _googleSheetWebhookUrl.asStateFlow()
+
+    // Persisted Fire TV IP
+    private val _fireTvIp = MutableStateFlow(userPreferences.fireTvIp)
+    val fireTvIp: StateFlow<String> = _fireTvIp.asStateFlow()
+
     fun saveTmdbApiKey(key: String) {
         userPreferences.tmdbApiKey = key
         _tmdbApiKey.value = key.trim()
@@ -99,6 +107,18 @@ class StreamViewModel(
         userPreferences.githubToken = token
         _githubToken.value = token.trim()
         _statusMessage.value = "GitHub token saved for Self-Evolving workflows."
+    }
+
+    fun saveGoogleSheetWebhookUrl(url: String) {
+        userPreferences.googleSheetWebhookUrl = url
+        _googleSheetWebhookUrl.value = url.trim()
+        _statusMessage.value = "Google Sheet Webhook URL saved."
+    }
+
+    fun saveFireTvIp(ip: String) {
+        userPreferences.fireTvIp = ip
+        _fireTvIp.value = ip.trim()
+        _statusMessage.value = "Fire TV IP saved: $ip"
     }
 
     // Casting State
@@ -314,6 +334,252 @@ class StreamViewModel(
                 // Select the most recent intending watch item to prompt
                 _activeCheckInItem.value = intendingItems.first()
             }
+        }
+    }
+
+    /**
+     * Direct Quick-Log: Logs a movie as watched with Letterboxd & ROI parity.
+     * Bypasses the watchlist and records the watch session immediately.
+     */
+    fun logWatchedMovie(
+        title: String,
+        year: String?,
+        rating: Double?,
+        isRewatch: Boolean,
+        providerId: String?,
+        durationMinutes: Int,
+        notes: String?
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val savedItem = repository.logWatchedMovieDirectly(
+                title = title,
+                year = year,
+                userRating = rating,
+                isRewatch = isRewatch,
+                providerId = providerId,
+                durationMinutes = durationMinutes,
+                notes = notes
+            )
+            _statusMessage.value = "Spectacular! \"${savedItem.title}\" logged to History & staged for Letterboxd."
+
+            // Trigger background sync to Google Sheet if configured
+            if (googleSheetWebhookUrl.value.isNotBlank()) {
+                syncWatchedItemToSheet(savedItem, providerId, durationMinutes)
+            }
+        }
+    }
+
+    /**
+     * Exports all watched films to standard Letterboxd CSV format in Downloads.
+     */
+    fun exportToLetterboxdCsv() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val watched = repository.getWatchedMediaItemsList()
+                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val exportFile = File(downloadsDir, "letterboxd_import.csv")
+
+                val csvBuilder = StringBuilder()
+                csvBuilder.appendLine("Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Review")
+
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+
+                watched.forEach { item ->
+                    val date = item.watchedAt?.let { dateFormat.format(java.util.Date(it)) } ?: dateFormat.format(java.util.Date())
+                    val name = escapeCsv(item.title)
+                    val year = escapeCsv(item.releaseYear ?: "")
+                    val uri = escapeCsv(item.letterboxdUri ?: "")
+                    val rating = item.userRating?.toString() ?: (item.rating?.let { (it / 2.0).toString() } ?: "")
+                    val rewatch = if (item.isRewatch) "Yes" else "No"
+                    val tags = "streamwise"
+                    val review = escapeCsv(item.userNotes ?: "")
+
+                    csvBuilder.appendLine("$date,$name,$year,$uri,$rating,$rewatch,$tags,$review")
+                }
+
+                exportFile.writeText(csvBuilder.toString())
+                _statusMessage.value = "Exported ${watched.size} titles to Downloads/letterboxd_import.csv"
+            } catch (e: Exception) {
+                _statusMessage.value = "Letterboxd export failed: ${e.message}"
+            }
+        }
+    }
+
+    private fun escapeCsv(value: String): String {
+        return if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+            "\"" + value.replace("\"", "\"\"") + "\""
+        } else {
+            value
+        }
+    }
+
+    /**
+     * 2-Way Sync with Google Sheets Master Ledger:
+     * 1. Pulls new podcast/external recommendations from Watchlist tab.
+     * 2. Pushes unsynced watch history to Watched tab.
+     */
+    fun syncWithGoogleSheet() {
+        val webhookUrl = googleSheetWebhookUrl.value
+        if (webhookUrl.isBlank()) {
+            _statusMessage.value = "Please configure your Google Sheet Webhook URL in Settings first."
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // 1. Pull Watchlist from Sheet
+                val getUrl = URL("$webhookUrl?action=getWatchlist")
+                val getConn = getUrl.openConnection() as HttpURLConnection
+                getConn.requestMethod = "GET"
+                getConn.connectTimeout = 5000
+                getConn.readTimeout = 7000
+
+                var importedCount = 0
+                if (getConn.responseCode in 200..299) {
+                    val respText = getConn.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(respText)
+                    if (json.optBoolean("success")) {
+                        val itemsArray = json.optJSONArray("items")
+                        if (itemsArray != null) {
+                            for (i in 0 until itemsArray.length()) {
+                                val obj = itemsArray.getJSONObject(i)
+                                val title = obj.optString("title")
+                                if (title.isNotBlank()) {
+                                    val existing = repository.getMediaItemByTitle(title)
+                                    if (existing == null) {
+                                        val newItem = MediaItem(
+                                            title = title,
+                                            releaseYear = obj.optString("year").ifBlank { null },
+                                            tmdbId = obj.optString("tmdbId").ifBlank { null },
+                                            importSource = obj.optString("source").ifBlank { "Google Sheet Sync" },
+                                            userNotes = obj.optString("notes").ifBlank { null },
+                                            status = MediaStatus.WATCHLIST.name,
+                                            syncedToSheet = true
+                                        )
+                                        repository.insertMediaItem(newItem)
+                                        importedCount++
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                getConn.disconnect()
+
+                // 2. Push Unsynced Watched Items to Sheet
+                val unsynced = repository.getUnsyncedMediaItems().filter { it.status == MediaStatus.WATCHED.name }
+                if (unsynced.isNotEmpty()) {
+                    val pushPayload = JSONObject().apply {
+                        put("action", "syncWatchedBatch")
+                        val arr = org.json.JSONArray()
+                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                        unsynced.forEach { item ->
+                            arr.put(JSONObject().apply {
+                                put("name", item.title)
+                                put("year", item.releaseYear ?: "")
+                                put("date", item.watchedAt?.let { dateFormat.format(java.util.Date(it)) } ?: "")
+                                put("rating", item.userRating ?: "")
+                                put("rewatch", item.isRewatch)
+                                put("notes", item.userNotes ?: "")
+                                put("provider", item.providersList.firstOrNull() ?: "")
+                                put("durationMinutes", item.runtimeMinutes ?: 120)
+                            })
+                        }
+                        put("items", arr)
+                    }
+
+                    val postUrl = URL(webhookUrl)
+                    val postConn = (postUrl.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        setRequestProperty("Content-Type", "application/json")
+                        doOutput = true
+                    }
+                    postConn.outputStream.use { it.write(pushPayload.toString().toByteArray()) }
+
+                    if (postConn.responseCode in 200..299) {
+                        repository.markItemsSynced(unsynced)
+                    }
+                    postConn.disconnect()
+                }
+
+                _statusMessage.value = "Synced with Master Ledger! ($importedCount new items pulled)"
+            } catch (e: Exception) {
+                _statusMessage.value = "Sheet sync error: ${e.message}"
+            }
+        }
+    }
+
+    private suspend fun syncWatchedItemToSheet(item: MediaItem, providerId: String?, durationMinutes: Int) {
+        try {
+            val webhookUrl = googleSheetWebhookUrl.value
+            if (webhookUrl.isBlank()) return
+
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+            val payload = JSONObject().apply {
+                put("action", "logWatched")
+                put("item", JSONObject().apply {
+                    put("name", item.title)
+                    put("year", item.releaseYear ?: "")
+                    put("date", item.watchedAt?.let { dateFormat.format(java.util.Date(it)) } ?: dateFormat.format(java.util.Date()))
+                    put("rating", item.userRating ?: "")
+                    put("rewatch", item.isRewatch)
+                    put("provider", providerId ?: "")
+                    put("durationMinutes", durationMinutes)
+                    put("notes", item.userNotes ?: "")
+                })
+            }
+
+            val conn = (URL(webhookUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                doOutput = true
+                connectTimeout = 4000
+                readTimeout = 4000
+            }
+            conn.outputStream.use { it.write(payload.toString().toByteArray()) }
+            if (conn.responseCode in 200..299) {
+                repository.markItemsSynced(listOf(item))
+            }
+            conn.disconnect()
+        } catch (e: Exception) {
+            // Background sync fail silent
+        }
+    }
+
+    /**
+     * Launches playback natively on Fire TV via local Wi-Fi.
+     */
+    fun launchOnFireTv(item: MediaItem, providerId: String?) {
+        viewModelScope.launch {
+            val result = FireTvRelay.launchOnFireTv(
+                fireTvIp = fireTvIp.value,
+                movieTitle = item.title,
+                providerId = providerId,
+                tmdbId = item.tmdbId
+            )
+            when (result) {
+                is FireTvRelay.LaunchResult.Success -> _statusMessage.value = result.message
+                is FireTvRelay.LaunchResult.Error -> _statusMessage.value = result.message
+            }
+        }
+    }
+
+    /**
+     * Launches playback directly on phone via Android Intent.
+     */
+    fun launchOnPhone(context: android.content.Context, item: MediaItem, providerId: String?) {
+        FireTvRelay.launchOnPhone(context, item.title, providerId, item.tmdbId)
+        _statusMessage.value = "Opening \"${item.title}\" on this device..."
+    }
+
+    /**
+     * Pins title as Tonight's Feature.
+     */
+    fun pinTonight(item: MediaItem) {
+        viewModelScope.launch {
+            val updated = item.copy(status = MediaStatus.INTENDING_TO_WATCH.name, updatedAt = System.currentTimeMillis())
+            repository.updateMediaItem(updated)
+            _statusMessage.value = "🍿 \"${item.title}\" pinned as Tonight's Feature!"
         }
     }
 

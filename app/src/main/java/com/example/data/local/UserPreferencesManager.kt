@@ -26,11 +26,21 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getString(KEY_WATCHMODE_API_KEY, "") ?: ""
         set(value) = prefs.edit().putString(KEY_WATCHMODE_API_KEY, value).apply()
 
+    var googleSheetWebhookUrl: String
+        get() = prefs.getString(KEY_GOOGLE_SHEET_WEBHOOK_URL, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_GOOGLE_SHEET_WEBHOOK_URL, value.trim()).apply()
+
+    var fireTvIp: String
+        get() = prefs.getString(KEY_FIRE_TV_IP, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_FIRE_TV_IP, value.trim()).apply()
+
     companion object {
         private const val PREFS_NAME = "user_preferences"
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
         private const val KEY_WATCHMODE_API_KEY = "watchmode_api_key"
         private const val KEY_OLLAMA_HOST = "ollama_host"
         private const val KEY_GITHUB_TOKEN = "github_token"
+        private const val KEY_GOOGLE_SHEET_WEBHOOK_URL = "google_sheet_webhook_url"
+        private const val KEY_FIRE_TV_IP = "fire_tv_ip"
     }
 }

@@ -38,6 +38,15 @@ interface MediaDao {
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMediaItemById(id: Long)
 
+    @Query("SELECT * FROM media_items WHERE LOWER(title) = LOWER(:title) LIMIT 1")
+    suspend fun getMediaItemByTitle(title: String): MediaItem?
+
+    @Query("SELECT * FROM media_items WHERE status = 'WATCHED' ORDER BY watchedAt DESC")
+    suspend fun getWatchedMediaItemsList(): List<MediaItem>
+
+    @Query("SELECT * FROM media_items WHERE syncedToSheet = 0")
+    suspend fun getUnsyncedMediaItems(): List<MediaItem>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWatchSessions(sessions: List<WatchSession>)
 

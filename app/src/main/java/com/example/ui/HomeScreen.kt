@@ -56,11 +56,20 @@ fun HomeScreen(
     val checkInItem by viewModel.activeCheckInItem.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val tmdbApiKey by viewModel.tmdbApiKey.collectAsState()
+    val googleSheetWebhookUrl by viewModel.googleSheetWebhookUrl.collectAsState()
+    val fireTvIp by viewModel.fireTvIp.collectAsState()
+    val githubToken by viewModel.githubToken.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+
     var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Agent
     var filterOnlyMyServices by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var showQuickLogDialog by remember { mutableStateOf(false) }
+    var quickLogInitialMovie by remember { mutableStateOf<MediaItem?>(null) }
+    var watchActionItem by remember { mutableStateOf<MediaItem?>(null) }
+    var showFeedbackDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
@@ -91,12 +100,22 @@ fun HomeScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { viewModel.exportToObsidian() },
-                        modifier = Modifier.testTag("export_obsidian_button")
+                        onClick = { viewModel.syncWithGoogleSheet() },
+                        modifier = Modifier.testTag("sync_sheet_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Sync with Google Sheet",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.exportToLetterboxdCsv() },
+                        modifier = Modifier.testTag("export_letterboxd_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
-                            contentDescription = "Export to Obsidian",
+                            contentDescription = "Export for Letterboxd (CSV)",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -127,16 +146,6 @@ fun HomeScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    IconButton(
-                        onClick = simulateForegroundReturn,
-                        modifier = Modifier.testTag("simulate_foreground_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Simulate App Resume (Foreground Check)",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
@@ -144,23 +153,45 @@ fun HomeScreen(
             )
         },
         floatingActionButton = {
-            if (selectedTab == 0 || selectedTab == 1) {
-                ExtendedFloatingActionButton(
-                    text = { Text("Add Title") },
-                    icon = { Icon(Icons.Default.Add, contentDescription = "Add media item") },
-                    onClick = { showAddDialog = true },
-                    modifier = Modifier
-                        .navigationBarsPadding()
-                        .testTag("add_item_fab")
-                        .showcaseTarget(
-                            "fab_add", 
-                            "Add Movies & Shows", 
-                            "Opens a search window connected to TMDB where you can find and add any movie or TV show to your Watchlist.",
-                            "Use this whenever you hear a recommendation from a friend or see a trailer for something you want to watch later."
-                        ),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.navigationBarsPadding()
+            ) {
+                // Floating Feedback Button (Do-It-Now pipeline)
+                FloatingFeedbackButton(
+                    onClick = { showFeedbackDialog = true }
                 )
+
+                if (selectedTab == 0) {
+                    ExtendedFloatingActionButton(
+                        text = { Text("Add to Queue") },
+                        icon = { Icon(Icons.Default.Add, contentDescription = "Add media item") },
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier
+                            .testTag("add_item_fab")
+                            .showcaseTarget(
+                                "fab_add", 
+                                "Add Movies & Shows", 
+                                "Opens a search window connected to TMDB where you can find and add any movie or TV show to your Watchlist.",
+                                "Use this whenever you hear a recommendation from a friend or see a trailer for something you want to watch later."
+                            ),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else if (selectedTab == 1) {
+                    ExtendedFloatingActionButton(
+                        text = { Text("Quick Log Film") },
+                        icon = { Icon(Icons.Default.Check, contentDescription = "Log watched film") },
+                        onClick = {
+                            quickLogInitialMovie = null
+                            showQuickLogDialog = true
+                        },
+                        modifier = Modifier.testTag("quick_log_fab"),
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                }
             }
         }
     ) { innerPadding ->
@@ -239,9 +270,9 @@ fun HomeScreen(
                         allProviders = allProviders,
                         filterOnlyMyServices = filterOnlyMyServices,
                         onFilterToggle = { filterOnlyMyServices = it },
-                        onWatchClick = { viewModel.startIntendingToWatch(it) },
+                        onWatchClick = { watchActionItem = it },
                         onDeleteClick = { viewModel.deleteItem(it) },
-                        onSyncClick = { viewModel.triggerImmediateSync() },
+                        onSyncClick = { viewModel.syncWithGoogleSheet() },
                         tmdbApiKey = tmdbApiKey,
                         onOpenSettings = { showSettingsDialog = true },
                         onMovieClick = { detailMovieItem = it }
@@ -253,7 +284,12 @@ fun HomeScreen(
                             allProviders = allProviders,
                             onMovieClick = { detailMovieItem = it },
                             onDeleteClick = { viewModel.deleteItem(it) },
-                            onSyncClick = { viewModel.triggerImmediateSync() }
+                            onSyncClick = { viewModel.syncWithGoogleSheet() },
+                            onQuickLogClick = {
+                                quickLogInitialMovie = null
+                                showQuickLogDialog = true
+                            },
+                            onExportLetterboxdClick = { viewModel.exportToLetterboxdCsv() }
                         )
                     }
                     2 -> MonthlyRoiContent(
@@ -322,6 +358,13 @@ fun HomeScreen(
                 onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
                 githubToken = githubToken,
                 onSaveGithubToken = { viewModel.saveGithubToken(it) },
+                googleSheetWebhookUrl = googleSheetWebhookUrl,
+                onSaveGoogleSheetWebhookUrl = { viewModel.saveGoogleSheetWebhookUrl(it) },
+                fireTvIp = fireTvIp,
+                onSaveFireTvIp = { viewModel.saveFireTvIp(it) },
+                onSyncGoogleSheet = { viewModel.syncWithGoogleSheet() },
+                onExportLetterboxd = { viewModel.exportToLetterboxdCsv() },
+                onSimulateResume = simulateForegroundReturn,
                 onDismiss = { showSettingsDialog = false }
             )
         }
@@ -346,13 +389,79 @@ fun HomeScreen(
                 onCastClick = { device, item -> viewModel.castToDevice(device, item) },
                 onDismiss = { detailMovieItem = null },
                 onWatchClick = {
-                    viewModel.startIntendingToWatch(detailMovieItem!!)
+                    val target = detailMovieItem
                     detailMovieItem = null
+                    watchActionItem = target
                 },
                 onDeleteClick = {
                     viewModel.deleteItem(detailMovieItem!!)
                     detailMovieItem = null
                 }
+            )
+        }
+
+        // Watch Action Sheet (Reworked "Watch Now" action hub)
+        if (watchActionItem != null) {
+            WatchActionSheet(
+                item = watchActionItem!!,
+                allProviders = allProviders,
+                fireTvIp = fireTvIp,
+                onDismiss = { watchActionItem = null },
+                onLaunchFireTv = { item, providerId ->
+                    viewModel.launchOnFireTv(item, providerId)
+                    watchActionItem = null
+                },
+                onLaunchPhone = { item, providerId ->
+                    viewModel.launchOnPhone(context, item, providerId)
+                    watchActionItem = null
+                },
+                onQuickLog = { item ->
+                    val target = item
+                    watchActionItem = null
+                    quickLogInitialMovie = target
+                    showQuickLogDialog = true
+                },
+                onPinTonight = { item ->
+                    viewModel.pinTonight(item)
+                    watchActionItem = null
+                }
+            )
+        }
+
+        // Quick Log Dialog
+        if (showQuickLogDialog) {
+            QuickLogDialog(
+                initialMovie = quickLogInitialMovie,
+                allProviders = allProviders,
+                onDismiss = {
+                    showQuickLogDialog = false
+                    quickLogInitialMovie = null
+                },
+                onSave = { title, year, rating, isRewatch, providerId, durationMinutes, notes ->
+                    viewModel.logWatchedMovie(title, year, rating, isRewatch, providerId, durationMinutes, notes)
+                    showQuickLogDialog = false
+                    quickLogInitialMovie = null
+                }
+            )
+        }
+
+        // Autonomous Feedback Dialog (Do-It-Now pipeline)
+        if (showFeedbackDialog) {
+            val currentTabName = when (selectedTab) {
+                0 -> "Watchlist"
+                1 -> "Watched History"
+                2 -> "ROI Stats"
+                3 -> "Olivia Agent Chat"
+                else -> "Main"
+            }
+            FeedbackDialog(
+                githubToken = githubToken,
+                webhookUrl = googleSheetWebhookUrl,
+                currentTabName = currentTabName,
+                watchlistCount = watchlistItems.count { it.status != MediaStatus.WATCHED.name },
+                watchedCount = watchlistItems.count { it.status == MediaStatus.WATCHED.name },
+                onDismiss = { showFeedbackDialog = false },
+                onSubmitSuccess = { /* toast handled */ }
             )
         }
     } // End Scaffold
@@ -392,6 +501,7 @@ fun WatchlistTabContent(
     var sortBy by remember { mutableStateOf("added") } // "added", "alpha", "rating"
     var showFreeOnly by remember { mutableStateOf(false) }
     var selectedGenre by remember { mutableStateOf<String?>(null) }
+    var runtimeFilter by remember { mutableStateOf<Int?>(null) } // null: All, 90: <90m, 120: <120m
 
     val allGenres = remember(watchlistItems) {
         watchlistItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
@@ -401,7 +511,7 @@ fun WatchlistTabContent(
     }
 
     // Filter items according to state
-    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, selectedGenre) {
+    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, selectedGenre, runtimeFilter) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
@@ -412,6 +522,11 @@ fun WatchlistTabContent(
 
             if (selectedGenre != null) {
                 if (item.genres?.contains(selectedGenre!!, ignoreCase = true) != true) return@filter false
+            }
+
+            if (runtimeFilter != null) {
+                val mins = item.runtimeMinutes
+                if (mins != null && mins > runtimeFilter!!) return@filter false
             }
 
             if (showFreeOnly) {
@@ -638,7 +753,39 @@ fun WatchlistTabContent(
                 modifier = Modifier.testTag("filter_free_chip")
             )
 
+            FilterChip(
+                selected = runtimeFilter == 90,
+                onClick = { runtimeFilter = if (runtimeFilter == 90) null else 90 },
+                label = { Text("< 90m", fontSize = 11.sp) },
+                modifier = Modifier.testTag("filter_runtime_90_chip")
+            )
+
+            FilterChip(
+                selected = runtimeFilter == 120,
+                onClick = { runtimeFilter = if (runtimeFilter == 120) null else 120 },
+                label = { Text("< 120m", fontSize = 11.sp) },
+                modifier = Modifier.testTag("filter_runtime_120_chip")
+            )
+
             Spacer(modifier = Modifier.weight(1f))
+
+            IconButton(
+                onClick = {
+                    if (processedItems.isNotEmpty()) {
+                        onMovieClick(processedItems.random())
+                    }
+                },
+                modifier = Modifier
+                    .size(36.dp)
+                    .testTag("surprise_me_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = "Pick random film from filter",
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
 
             IconButton(
                 onClick = onSyncClick,
@@ -777,16 +924,31 @@ fun MediaItemCard(
                         }
                     }
 
-                    // TMDB Rating Display if available
-                    if (item.rating != null && item.rating > 0.0) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        ) {
+                    // User Rating or TMDB Rating Display
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 2.dp)
+                    ) {
+                        if (item.userRating != null) {
                             Icon(
                                 imageVector = Icons.Default.Star,
-                                contentDescription = "Rating",
-                                tint = Color(0xFFFFD700), // Gold
+                                contentDescription = "Your Letterboxd Rating",
+                                tint = Color(0xFFFF8C00),
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "★ ${String.format("%.1f", item.userRating)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        } else if (item.rating != null && item.rating > 0.0) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "TMDB Rating",
+                                tint = Color(0xFFFFD700),
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(3.dp))
@@ -796,33 +958,46 @@ fun MediaItemCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.SemiBold
                             )
-                            
-                            if (!item.genres.isNullOrEmpty()) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "â€¢",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = item.genres,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            Spacer(modifier = Modifier.width(6.dp))
                         }
-                    } else if (!item.genres.isNullOrEmpty()) {
-                        Text(
-                            text = item.genres,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
+
+                        if (item.releaseYear != null) {
+                            Text(
+                                text = "${item.releaseYear}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+
+                        if (item.isRewatch) {
+                            Text(
+                                text = "↻ Rewatch",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+
+                        if (item.runtimeMinutes != null && item.runtimeMinutes > 0) {
+                            Text(
+                                text = "${item.runtimeMinutes}m",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                        }
+
+                        if (!item.genres.isNullOrEmpty()) {
+                            Text(
+                                text = "• ${item.genres}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
                     if (item.status == MediaStatus.PENDING_METADATA.name) {
@@ -1022,7 +1197,9 @@ fun WatchedTabContent(
     allProviders: List<StreamingProvider>,
     onMovieClick: (MediaItem) -> Unit,
     onDeleteClick: (MediaItem) -> Unit,
-    onSyncClick: () -> Unit
+    onSyncClick: () -> Unit,
+    onQuickLogClick: () -> Unit,
+    onExportLetterboxdClick: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("timeline") } // "timeline", "alpha", "rating"
@@ -1137,8 +1314,17 @@ fun WatchedTabContent(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.weight(1f))
+
+            IconButton(onClick = onQuickLogClick) {
+                Icon(Icons.Default.Add, contentDescription = "Quick Log Film", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+
+            IconButton(onClick = onExportLetterboxdClick) {
+                Icon(Icons.Default.Share, contentDescription = "Export Letterboxd CSV", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            }
+
             IconButton(onClick = onSyncClick) {
-                Icon(Icons.Default.Refresh, contentDescription = "Enrich metadata", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Icon(Icons.Default.Refresh, contentDescription = "Sync with Google Sheet", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
         }
 
@@ -1937,9 +2123,16 @@ fun SettingsDialog(
     onSaveOllamaHost: (String) -> Unit,
     githubToken: String,
     onSaveGithubToken: (String) -> Unit,
+    googleSheetWebhookUrl: String,
+    onSaveGoogleSheetWebhookUrl: (String) -> Unit,
+    fireTvIp: String,
+    onSaveFireTvIp: (String) -> Unit,
+    onSyncGoogleSheet: () -> Unit,
+    onExportLetterboxd: () -> Unit,
+    onSimulateResume: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: APIs (TMDB/Watchmode), 2: AI (Ollama) & About
+    var activeSubTab by remember { mutableStateOf(0) } // 0: Subs, 1: Cloud/Sheet, 2: Fire TV, 3: APIs, 4: AI/Local, 5: Dev
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1959,11 +2152,12 @@ fun SettingsDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 500.dp)
+                    .heightIn(max = 520.dp)
             ) {
-                TabRow(
+                ScrollableTabRow(
                     selectedTabIndex = activeSubTab,
                     containerColor = Color.Transparent,
+                    edgePadding = 0.dp,
                     modifier = Modifier.padding(bottom = 16.dp)
                 ) {
                     Tab(
@@ -1974,12 +2168,27 @@ fun SettingsDialog(
                     Tab(
                         selected = activeSubTab == 1,
                         onClick = { activeSubTab = 1 },
-                        text = { Text("APIs", fontSize = 11.sp) }
+                        text = { Text("Cloud/Sheet", fontSize = 11.sp) }
                     )
                     Tab(
                         selected = activeSubTab == 2,
                         onClick = { activeSubTab = 2 },
+                        text = { Text("Fire TV", fontSize = 11.sp) }
+                    )
+                    Tab(
+                        selected = activeSubTab == 3,
+                        onClick = { activeSubTab = 3 },
+                        text = { Text("APIs", fontSize = 11.sp) }
+                    )
+                    Tab(
+                        selected = activeSubTab == 4,
+                        onClick = { activeSubTab = 4 },
                         text = { Text("AI/Local", fontSize = 11.sp) }
+                    )
+                    Tab(
+                        selected = activeSubTab == 5,
+                        onClick = { activeSubTab = 5 },
+                        text = { Text("Dev", fontSize = 11.sp) }
                     )
                 }
 
@@ -2015,6 +2224,102 @@ fun SettingsDialog(
                         }
                     }
                     1 -> {
+                        var sheetUrlInput by remember(googleSheetWebhookUrl) { mutableStateOf(googleSheetWebhookUrl) }
+                        val scrollState = rememberScrollState()
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                        ) {
+                            Text("Google Sheets & Letterboxd", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Two-way sync with your Google Sheet Master Ledger (\$0/mo). Enables Gemini scheduled tasks to ingest podcast recommendations directly into your Watchlist.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+
+                            OutlinedTextField(
+                                value = sheetUrlInput,
+                                onValueChange = { sheetUrlInput = it },
+                                label = { Text("Google Apps Script Webhook URL") },
+                                placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Button(
+                                onClick = { onSaveGoogleSheetWebhookUrl(sheetUrlInput) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save Webhook URL")
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            Button(
+                                onClick = onSyncGoogleSheet,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Sync Watchlist & Watched Now")
+                            }
+
+                            Button(
+                                onClick = onExportLetterboxd,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Export Letterboxd CSV to Downloads")
+                            }
+                        }
+                    }
+                    2 -> {
+                        var fireIpInput by remember(fireTvIp) { mutableStateOf(fireTvIp) }
+                        val scrollState = rememberScrollState()
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                        ) {
+                            Text("Amazon Fire TV Wi-Fi Trigger", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text(
+                                "Configure your Fire TV IP address. When you tap 'Watch' on any movie, Streamwise wakes your Fire TV over Wi-Fi and launches the film natively inside Netflix, Prime, Hulu, or Max in 4K HDR.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+
+                            OutlinedTextField(
+                                value = fireIpInput,
+                                onValueChange = { fireIpInput = it },
+                                label = { Text("Fire TV IP Address") },
+                                placeholder = { Text("e.g. 192.168.1.150") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Button(
+                                onClick = { onSaveFireTvIp(fireIpInput) },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save Fire TV IP")
+                            }
+                        }
+                    }
+                    3 -> {
                         var tmdbInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
                         var wmInput by remember(watchmodeApiKey) { mutableStateOf(watchmodeApiKey) }
                         var showTmdb by remember { mutableStateOf(false) }
@@ -2108,7 +2413,7 @@ fun SettingsDialog(
                             }
                         }
                     }
-                    2 -> {
+                    4 -> {
                         val context = LocalContext.current
                         var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
                         var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
@@ -2210,8 +2515,6 @@ fun SettingsDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             
-                            // Basic HTML renderer (strips tags for standard Text view, 
-                            // though full WebView would be better for complex styles)
                             val cleanText = remember(manualHtml) {
                                 manualHtml.replace(Regex("<[^>]*>"), "")
                                     .replace("&nbsp;", " ")
@@ -2224,6 +2527,36 @@ fun SettingsDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                             )
+                        }
+                    }
+                    5 -> {
+                        val scrollState = rememberScrollState()
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                        ) {
+                            Text(
+                                "Developer & Simulation",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Test lifecycle background transitions, check-in sheets, and diagnostic reporting.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+
+                            OutlinedButton(
+                                onClick = onSimulateResume,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Simulate App Resume (Foreground Check)")
+                            }
                         }
                     }
                 }

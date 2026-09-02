@@ -33,7 +33,19 @@ data class MediaItem(
     // Latest timestamp when this movie was watched
     val watchedAt: Long? = null,
     // Comma-separated list of active provider IDs (e.g., "netflix,hulu,max") available for this media item
-    val providerIds: String? = null
+    val providerIds: String? = null,
+    // User's personal rating (0.5 to 5.0 stars)
+    val userRating: Double? = null,
+    // Letterboxd rewatch indicator
+    val isRewatch: Boolean = false,
+    // Letterboxd URI link
+    val letterboxdUri: String? = null,
+    // Google Sheet cloud sync indicator
+    val syncedToSheet: Boolean = false,
+    // Runtime duration in minutes for <90m and <120m filtering
+    val runtimeMinutes: Int? = null,
+    // Release year (e.g., "1995")
+    val releaseYear: String? = null
 ) {
     // Utility to parse provider IDs array
     val providersList: List<String>
