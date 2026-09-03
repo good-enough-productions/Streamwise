@@ -38,6 +38,9 @@ class StreamApp : Application() {
 
         // Queue WorkManager Periodic Streaming Provider Availability Sync
         setupPeriodicAvailabilitySync()
+
+        // Start TvCompanionService (Listens on port 8998 for Wi-Fi playback triggers)
+        com.example.service.TvCompanionService.start(this)
     }
 
     private fun setupPeriodicAvailabilitySync() {

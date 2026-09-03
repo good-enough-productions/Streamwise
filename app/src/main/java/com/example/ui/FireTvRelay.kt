@@ -89,20 +89,38 @@ object FireTvRelay {
             conn.outputStream.use { it.write(payload.toByteArray()) }
 
             if (conn.responseCode in 200..299) {
-                Log.d(TAG, "Successfully launched on Fire TV via Companion Receiver")
-                return@withContext LaunchResult.Success("Launched \"$movieTitle\" on Fire TV ($fireTvIp)")
+                val respString = conn.inputStream.bufferedReader().readText()
+                val respJson = try { JSONObject(respString) } catch (_: Exception) { JSONObject() }
+                val targetApp = respJson.optString("targetApp", "")
+                val appLabel = when {
+                    targetApp.contains("netflix") -> "Netflix"
+                    targetApp.contains("hulu") -> "Hulu"
+                    targetApp.contains("disney") -> "Disney+"
+                    targetApp.contains("hbo") -> "Max"
+                    targetApp.contains("avod") -> "Prime Video"
+                    targetApp.contains("apple") -> "Apple TV"
+                    targetApp.contains("peacock") -> "Peacock"
+                    targetApp.contains("criterion") -> "Criterion Channel"
+                    targetApp.contains("starz") -> "Starz"
+                    targetApp.contains("tubi") -> "Tubi"
+                    targetApp.contains("pluto") -> "Pluto TV"
+                    targetApp.contains("search") -> "Universal Search"
+                    else -> providerId?.replaceFirstChar { it.uppercase() } ?: "Fire TV"
+                }
+                Log.d(TAG, "Successfully launched on Fire TV via Companion Receiver: $appLabel")
+                return@withContext LaunchResult.Success("🎬 Playing \"$movieTitle\" on Danny's Fire TV via $appLabel!")
             }
         } catch (e: Exception) {
-            Log.d(TAG, "Companion receiver not responding on port 8998, checking ADB port 5555: ${e.message}")
+            Log.d(TAG, "Companion receiver not responding on port 8998: ${e.message}")
         }
 
-        // Attempt 2: Verify Fire TV is alive on port 5555 (ADB)
+        // Attempt 2: Verify Fire TV port 5555
         try {
             Socket().use { socket ->
                 socket.connect(InetSocketAddress(fireTvIp, ADB_PORT), 1500)
-                Log.d(TAG, "Fire TV detected with ADB listening on 5555")
-                return@withContext LaunchResult.Success(
-                    "Fire TV detected at $fireTvIp. Launch intent staged for \"$movieTitle\"."
+                Log.d(TAG, "Fire TV detected with ADB listening on 5555, but Companion on 8998 is offline.")
+                return@withContext LaunchResult.Error(
+                    "Fire TV detected at $fireTvIp, but Streamwise TV service is not running. Please open Streamwise on your TV once to activate."
                 )
             }
         } catch (e: Exception) {
