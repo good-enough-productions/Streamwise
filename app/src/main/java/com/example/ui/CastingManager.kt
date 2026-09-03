@@ -73,7 +73,8 @@ object CastingManager {
                     socket.receive(receivePacket)
                     
                     val response = String(receivePacket.data, 0, receivePacket.length)
-                    val device = parseSsdpResponse(response, receivePacket.address.hostAddress)
+                    val hostAddr = receivePacket.address?.hostAddress ?: ""
+                    val device = parseSsdpResponse(response, hostAddr)
                     
                     if (device != null && devices.none { it.ip == device.ip }) {
                         devices.add(device)
@@ -86,8 +87,18 @@ object CastingManager {
         } catch (e: Exception) {
             Log.e(TAG, "SSDP Discovery error: ${e.message}")
         } finally {
-            socket?.close()
-            multicastLock?.release()
+            try {
+                socket?.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed closing socket: ${e.message}")
+            }
+            try {
+                if (multicastLock?.isHeld == true) {
+                    multicastLock?.release()
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed releasing multicastLock: ${e.message}")
+            }
         }
 
         _discoveredDevices.value = devices
