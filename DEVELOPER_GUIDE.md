@@ -1,31 +1,39 @@
-﻿# Streamwise Developer Guide
+# Streamwise Developer Guide
 
 ## Architecture Overview
-Streamwise is a native Android application built entirely with **Kotlin** and **Jetpack Compose**. It aims to solve the "subscription fatigue" problem by combining a Watchlist manager with a Financial ROI tracker.
+Streamwise is a native Android application built entirely with **Kotlin** and **Jetpack Compose**. It aims to solve the "subscription fatigue" problem by combining a Watchlist manager with a Financial ROI tracker and a forward-looking Churn Optimizer.
 
 ### Key Components
 
-1. **Local Database (Room)**
-   - **AppDatabase.kt**: The SQLite database powered by Android Room.
+1. **Local Database (Room Schema v8)**
+   - **AppDatabase.kt**: SQLite database powered by Android Room with migration path `MIGRATION_7_8`.
    - **Entities**:
-     - MediaItem: Represents a movie or TV show.
-     - StreamingProvider: Represents a platform (Netflix, Hulu, etc.). Custom pricing and trial expiration are stored here to drive the ROI math.
-     - WatchSession: Every time an item is checked off, a session is logged to track hours spent on a given platform.
-   - **MediaDao.kt**: Contains raw SQL queries. Specifically, getMonthlyUsageStats joins sessions and providers to figure out the "Cost Per Hour" burn rate.
+     - `MediaItem`: Represents a movie or TV show. Schema v8 adds `userRating` (0.5–5.0), `isRewatch`, `letterboxdUri`, `syncedToSheet`, `runtimeMinutes`, and `releaseYear`.
+     - `StreamingProvider`: Represents a platform (Netflix, Hulu, Criterion, etc.). Custom user pricing, trial durations, and active states are stored here to drive ROI math.
+     - `WatchSession`: Every time an item is checked off or watched on TV, a session is logged to track hours spent on a given platform.
+   - **MediaDao.kt**: Contains Room queries, monthly usage aggregations (`getMonthlyUsageStats`), and custom provider deletions.
 
-2. **Network & APIs (Retrofit)**
-   - **TMDB (The Movie Database)**: Used for searching titles and fetching metadata (posters, descriptions).
-   - **Watchmode**: The crux of the app. It resolves a TMDB ID into actual streaming provider availability (e.g., "The Matrix" is on "Max").
-   - **Ollama AI**: Talks directly to a local, self-hosted LLM (like llama3) running on the user's home network for private chat recommendations.
+2. **Network, TV Discovery & Cloud Sync**
+   - **TMDB & Watchmode**: Resolves title metadata and streaming availability across major and FAST providers in `AvailabilitySyncWorker.kt`.
+   - **SSDP / DIAL TV Discovery**: `CastingManager.kt` sweeps the local Wi-Fi subnet on startup, identifies Fire TVs / Smart TVs via XML device descriptors, and provides zero-config IP binding.
+   - **Adaptive Playback Sheet**: `WatchActionSheet.kt` routes playback to the auto-discovered TV or mobile device and tracks runtime watch sessions.
+   - **Master Google Sheet Cloud Ledger**: Serverless Google Apps Script webhook deployed at `https://script.google.com/macros/s/AKfycbwTFjzb2NgW_Py8dhNTWY1Qen9y4D93yG0NUvzhkm1jzKfCz_gE01WQryMcNThfSXEKqQ/exec` (`UserPreferencesManager.DEFAULT_GOOGLE_SHEET_WEBHOOK_URL`) providing two-way sync for watchlist, ratings, and podcast recommendation ingestion.
 
 3. **UI (Jetpack Compose)**
-   - **HomeScreen.kt**: A monolithic Compose file that handles the primary tab routing.
-     - *Watchlist Tab*: Displays saved items, filtered by My Services.
-     - *Search Tab*: Connects to TMDB.
-     - *ROI Tab*: The budget dashboard. Calculates Potential Savings for underutilized platforms.
-     - *Chat Tab*: Connects to Ollama.
-   - **GuideDialog.kt**: Renders user_guide.html and changelog.html from the ssets folder directly inside an Android WebView so users always have offline access to docs.
+   - **HomeScreen.kt**: Monolithic navigation and screen layout:
+     - *Watchlist Tab (0)*: Filtered by "Free to Me" and duration chips (`< 90m`, `< 120m`).
+     - *Watched Vault Tab (1)*: Viewing diary with personal ratings, rewatch badges, and 1-tap Letterboxd CSV export.
+     - *ROI Churn & Budget Tab (2)*: Dual mode view featuring **🎯 Watchlist Match** (ranking services by available watchlist titles, "Best Opportunity to Subscribe" and "Safe to Pause" banners, preview chips) and **📊 Spend & Usage** (burn rate, cost/hour, cancel candidates).
+     - *Agent Chat Tab (3)*: Local AI assistant (Olivia).
+   - **SubscriptionEditSheet.kt & AddServiceDialog.kt**: Modal pricing presets, trial expiration tracker, and custom provider additions.
+   - **QuickLogDialog.kt**: 0.5–5.0 star selector, rewatches, and notes.
+   - **FeedbackDialog.kt**: Floating FAB on every screen that captures Compose screenshots, gathers device diagnostics, and creates GitHub issues labeled `jules-triage`.
+   - **GuideDialog.kt**: Renders `user_guide.html` and `changelog.html` from `app/src/main/assets` directly inside an Android WebView.
 
-### Vibe Coding Notes for Agents
-- Do not introduce massive external UI libraries unless necessary. Compose standard Material3 is preferred.
-- All docs (user_guide.html, changelog.html, and this DEVELOPER_GUIDE.md) MUST be updated when releasing new features. See ibe-coding-docs.md in the global rule set.
+### Mandate for AI Agents & Contributors
+- **Documentation Integrity**: When releasing or updating any feature, you **MUST** update:
+  1. `app/src/main/assets/user_guide.html` (In-App User Guide)
+  2. `app/src/main/assets/changelog.html` (In-App Changelog)
+  3. `README.md` (Repository documentation)
+  4. `DEVELOPER_GUIDE.md` (Architecture and component index)
+  5. Session Walkthrough artifact.

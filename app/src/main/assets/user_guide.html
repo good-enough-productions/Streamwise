@@ -1,63 +1,189 @@
-﻿<!DOCTYPE html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>Streamwise User Guide</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; padding: 16px; color: #333; }
-        h1, h2 { color: #222; }
-        h1 { border-bottom: 2px solid #eaeaea; padding-bottom: 8px; }
-        .section { margin-bottom: 24px; }
-        .step { background: #f9f9f9; padding: 12px; border-radius: 8px; margin-bottom: 12px; border-left: 4px solid #4CAF50; }
-        .tip { background: #e3f2fd; padding: 12px; border-radius: 8px; margin-top: 16px; font-size: 0.9em; }
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-color: #e6edf3;
+            --text-muted: #8b949e;
+            --border-color: #30363d;
+            --primary: #58a6ff;
+            --accent: #238636;
+            --warning: #d29922;
+            --danger: #f85149;
+            --purple: #bc8cff;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            padding: 18px;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+        }
+        h1, h2, h3 { color: #ffffff; margin-top: 0; }
+        h1 {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            font-size: 1.6em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        h2 {
+            font-size: 1.25em;
+            margin-top: 24px;
+            color: var(--primary);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 6px;
+        }
+        .intro {
+            font-size: 1.05em;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+        .card {
+            background: var(--card-bg);
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border-color);
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 0.75em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 6px;
+        }
+        .badge.green { background: #238636; color: #ffffff; }
+        .badge.blue { background: #1f6feb; color: #ffffff; }
+        .badge.purple { background: #8957e5; color: #ffffff; }
+        .badge.yellow { background: #9e6a03; color: #ffffff; }
+        .badge.red { background: #da3633; color: #ffffff; }
+        .tip {
+            background: #121d2f;
+            border-left: 4px solid var(--primary);
+            padding: 12px 14px;
+            border-radius: 0 8px 8px 0;
+            margin: 14px 0;
+            font-size: 0.9em;
+            color: #dbeafe;
+        }
+        .pro-tip {
+            background: #251d08;
+            border-left: 4px solid var(--warning);
+            padding: 12px 14px;
+            border-radius: 0 8px 8px 0;
+            margin: 14px 0;
+            font-size: 0.9em;
+            color: #fef08a;
+        }
+        ul { padding-left: 20px; margin: 8px 0; }
+        li { margin-bottom: 6px; }
+        code {
+            background: #21262d;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.88em;
+            color: #79c0ff;
+        }
     </style>
 </head>
 <body>
-    <h1>Streamwise User Guide</h1>
-    <p>Welcome to Streamwise! This app has two main goals: helping you find exactly what to watch, and making sure you aren't paying for subscriptions you aren't actually using.</p>
+    <h1>🎬 Streamwise User Guide</h1>
+    <p class="intro">Streamwise is your intelligent streaming companion and subscription optimizer. It unifies your Watchlist across every service, routes playback directly to your Smart TV, logs your viewing history, and uses a forward-looking recommendation engine to save you money every month.</p>
 
-    <div class="section">
-        <h2>1. The Watchlist (Your Queue)</h2>
-        <div class="step">
-            <strong>What it is:</strong> A single place for all the movies and shows you want to watch.
-        </div>
-        <p>No more jumping between Netflix, Hulu, and Max to remember what you saved. Search for any movie or show, and add it to your Watchlist. When you're ready to watch, the app tells you exactly which of your active services has it right now.</p>
+    <!-- SECTION 1 -->
+    <h2>1. 🎯 ROI Command Center & The Churn Optimizer (Tab 2)</h2>
+    <div class="card">
+        <p>The ROI page is no longer just historical math—it's a <strong>forward-looking recommendation engine</strong> that tells you what to subscribe to next and what to cancel.</p>
+        
+        <h3>Two View Modes</h3>
+        <ul>
+            <li><span class="badge blue">Watchlist Match</span> <strong>(Default):</strong> Ranks every streaming service by how many movies on your Watchlist are currently available to stream there right now.</li>
+            <li><span class="badge purple">Spend & Usage</span> Historical monthly streaming burn rate, hours watched, cost-per-hour, and underutilized channels.</li>
+        </ul>
+
+        <h3>Strategic Opportunity Banners</h3>
+        <ul>
+            <li><strong>🚀 "Best Opportunity to Subscribe":</strong> Identifies the #1 inactive channel with the highest concentration of movies on your watchlist (e.g., <em>"12 movies on your list are on Criterion Channel! Subscribe for 1 month at $10.99 ($0.91/movie) to binge them."</em>) with a 1-tap <strong>Activate</strong> button.</li>
+            <li><strong>💡 "Safe to Pause" Alert:</strong> Highlights active services where you have 0 or 1 movie left on your list and low watch time, calculating your exact monthly savings.</li>
+        </ul>
+
+        <h3>Interactive Subscriptions & Price Presets</h3>
+        <ul>
+            <li><strong>Quick Subscriptions Ribbon:</strong> 1-tap horizontal chip row to instantly toggle any service Active or Paused.</li>
+            <li><strong>Subscription Edit Sheet:</strong> Tap any service or its gear icon to choose 1-tap price presets (<code>$0 Free</code>, <code>$5.99</code>, <code>$7.99</code>, <code>$9.99</code>, <code>$13.99</code>, <code>$15.49</code>, <code>$19.99</code>, <code>$22.99</code>).</li>
+            <li><strong>Free Trial Tracker:</strong> Flip on trial mode with preset durations (<code>7d</code>, <code>14d</code>, <code>30d</code>, <code>3mo</code>). Streamwise displays real-time countdown badges and prevents accidental pause alerts during active trials.</li>
+            <li><strong>+ Add Service:</strong> Add niche or custom channels with instant suggestions for Criterion, Peacock, Paramount+, MUBI, Shudder, BritBox, YouTube Premium, and F1 TV.</li>
+            <li><strong>Watchlist Movie Chips:</strong> Tap any movie chip on a provider card to jump straight to that film's details or launch it on your TV!</li>
+        </ul>
     </div>
 
-    <div class="section">
-        <h2>2. Searching & Adding</h2>
-        <div class="step">
-            <strong>How to do it:</strong> Tap the <strong>Search</strong> tab at the bottom of the screen.
-        </div>
-        <p>Type in a movie or show. When you see something you like, tap the "+" button to add it to your Watchlist. The app uses TMDB (The Movie Database) and Watchmode to automatically find out where it's streaming.</p>
+    <!-- SECTION 2 -->
+    <h2>2. 📺 Universal TV Auto-Discovery & "Watch Now"</h2>
+    <div class="card">
+        <p>Streamwise connects directly with your living room hardware over your local Wi-Fi subnet with zero manual configuration.</p>
+        <ul>
+            <li><strong>Zero-Config SSDP / DIAL Discovery:</strong> On startup, Streamwise automatically discovers Amazon Fire TVs and Smart TVs on your Wi-Fi, pulling friendly names (e.g. <em>"Sean's Fire TV Stick 4K"</em>) and binding automatically. You never need to find or type an IP address.</li>
+            <li><strong>Adaptive "Watch Now" Sheet:</strong> Tapping "Watch Now" prioritizes <strong>"Play on [Your TV Name]"</strong>. If you're away from home or on cellular, it automatically falls back to <strong>"Watch on this Device"</strong>.</li>
+            <li><strong>Watch Session Tracking:</strong> When you trigger playback on your TV, Streamwise automatically tracks your watch session based on runtime, surfacing an effortless check-in when done to log your rating and update your subscription ROI.</li>
+        </ul>
     </div>
 
-    <div class="section">
-        <h2>3. Managing Your Subscriptions (Subs Tab)</h2>
-        <div class="step">
-            <strong>How to do it:</strong> Tap the <strong>Settings (Gear)</strong> icon, then go to the <strong>Subs</strong> tab.
-        </div>
-        <p>Tell the app which streaming services you currently pay for. This is crucial for the Watchlist to accurately show you "My Services" vs everything else.</p>
-        <p><strong>Custom Pricing & Trials:</strong> Tap on any active service to expand its details. If you're on a .99/mo trial, enter that price and the days until the trial ends. Streamwise will use this real data for your ROI calculations, and automatically disable the service when the trial expires!</p>
+    <!-- SECTION 3 -->
+    <h2>3. 📋 Watchlist & "Free to Me" Filtering (Tab 0)</h2>
+    <div class="card">
+        <p>A unified queue across Netflix, Max, Hulu, Prime Video, Apple TV+, Criterion, and free ad-supported platforms (Tubi, Pluto, Freevee).</p>
+        <ul>
+            <li><strong>"Free to Me" Filter:</strong> Shows only movies available on streaming services you currently have active (or free platforms), eliminating paywalls.</li>
+            <li><strong>Duration Chips:</strong> Filter quickly for <code>&lt; 90 min</code> or <code>&lt; 120 min</code> when you need something quick for movie night.</li>
+            <li><strong>Olivia Agent Research:</strong> Every title includes synthesized cultural trivia, focus topics, and pre-watch notes generated by your local AI.</li>
+        </ul>
     </div>
 
-    <div class="section">
-        <h2>4. ROI & Budget Tracking</h2>
-        <div class="step">
-            <strong>What it is:</strong> Tap the <strong>ROI Stats</strong> tab to see if your subscriptions are worth the money.
-        </div>
-        <p>Are you paying /mo for Max but only watched 1 hour this month? Streamwise tracks your "Watch Sessions" when you check off items from your Watchlist. It calculates a "Cost Per Hour" for each service. If a service costs too much per hour of entertainment, it gets flagged as a <strong>CANCEL CANDIDATE</strong> to save you money.</p>
+    <!-- SECTION 4 -->
+    <h2>4. ⭐ Frictionless Watched Logging & Letterboxd Sync (Tab 1)</h2>
+    <div class="card">
+        <p>Log what you watch with precision and keep your cinematic records portable.</p>
+        <ul>
+            <li><strong>Quick Log Dialog:</strong> Rate movies from 0.5 to 5.0 stars, toggle the Rewatch flag, record exact runtime, and attribute the watch to the correct subscription.</li>
+            <li><strong>The Vault:</strong> Your permanent viewing diary displaying personal star ratings, release years, runtime badges, and rewatch indicators.</li>
+            <li><strong>Letterboxd CSV Export:</strong> Tap <strong>"Export to Letterboxd"</strong> to create a ready-to-import CSV file (<code>Downloads/letterboxd_import.csv</code>) matching Letterboxd's exact import format.</li>
+        </ul>
     </div>
 
-    <div class="section">
-        <h2>5. The AI Chatbot</h2>
-        <div class="step">
-            <strong>What it is:</strong> Tap the <strong>AI Chat</strong> tab to talk to your local AI.
-        </div>
-        <p>Not sure what to watch? Ask the AI! "Give me a 90s action movie available on Netflix." The AI talks to your local Ollama server to give you private, smart recommendations.</p>
+    <!-- SECTION 5 -->
+    <h2>5. ☁️ Master Google Sheet Cloud Ledger ($0/mo)</h2>
+    <div class="card">
+        <p>Your Watchlist and Watched history automatically sync with a shared Google Sheet via a dedicated serverless Google Apps Script webhook.</p>
+        <ul>
+            <li><strong>Pre-Configured:</strong> Built into the app with zero copy-pasting required.</li>
+            <li><strong>Automated Podcast Ingestion:</strong> Scheduled background tasks analyze movie podcast episodes (e.g., <em>The Big Picture</em>, <em>The Rewatchables</em>) and automatically append recommended movies directly into your master sheet, which syncs back into Streamwise!</li>
+        </ul>
+    </div>
+
+    <!-- SECTION 6 -->
+    <h2>6. 🐞 "Do It Now" Floating Feedback FAB</h2>
+    <div class="card">
+        <p>Encounter a bug or have an idea for a feature? Look for the floating feedback button on any screen.</p>
+        <ul>
+            <li>Automatically captures a Compose screenshot preview.</li>
+            <li>Attaches device diagnostics (screen tab, active subscriptions, OS version).</li>
+            <li>Files an issue directly on GitHub labeled <code>jules-triage</code> for autonomous AI agent pickup and implementation!</li>
+        </ul>
     </div>
 
     <div class="tip">
-        <strong>Tip:</strong> Keep this app updated with your true subscription costs to get the most accurate savings recommendations!
+        <strong>Pro-Tip:</strong> Before your next billing date, check the <strong>Watchlist Match</strong> tab. If a service only has 1 title left on your list, pause it, activate whatever channel has 10+ titles waiting, and binge them!
     </div>
 </body>
 </html>
