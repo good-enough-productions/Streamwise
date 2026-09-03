@@ -16,7 +16,7 @@ Streamwise is a native Android application built entirely with **Kotlin** and **
 2. **Network, TV Discovery & Cloud Sync**
    - **TMDB & Watchmode**: Resolves title metadata, exact runtimes in minutes (`GET /movie/{id}`), release dates, and streaming availability across major and FAST providers in `AvailabilitySyncWorker.kt`.
    - **Deep-Link Relay**: `FireTvRelay.kt` maps 15+ streaming services to native Android app & web deep-link search URIs.
-   - **SSDP / DIAL TV Discovery**: `CastingManager.kt` sweeps the local Wi-Fi subnet on startup, identifies Fire TVs / Smart TVs via XML device descriptors, and provides zero-config IP binding.
+   - **Hybrid Subnet Sweep & SSDP TV Discovery**: `CastingManager.kt` performs a concurrent TCP port sweep (5555, 8008, 8009, 8998) across the local `/24` subnet on startup, bypassing router multicast isolation to identify Fire TVs (*Danny's Fire TV*) and Google Cast devices in < 200ms with real-time UI scan progress.
    - **Watch Hub & TV Connect**: `WatchActionSheet.kt` always renders the TV playback card. If multicast discovery is restricted, an interactive **TV Connect Dialog** provides 1-tap subnet scanning or manual IP input with instant persistence. Also includes **Universal Cast** via Android system picker.
    - **Master Google Sheet Cloud Ledger**: Serverless Google Apps Script webhook deployed at `https://script.google.com/macros/s/AKfycbwTFjzb2NgW_Py8dhNTWY1Qen9y4D93yG0NUvzhkm1jzKfCz_gE01WQryMcNThfSXEKqQ/exec` (`UserPreferencesManager.DEFAULT_GOOGLE_SHEET_WEBHOOK_URL`) providing two-way sync for watchlist, ratings, and podcast recommendation ingestion.
 

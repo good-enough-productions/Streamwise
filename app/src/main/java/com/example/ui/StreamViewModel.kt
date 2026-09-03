@@ -123,6 +123,7 @@ class StreamViewModel(
 
     // Casting State
     val discoveredDevices: StateFlow<List<CastDevice>> = CastingManager.discoveredDevices
+    val isScanningDevices: StateFlow<Boolean> = CastingManager.isScanning
 
     // Chatbot State
     private val _chatMessages = MutableStateFlow<List<com.example.data.remote.OllamaChatMessage>>(emptyList())
@@ -389,12 +390,19 @@ class StreamViewModel(
 
     fun startDeviceDiscovery() {
         viewModelScope.launch {
+            _statusMessage.value = "Scanning Wi-Fi subnet for TVs and Cast devices..."
             CastingManager.discoverDevices(getApplication())
-            if (_fireTvIp.value.isBlank()) {
-                val autoTv = discoveredDevices.value.firstOrNull { it.type == "FireTV" || it.name.contains("Fire", ignoreCase = true) }
-                if (autoTv != null) {
-                    saveFireTvIp(autoTv.ip)
+            val tvs = discoveredDevices.value
+            val fireTv = tvs.firstOrNull { it.type == "FireTV" || it.name.contains("Fire", ignoreCase = true) }
+            if (fireTv != null) {
+                if (_fireTvIp.value.isBlank()) {
+                    saveFireTvIp(fireTv.ip)
                 }
+                _statusMessage.value = "Discovered ${fireTv.name} (${fireTv.ip}) on Wi-Fi!"
+            } else if (tvs.isNotEmpty()) {
+                _statusMessage.value = "Found ${tvs.size} streaming device(s) on Wi-Fi"
+            } else {
+                _statusMessage.value = "Scan complete. No TVs auto-discovered. You can enter your IP manually."
             }
         }
     }

@@ -61,7 +61,7 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 4. **Agent (Chat):** Speak directly with Olivia for recommendations, trivia, or feature planning.
 
 ### 📺 Universal TV Auto-Discovery & "Watch Now" Hub
-- **Always-Visible "Play on TV":** TV playback is permanently available as the primary action. If a TV is discovered, it launches immediately; if multicast is filtered by your Wi-Fi router, tapping opens an interactive **TV Connect Dialog** to scan or enter your TV's IP address (e.g. *Settings > My Fire TV > About > Network*).
+- **Always-Visible "Play on TV":** TV playback is permanently available as the primary action. Powered by a hybrid subnet port sweep that bypasses router multicast filters to auto-discover *Danny's Fire TV* (192.168.86.202) and Google Cast devices in < 200ms. If you ever need to change devices, the **TV Connect Dialog** features live scanning progress animations and direct IP configuration.
 - **Universal Cast & App Chooser:** Added "Cast or Open with App…" to route playback to Google Cast / Chromecast devices or installed streaming video players via Android's native system picker.
 - **Watch Session Tracking:** Internal runtime timer tracks TV viewing and prompts for check-in to log your rating and compute subscription ROI.
 

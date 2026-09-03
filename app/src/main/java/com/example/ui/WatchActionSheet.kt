@@ -39,6 +39,7 @@ fun WatchActionSheet(
     allProviders: List<StreamingProvider>,
     fireTvIp: String,
     discoveredDevices: List<CastDevice> = emptyList(),
+    isScanning: Boolean = false,
     onDismiss: () -> Unit,
     onLaunchFireTv: (MediaItem, String?, String) -> Unit, // passes (item, providerId, targetIp)
     onLaunchPhone: (MediaItem, String?) -> Unit,
@@ -357,22 +358,50 @@ fun WatchActionSheet(
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        TextButton(
-                            onClick = onScanDevices,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Scan", fontSize = 12.sp)
+                        if (isScanning) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Scanning...", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            }
+                        } else {
+                            TextButton(
+                                onClick = onScanDevices,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Scan Wi-Fi", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    if (isScanning) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(4.dp))
+                            )
+                            Text(
+                                "Scanning your local Wi-Fi subnet for Fire TV, Smart TVs, and Cast devices...",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
 
                     if (discoveredDevices.isNotEmpty()) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             discoveredDevices.forEach { device ->
+                                val isCurrentTarget = device.ip == effectiveTvIp
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                                    color = if (isCurrentTarget) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable {
@@ -387,23 +416,44 @@ fun WatchActionSheet(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Column {
-                                            Text(device.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
-                                            Text(device.ip, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = null,
+                                                tint = if (isCurrentTarget) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Column {
+                                                Text(device.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodySmall)
+                                                Text(
+                                                    "${device.ip} • ${if (device.type == "FireTV") "Fire TV (Port 5555)" else "Smart TV / Cast"}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
                                         }
-                                        Text("Select & Play", color = MaterialTheme.colorScheme.primary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            if (isCurrentTarget) "Active ✓" else "Select & Play",
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
                                 }
                             }
                         }
-                    } else {
+                    } else if (!isScanning) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text(
-                                "No TVs auto-discovered yet. Tap 'Scan' or enter IP below.",
+                                "No TVs auto-discovered yet. Tap 'Scan Wi-Fi' or enter your TV's IP below.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.padding(8.dp)
