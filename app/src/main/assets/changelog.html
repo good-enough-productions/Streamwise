@@ -61,6 +61,19 @@
 <body>
     <h1>Streamwise Changelog</h1>
 
+    <!-- v8.4 -->
+    <div class="release">
+        <h2>v8.4: TMDB Runtime Ingestion, Duration Filtering & Deep-Link Audit</h2>
+        <span class="date">September 2026</span>
+        <ul>
+            <li><span class="badge fix">Fix</span><strong>Duration Filtering (<90m, <120m):</strong> Integrated TMDB Movie Details API (<code>/movie/{id}</code>) to ingest exact runtimes and release dates. Fixed filter predicate so movies over 90m and 120m are properly excluded when chips are active.</li>
+            <li><span class="badge feature">Feature</span><strong>Duration Sorting:</strong> Added "Shortest Duration" option to the queue sorting dropdown to organize your queue from quickest to longest films.</li>
+            <li><span class="badge ui">UI/UX</span><strong>Active Filter Summary Bar:</strong> Displays exact count of matching movies when filters are active, along with a 1-tap <strong>"Clear all filters"</strong> action.</li>
+            <li><span class="badge feature">Feature</span><strong>Expanded Provider Deep-Links:</strong> Audited and updated <code>FireTvRelay.kt</code> with direct app/web deep-links for Apple TV+, Criterion Channel, Peacock, Paramount+, Pluto TV, Freevee, MUBI, Shudder, Starz, and BritBox.</li>
+            <li><span class="badge ui">UI/UX</span><strong>Movie Details Runtime Badge:</strong> Surfaced release year and runtime duration (e.g. <code>2018 · 89 min</code>) in the Movie Details sheet.</li>
+        </ul>
+    </div>
+
     <!-- v8.3 -->
     <div class="release">
         <h2>v8.3: Instant Undo Deletion & Universal TV Cast Hub</h2>

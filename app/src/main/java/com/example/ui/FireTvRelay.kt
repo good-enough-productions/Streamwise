@@ -35,7 +35,17 @@ object FireTvRelay {
             "hulu" -> "https://www.hulu.com/search?q=${Uri.encode(movieTitle)}"
             "max", "hbo" -> "https://play.max.com/search?q=${Uri.encode(movieTitle)}"
             "disney" -> "https://www.disneyplus.com/search?q=${Uri.encode(movieTitle)}"
+            "apple" -> "https://tv.apple.com/search?term=${Uri.encode(movieTitle)}"
+            "criterion" -> "https://www.criterionchannel.com/search?q=${Uri.encode(movieTitle)}"
+            "peacock" -> "https://www.peacocktv.com/watch/search?q=${Uri.encode(movieTitle)}"
+            "paramount" -> "https://www.paramountplus.com/search/?q=${Uri.encode(movieTitle)}"
             "tubi" -> "https://tubitv.com/search/${Uri.encode(movieTitle)}"
+            "pluto" -> "https://pluto.tv/search/details/movies/${Uri.encode(movieTitle)}"
+            "freevee" -> "https://app.primevideo.com/search?phrase=${Uri.encode(movieTitle)}"
+            "mubi" -> "https://mubi.com/search?query=${Uri.encode(movieTitle)}"
+            "shudder" -> "https://www.shudder.com/search?q=${Uri.encode(movieTitle)}"
+            "starz" -> "https://www.starz.com/us/en/search?q=${Uri.encode(movieTitle)}"
+            "britbox" -> "https://www.britbox.com/us/search?q=${Uri.encode(movieTitle)}"
             else -> "https://www.google.com/search?q=${Uri.encode("$movieTitle stream")}"
         }
     }

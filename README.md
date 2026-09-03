@@ -52,7 +52,7 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 ## 🎬 Master the Interface
 
 ### The 4 Main Tabs
-1. **Watchlist (Queue):** Your unified movie and TV queue. Features **Instant Undo** (recovers accidentally deleted movies via an animated top banner and Snackbar action), **"Free to Me"** filter to hide paywalls, **Duration Chips** (`< 90m`, `< 120m`) for quick picks, and Olivia's synthesized cultural trivia and pre-watch notes.
+1. **Watchlist (Queue):** Your unified movie and TV queue. Features **Instant Undo** (recovers accidentally deleted movies via an animated top banner and Snackbar action), **"Free to Me"** filter to hide paywalls, **Duration Chips** (`< 90m`, `< 120m`) and **Duration Sorting** ("Shortest Duration") powered by exact TMDB movie runtime metadata, live matching filter counts with "Clear all filters", and Olivia's synthesized cultural trivia and pre-watch notes.
 2. **Watched (The Vault):** Your personal viewing diary. Tap any title to log a **0.5–5.0 star rating**, mark rewatches, and attribute subscriptions. Tap **"Export to Letterboxd"** for a 1-tap CSV export in standard Letterboxd format (`Downloads/letterboxd_import.csv`).
 3. **ROI Stats (Churn Optimizer & Budget):**
    - **🎯 Watchlist Match Mode:** Ranks every streaming service by how many movies on your Watchlist are currently streaming on them. Features **"Best Opportunity to Subscribe"** and **"Safe to Pause"** opportunity banners, cost-per-movie metrics, and expandable movie title preview chips.
