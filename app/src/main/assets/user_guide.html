@@ -133,7 +133,8 @@
     <div class="card">
         <p>Streamwise connects directly with your living room hardware over your local Wi-Fi subnet with multiple reliable pathways:</p>
         <ul>
-            <li><strong>Play on Smart TV / Fire TV:</strong> Always prominently available at the top of the Watch sheet with your TV name (e.g. <em>Play on Danny's Fire TV</em>). Streamwise uses a hybrid subnet port sweep that bypasses router multicast blocks to auto-discover your Fire TV in milliseconds. The <strong>TV Connect Dialog</strong> displays active scan animations and lets you pick any discovered TV or enter a custom IP with 1 tap.</li>
+            <li><strong>Play on Smart TV / Fire TV:</strong> Always prominently available at the top of the Watch sheet with your TV name (e.g. <em>Play on Danny's Fire TV</em>). Streamwise communicates directly with the lightweight <code>TvCompanionService</code> running on your TV on port 8998. It acquires a screen wake-lock and immediately launches the official streaming app (Netflix, Disney+, Hulu, Prime Video, Tubi, Pluto TV, YouTube) with a search query for the movie, while automatically starting your watch session timer on the phone!</li>
+            <li><strong>TV Connect Dialog:</strong> Tap the settings gear icon on the TV card or in Settings to scan your local Wi-Fi subnet. Live animation spinners and progress bars show active discovery, finding your Fire TV and Cast devices in milliseconds.</li>
             <li><strong>Watch on this Device:</strong> Deep-links directly into the official streaming provider app or mobile browser on your phone.</li>
             <li><strong>Cast or Open with App…:</strong> Opens Android's system chooser, allowing you to route playback via Google Cast / Chromecast or select another installed video player.</li>
             <li><strong>Already Watched (Log Now):</strong> Rapidly logs the title, star rating, runtime, and subscription attribution without starting playback.</li>

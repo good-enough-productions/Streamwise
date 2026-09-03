@@ -60,10 +60,12 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
    - **Quick Subscriptions Ribbon & Edit Sheet:** 1-tap active/paused toggle, price presets (`$0 Free`, `$5.99`, `$7.99`, `$9.99`, `$13.99`, `$15.49`, `$19.99`, `$22.99`), auto-expiring free trial countdowns, and a `+ Add Service` modal.
 4. **Agent (Chat):** Speak directly with Olivia for recommendations, trivia, or feature planning.
 
-### 📺 Universal TV Auto-Discovery & "Watch Now" Hub
-- **Always-Visible "Play on TV":** TV playback is permanently available as the primary action. Powered by a hybrid subnet port sweep that bypasses router multicast filters to auto-discover *Danny's Fire TV* (192.168.86.202) and Google Cast devices in < 200ms. If you ever need to change devices, the **TV Connect Dialog** features live scanning progress animations and direct IP configuration.
+### 📺 Native TV Companion, Auto-Discovery & "Watch Now" Hub
+- **Zero-Latency Fire TV Companion (`TvCompanionService`):** Runs an embedded HTTP receiver on port 8998 on your Fire TV or Android TV. When you tap **"Play on Fire TV"** from the phone, it wakes the TV via screen wake-lock and natively launches the installed streaming app (Netflix, Disney+, Hulu, Prime Video, Tubi, Pluto TV, YouTube) with a search query for the movie, while automatically starting your watch timer.
+- **Subnet Port Sweep Auto-Discovery:** Bypasses home router multicast filters by concurrently scanning local subnet IP ports (5555, 8008, 8009, 8998) to discover *Danny's Fire TV* (192.168.86.202) and Google Cast devices in < 200ms.
+- **TV Connect Dialog:** Features live spinning discovery indicators, progress feedback, and 1-tap manual IP entry.
 - **Universal Cast & App Chooser:** Added "Cast or Open with App…" to route playback to Google Cast / Chromecast devices or installed streaming video players via Android's native system picker.
-- **Watch Session Tracking:** Internal runtime timer tracks TV viewing and prompts for check-in to log your rating and compute subscription ROI.
+- **Watch Session Tracking & Check-In:** Internal timer tracks TV viewing and prompts for check-in upon returning to the app to log your rating and compute subscription ROI.
 
 ### ☁️ $0/mo Master Google Sheet Cloud Ledger
 - Integrated Google Apps Script serverless webhook deployed and baked into app settings. Two-way cloud sync with Google Sheets for watchlist, history, and automated podcast recommendation ingestion (`scrape_podcast_recs.py`).

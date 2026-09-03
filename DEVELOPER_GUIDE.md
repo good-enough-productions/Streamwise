@@ -13,10 +13,11 @@ Streamwise is a native Android application built entirely with **Kotlin** and **
      - `WatchSession`: Every time an item is checked off or watched on TV, a session is logged to track hours spent on a given platform.
    - **MediaDao.kt**: Contains Room queries, monthly usage aggregations (`getMonthlyUsageStats`), and custom provider deletions.
 
-2. **Network, TV Discovery & Cloud Sync**
+2. **Network, TV Companion & Cloud Sync**
    - **TMDB & Watchmode**: Resolves title metadata, exact runtimes in minutes (`GET /movie/{id}`), release dates, and streaming availability across major and FAST providers in `AvailabilitySyncWorker.kt`.
-   - **Deep-Link Relay**: `FireTvRelay.kt` maps 15+ streaming services to native Android app & web deep-link search URIs.
-   - **Hybrid Subnet Sweep & SSDP TV Discovery**: `CastingManager.kt` performs a concurrent TCP port sweep (5555, 8008, 8009, 8998) across the local `/24` subnet on startup, bypassing router multicast isolation to identify Fire TVs (*Danny's Fire TV*) and Google Cast devices in < 200ms with real-time UI scan progress.
+   - **Native TV Companion (`TvCompanionService.kt`)**: An embedded lightweight HTTP server listening on port 8998 with `BootReceiver.kt` and screen wake-lock capabilities. Receives JSON launch payloads (`/launch`) and initiates native Fire OS package activities (Netflix `com.netflix.ninja`, Disney+ `com.disney.disneyplus`, Hulu, Prime Video, Tubi, Pluto, etc.) or universal search.
+   - **Deep-Link Relay (`FireTvRelay.kt`)**: Communicates with `TvCompanionService` over Wi-Fi, returning detailed confirmation messages (e.g. `🎬 Playing "Inside Out 2" on Danny's Fire TV via Disney+!`) and fallback warnings.
+   - **Hybrid Subnet Sweep TV Discovery**: `CastingManager.kt` performs a concurrent TCP port sweep (5555, 8008, 8009, 8998) across the local `/24` subnet on startup, bypassing router multicast isolation to identify Fire TVs (*Danny's Fire TV*) and Google Cast devices in < 200ms with real-time UI scan progress.
    - **Watch Hub & TV Connect**: `WatchActionSheet.kt` always renders the TV playback card. If multicast discovery is restricted, an interactive **TV Connect Dialog** provides 1-tap subnet scanning or manual IP input with instant persistence. Also includes **Universal Cast** via Android system picker.
    - **Master Google Sheet Cloud Ledger**: Serverless Google Apps Script webhook deployed at `https://script.google.com/macros/s/AKfycbwTFjzb2NgW_Py8dhNTWY1Qen9y4D93yG0NUvzhkm1jzKfCz_gE01WQryMcNThfSXEKqQ/exec` (`UserPreferencesManager.DEFAULT_GOOGLE_SHEET_WEBHOOK_URL`) providing two-way sync for watchlist, ratings, and podcast recommendation ingestion.
 

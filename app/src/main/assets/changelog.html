@@ -61,6 +61,17 @@
 <body>
     <h1>Streamwise Changelog</h1>
 
+    <!-- v8.6 -->
+    <div class="release">
+        <h2>v8.6: Zero-Latency Native TV Companion & End-to-End Playback Execution</h2>
+        <span class="date">September 2026</span>
+        <ul>
+            <li><span class="badge feature">Feature</span><strong>Native Fire TV Companion Service:</strong> Introduced <code>TvCompanionService</code>, an embedded HTTP receiver listening on port 8998 with automatic boot receiver (<code>BootReceiver</code>) and screen wake-lock capabilities. When triggered from your phone, it wakes the TV and immediately launches native Fire OS apps (Netflix, Disney+, Hulu, Prime Video, Tubi, Pluto TV, YouTube) with deep-link search queries.</li>
+            <li><span class="badge fix">Fix</span><strong>Live Playback Execution Verified:</strong> Replaced the placeholder TCP socket probe in <code>FireTvRelay.kt</code> with real JSON payload delivery and full status reporting. Verified live via wireless ADB on <em>Danny's Fire TV</em> (192.168.86.202:5555) launching <em>Malevolent</em> in Netflix and <em>Inside Out 2</em> in Disney+.</li>
+            <li><span class="badge ui">UI/UX</span><strong>Complete Toast & Notification Audit:</strong> Synchronized snackbar and dialog feedback across all actions (Wi-Fi discovery, TV playback launch, watch timer start, foreground return check-in, and instant deletion undo).</li>
+        </ul>
+    </div>
+
     <!-- v8.5 -->
     <div class="release">
         <h2>v8.5: High-Speed Subnet TV Discovery & Interactive Scan UI</h2>
