@@ -146,6 +146,25 @@ class StreamViewModel(
                 }
             }
         }
+
+        // Restore Malevolent (2018) if accidentally deleted
+        viewModelScope.launch(Dispatchers.IO) {
+            val all = repository.allMediaItems.firstOrNull() ?: emptyList()
+            if (all.none { it.title.equals("Malevolent", ignoreCase = true) }) {
+                repository.insertMediaItem(
+                    MediaItem(
+                        title = "Malevolent",
+                        status = MediaStatus.WATCHLIST.name,
+                        releaseYear = "2018",
+                        letterboxdUri = "https://boxd.it/hijI",
+                        providerIds = "netflix",
+                        runtimeMinutes = 88,
+                        overview = "A brother and sister team who run a fake paranormal investigation scam encounter real horrors when summoned to an estate with a dark past."
+                    )
+                )
+                enqueueTmdbSync(showMessage = false)
+            }
+        }
     }
 
     fun sendChatMessage(userMessage: String) {
@@ -851,10 +870,45 @@ class StreamViewModel(
         }
     }
 
+    private val _recentlyDeletedItem = MutableStateFlow<MediaItem?>(null)
+    val recentlyDeletedItem: StateFlow<MediaItem?> = _recentlyDeletedItem.asStateFlow()
+
     fun deleteItem(item: MediaItem) {
         viewModelScope.launch {
+            _recentlyDeletedItem.value = item
             repository.deleteMediaItem(item)
             _statusMessage.value = "\"${item.title}\" deleted."
+        }
+    }
+
+    fun undoDelete() {
+        val item = _recentlyDeletedItem.value ?: return
+        viewModelScope.launch {
+            repository.insertMediaItem(item.copy(id = 0))
+            _recentlyDeletedItem.value = null
+            _statusMessage.value = "Restored \"${item.title}\""
+            enqueueTmdbSync(showMessage = false)
+        }
+    }
+
+    fun dismissUndo() {
+        _recentlyDeletedItem.value = null
+    }
+
+    fun launchUniversalCast(context: android.content.Context, item: MediaItem, providerId: String?) {
+        viewModelScope.launch {
+            val launchUrl = FireTvRelay.getProviderLaunchUrl(providerId, item.title, item.tmdbId)
+            val sendIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(launchUrl)).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            val chooser = android.content.Intent.createChooser(sendIntent, "Play \"${item.title}\" with...")
+            chooser.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+            try {
+                context.startActivity(chooser)
+                _statusMessage.value = "Opening \"${item.title}\"..."
+            } catch (e: Exception) {
+                _statusMessage.value = "Could not open app: ${e.message}"
+            }
         }
     }
 

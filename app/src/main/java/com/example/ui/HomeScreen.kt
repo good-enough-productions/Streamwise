@@ -60,8 +60,10 @@ fun HomeScreen(
     val googleSheetWebhookUrl by viewModel.googleSheetWebhookUrl.collectAsState()
     val fireTvIp by viewModel.fireTvIp.collectAsState()
     val githubToken by viewModel.githubToken.collectAsState()
+    val recentlyDeletedItem by viewModel.recentlyDeletedItem.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
     var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Agent
@@ -77,10 +79,21 @@ fun HomeScreen(
     var editingProvider by remember { mutableStateOf<StreamingProvider?>(null) }
     var showAddServiceDialog by remember { mutableStateOf(false) }
 
-    // Clear and display Toast/Status banners beautifully
+    // Clear and display Toast/Status banners beautifully with UNDO support
     LaunchedEffect(statusMessage) {
-        statusMessage?.let {
-            snackbarHostState.showSnackbar(it)
+        statusMessage?.let { msg ->
+            if (recentlyDeletedItem != null) {
+                val result = snackbarHostState.showSnackbar(
+                    message = msg,
+                    actionLabel = "UNDO",
+                    duration = SnackbarDuration.Short
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    viewModel.undoDelete()
+                }
+            } else {
+                snackbarHostState.showSnackbar(msg)
+            }
             viewModel.clearStatusMessage()
         }
     }
@@ -278,7 +291,10 @@ fun HomeScreen(
                         onSyncClick = { viewModel.syncWithGoogleSheet() },
                         tmdbApiKey = tmdbApiKey,
                         onOpenSettings = { showSettingsDialog = true },
-                        onMovieClick = { detailMovieItem = it }
+                        onMovieClick = { detailMovieItem = it },
+                        recentlyDeletedItem = recentlyDeletedItem,
+                        onUndoDelete = { viewModel.undoDelete() },
+                        onDismissUndo = { viewModel.dismissUndo() }
                     )
                     1 -> {
                         val watchedItems by viewModel.watchedItems.collectAsState()
@@ -425,6 +441,10 @@ fun HomeScreen(
                     viewModel.launchOnPhone(context, item, providerId)
                     watchActionItem = null
                 },
+                onUniversalCast = { item, providerId ->
+                    viewModel.launchUniversalCast(context, item, providerId)
+                    watchActionItem = null
+                },
                 onQuickLog = { item ->
                     val target = item
                     watchActionItem = null
@@ -434,7 +454,9 @@ fun HomeScreen(
                 onPinTonight = { item ->
                     viewModel.pinTonight(item)
                     watchActionItem = null
-                }
+                },
+                onSaveFireTvIp = { viewModel.saveFireTvIp(it) },
+                onScanDevices = { viewModel.startDeviceDiscovery() }
             )
         }
 
@@ -525,7 +547,10 @@ fun WatchlistTabContent(
     onSyncClick: () -> Unit = {},
     tmdbApiKey: String,
     onOpenSettings: () -> Unit,
-    onMovieClick: (MediaItem) -> Unit
+    onMovieClick: (MediaItem) -> Unit,
+    recentlyDeletedItem: MediaItem? = null,
+    onUndoDelete: () -> Unit = {},
+    onDismissUndo: () -> Unit = {}
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -599,6 +624,65 @@ fun WatchlistTabContent(
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // Undo Banner for recently deleted items
+        AnimatedVisibility(
+            visible = recentlyDeletedItem != null,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.inversePrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Deleted \"${recentlyDeletedItem?.title}\"",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = onUndoDelete,
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.inversePrimary)
+                        ) {
+                            Text("UNDO", fontWeight = FontWeight.Black)
+                        }
+                        IconButton(
+                            onClick = onDismissUndo,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Dismiss",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
         // ... (TMDB Key Warning Box)
 
         // Search & Sorting controls
