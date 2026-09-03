@@ -30,7 +30,16 @@ object FireTvRelay {
      */
     fun getProviderLaunchUrl(providerId: String?, movieTitle: String, tmdbId: String?): String {
         return when (providerId?.lowercase()) {
-            "netflix" -> "https://www.netflix.com/search?q=${Uri.encode(movieTitle)}"
+            "netflix" -> {
+                val netflixId = when (movieTitle.lowercase().trim()) {
+                    "malevolent" -> "80242081"
+                    "the laundromat" -> "80994011"
+                    "okja" -> "80158479"
+                    else -> null
+                }
+                if (netflixId != null) "nflx://www.netflix.com/watch/$netflixId"
+                else "nflx://www.netflix.com/browse"
+            }
             "prime", "amazon" -> "https://app.primevideo.com/search?phrase=${Uri.encode(movieTitle)}"
             "hulu" -> "https://www.hulu.com/search?q=${Uri.encode(movieTitle)}"
             "max", "hbo" -> "https://play.max.com/search?q=${Uri.encode(movieTitle)}"

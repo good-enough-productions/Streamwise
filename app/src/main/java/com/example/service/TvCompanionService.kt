@@ -140,7 +140,7 @@ class TvCompanionService : Service() {
     }
 
     private fun triggerTvPlayback(title: String, provider: String, url: String, tmdbId: String): String {
-        // 1. Wake screen
+        // 1. Wake screen & Pulse HDMI-CEC to power TV glass
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             val wl = pm.newWakeLock(
@@ -148,8 +148,10 @@ class TvCompanionService : Service() {
                 "streamwise:wake_tv"
             )
             wl.acquire(3000)
+            // Fire KEYCODE_WAKEUP to trigger HDMI-CEC One Touch Play across the wire
+            Runtime.getRuntime().exec("input keyevent 224")
         } catch (e: Exception) {
-            Log.w(TAG, "Could not wake screen: ${e.message}")
+            Log.w(TAG, "Could not wake screen or pulse CEC: ${e.message}")
         }
 
         // 2. Map provider to Fire TV package
@@ -179,7 +181,12 @@ class TvCompanionService : Service() {
             val viewIntent = if (url.isNotBlank()) {
                 Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                     setPackage(targetPackage)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    // For Netflix on TV, CLEAR_TASK forces delivery of deep-link past the profile selection screen
+                    flags = if (targetPackage == "com.netflix.ninja") {
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    } else {
+                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }
                 }
             } else null
 
@@ -191,7 +198,7 @@ class TvCompanionService : Service() {
             if (launchIntent != null) {
                 startActivity(launchIntent)
                 launchedName = targetPackage
-                Log.i(TAG, "Started activity for package: $targetPackage")
+                Log.i(TAG, "Started activity for package: $targetPackage with url: $url")
             } else {
                 startSearchFallback(title)
                 launchedName = "search"
