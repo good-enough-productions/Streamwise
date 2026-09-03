@@ -61,6 +61,17 @@
 <body>
     <h1>Streamwise Changelog</h1>
 
+    <!-- v8.5 -->
+    <div class="release">
+        <h2>v8.5: High-Speed Subnet TV Discovery & Interactive Scan UI</h2>
+        <span class="date">September 2026</span>
+        <ul>
+            <li><span class="badge feature">Feature</span><strong>Hybrid Subnet Port Sweep:</strong> Upgraded TV discovery from fragile SSDP multicast (which most home mesh routers block) to a high-speed concurrent TCP subnet sweep (ports 5555, 8008, 8009, 8998). Automatically detects and binds <em>Danny's Fire TV</em> (192.168.86.202) and Google Cast displays in under 200ms.</li>
+            <li><span class="badge ui">UI/UX</span><strong>Interactive Wi-Fi Scan Feedback:</strong> The TV Connect modal now displays real-time progress indicators: animated spinning indicator, progress bar, and "Scanning Wi-Fi subnet..." status messages so you always know scanning is actively running.</li>
+            <li><span class="badge ui">UI/UX</span><strong>Discovered Device Badges:</strong> Devices are rendered with distinct device icons, exact friendly names, IPs, and active selection indicators (<code>Active ✓</code>).</li>
+        </ul>
+    </div>
+
     <!-- v8.4 -->
     <div class="release">
         <h2>v8.4: TMDB Runtime Ingestion, Duration Filtering & Deep-Link Audit</h2>
