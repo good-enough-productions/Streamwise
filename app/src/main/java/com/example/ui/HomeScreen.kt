@@ -589,7 +589,7 @@ fun WatchlistTabContent(
 
             if (runtimeFilter != null) {
                 val mins = item.runtimeMinutes
-                if (mins != null && mins > runtimeFilter!!) return@filter false
+                if (mins == null || mins > runtimeFilter!!) return@filter false
             }
 
             if (showFreeOnly) {
@@ -615,6 +615,7 @@ fun WatchlistTabContent(
         when (sortBy) {
             "alpha" -> items.sortedBy { it.title.lowercase() }
             "rating" -> items.sortedByDescending { it.rating ?: 0.0 }
+            "runtime" -> items.sortedBy { it.runtimeMinutes ?: 999 }
             else -> items.sortedByDescending { it.addedAt }
         }
     }
@@ -727,6 +728,7 @@ fun WatchlistTabContent(
                     val sortLabel = when (sortBy) {
                         "alpha" -> "A-Z"
                         "rating" -> "Rating"
+                        "runtime" -> "Duration"
                         else -> "Recent"
                     }
                     Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -755,6 +757,13 @@ fun WatchlistTabContent(
                         text = { Text("Highest Rated") },
                         onClick = {
                             sortBy = "rating"
+                            sortExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Shortest Duration") },
+                        onClick = {
+                            sortBy = "runtime"
                             sortExpanded = false
                         }
                     )
@@ -878,14 +887,24 @@ fun WatchlistTabContent(
             FilterChip(
                 selected = runtimeFilter == 90,
                 onClick = { runtimeFilter = if (runtimeFilter == 90) null else 90 },
-                label = { Text("< 90m", fontSize = 11.sp) },
+                label = { Text("< 90m", fontSize = 11.sp, fontWeight = if (runtimeFilter == 90) FontWeight.Bold else FontWeight.Normal) },
+                leadingIcon = {
+                    if (runtimeFilter == 90) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                    }
+                },
                 modifier = Modifier.testTag("filter_runtime_90_chip")
             )
 
             FilterChip(
                 selected = runtimeFilter == 120,
                 onClick = { runtimeFilter = if (runtimeFilter == 120) null else 120 },
-                label = { Text("< 120m", fontSize = 11.sp) },
+                label = { Text("< 120m", fontSize = 11.sp, fontWeight = if (runtimeFilter == 120) FontWeight.Bold else FontWeight.Normal) },
+                leadingIcon = {
+                    if (runtimeFilter == 120) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
+                    }
+                },
                 modifier = Modifier.testTag("filter_runtime_120_chip")
             )
 
@@ -921,6 +940,35 @@ fun WatchlistTabContent(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
                 )
+            }
+        }
+
+        if (runtimeFilter != null || filterOnlyMyServices || showFreeOnly || selectedPlatformId != null || selectedGenre != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "${processedItems.size} ${if (processedItems.size == 1) "movie" else "movies"} matching filters",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                TextButton(
+                    onClick = {
+                        runtimeFilter = null
+                        showFreeOnly = false
+                        selectedPlatformId = null
+                        selectedGenre = null
+                        onFilterToggle(false)
+                    },
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                ) {
+                    Text("Clear all filters", fontSize = 11.sp)
+                }
             }
         }
 
@@ -3405,6 +3453,21 @@ fun MovieDetailsBottomSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     
+                    val yearRuntimeText = buildString {
+                        if (!item.releaseYear.isNullOrBlank()) append(item.releaseYear)
+                        if (item.runtimeMinutes != null && item.runtimeMinutes > 0) {
+                            if (isNotEmpty()) append(" · ")
+                            append("${item.runtimeMinutes} min")
+                        }
+                    }
+                    if (yearRuntimeText.isNotBlank()) {
+                        Text(
+                            text = yearRuntimeText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
 
                     if (item.rating != null && item.rating > 0.0) {

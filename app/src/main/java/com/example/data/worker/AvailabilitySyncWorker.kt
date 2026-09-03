@@ -102,6 +102,8 @@ class AvailabilitySyncWorker(
                 var syncedTmdbId: String? = item.tmdbId
                 var syncedTrivia: String? = item.trivia
                 var syncedGenres: String? = item.genres
+                var syncedRuntimeMinutes: Int? = item.runtimeMinutes
+                var syncedReleaseYear: String? = item.releaseYear
 
                 try {
                     Log.d(TAG, "Syncing metadata for: \"${item.title}\" (Current TMDB ID: $syncedTmdbId)")
@@ -115,6 +117,20 @@ class AvailabilitySyncWorker(
                         syncedOverview = match.overview ?: item.overview
                         syncedRating = match.voteAverage ?: item.rating
                         syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+
+                        // 1.1 Fetch exact runtime and release date from movie details
+                        try {
+                            val details = com.example.data.remote.TmdbClient.tmdbApiService.getMovieDetails(movieId, apiKey)
+                            if (details.runtime != null && details.runtime > 0) {
+                                syncedRuntimeMinutes = details.runtime
+                            }
+                            if (!details.releaseDate.isNullOrBlank()) {
+                                syncedReleaseYear = details.releaseDate.take(4)
+                            }
+                            Log.d(TAG, "Movie details for \"${item.title}\": ${syncedRuntimeMinutes}m, Year: $syncedReleaseYear")
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not fetch movie details for \"${item.title}\": ${e.message}")
+                        }
 
                         // 2. Fetch Providers for TMDB Movie ID
                         val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(movieId, apiKey)
@@ -235,6 +251,8 @@ class AvailabilitySyncWorker(
                     tmdbId = syncedTmdbId,
                     trivia = syncedTrivia,
                     genres = syncedGenres,
+                    runtimeMinutes = syncedRuntimeMinutes,
+                    releaseYear = syncedReleaseYear,
                     updatedAt = System.currentTimeMillis()
                 )
 

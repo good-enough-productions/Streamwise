@@ -165,6 +165,62 @@ class StreamViewModel(
                 enqueueTmdbSync(showMessage = false)
             }
         }
+
+        // Backfill accurate runtime and release years for existing queue items
+        viewModelScope.launch(Dispatchers.IO) {
+            val all = repository.allMediaItems.firstOrNull() ?: emptyList()
+            all.forEach { item ->
+                if (item.runtimeMinutes == null || item.runtimeMinutes == 0) {
+                    val match = KNOWN_METADATA.entries.firstOrNull { it.key.equals(item.title, ignoreCase = true) }
+                    if (match != null) {
+                        repository.updateMediaItem(
+                            item.copy(
+                                runtimeMinutes = match.value.first,
+                                releaseYear = item.releaseYear ?: match.value.second
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    companion object {
+        private val KNOWN_METADATA = mapOf(
+            "Babygirl" to Pair(114, "2024"),
+            "Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb" to Pair(95, "1964"),
+            "Paddington" to Pair(95, "2014"),
+            "Before Sunset" to Pair(80, "2004"),
+            "Licorice Pizza" to Pair(133, "2021"),
+            "The Irishman" to Pair(209, "2019"),
+            "Aliens" to Pair(137, "1986"),
+            "Akira" to Pair(124, "1988"),
+            "Furiosa: A Mad Max Saga" to Pair(148, "2024"),
+            "The Hateful Eight" to Pair(168, "2015"),
+            "Beetlejuice Beetlejuice" to Pair(105, "2024"),
+            "tick, tick... BOOM!" to Pair(115, "2021"),
+            "Manchester by the Sea" to Pair(137, "2016"),
+            "Godzilla Minus One" to Pair(125, "2023"),
+            "Five Nights at Freddy's" to Pair(110, "2023"),
+            "Trainspotting" to Pair(94, "1996"),
+            "Alien: Romulus" to Pair(119, "2024"),
+            "The Whale" to Pair(117, "2022"),
+            "Asteroid City" to Pair(105, "2023"),
+            "Portrait of a Lady on Fire" to Pair(122, "2019"),
+            "The Banshees of Inisherin" to Pair(114, "2022"),
+            "Oldboy" to Pair(120, "2003"),
+            "Before Sunrise" to Pair(101, "1995"),
+            "Killers of the Flower Moon" to Pair(206, "2023"),
+            "Drive" to Pair(100, "2011"),
+            "Inside Out 2" to Pair(96, "2024"),
+            "Call Me by Your Name" to Pair(132, "2017"),
+            "Lady Bird" to Pair(94, "2017"),
+            "The Grand Budapest Hotel" to Pair(99, "2014"),
+            "Okja" to Pair(120, "2017"),
+            "Malevolent" to Pair(88, "2018"),
+            "The Laundromat" to Pair(96, "2019"),
+            "Side Effects" to Pair(106, "2013")
+        )
     }
 
     fun sendChatMessage(userMessage: String) {

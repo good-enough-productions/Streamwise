@@ -91,11 +91,24 @@ interface TmdbApiService {
         @Query("api_key") apiKey: String
     ): TmdbCreditsResponse
 
+    @GET("movie/{movie_id}")
+    suspend fun getMovieDetails(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbMovieDetails
+
     @GET("genre/movie/list")
     suspend fun getGenreList(
         @Query("api_key") apiKey: String
     ): TmdbGenreListResponse
 }
+
+@JsonClass(generateAdapter = true)
+data class TmdbMovieDetails(
+    @Json(name = "id") val id: Int,
+    @Json(name = "runtime") val runtime: Int? = null,
+    @Json(name = "release_date") val releaseDate: String? = null
+)
 
 @JsonClass(generateAdapter = true)
 data class TmdbGenreListResponse(
