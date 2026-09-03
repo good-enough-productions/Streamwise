@@ -119,14 +119,9 @@ class TvCompanionService : Service() {
                     val tmdbId = json.optString("tmdbId", "")
 
                     Log.i(TAG, "Launching on TV: title=$title, provider=$provider, url=$url")
-                    val launchedApp = triggerTvPlayback(title, provider, url, tmdbId)
+                    val result = triggerTvPlayback(title, provider, url, tmdbId)
 
-                    val resp = JSONObject().apply {
-                        put("status", "launched")
-                        put("title", title)
-                        put("targetApp", launchedApp)
-                    }
-                    sendResponse(out, 200, "application/json", resp.toString())
+                    sendResponse(out, 200, "application/json", result.toString())
                 }
                 else -> {
                     sendResponse(out, 404, "text/plain", "Not Found")
@@ -139,22 +134,44 @@ class TvCompanionService : Service() {
         }
     }
 
-    private fun triggerTvPlayback(title: String, provider: String, url: String, tmdbId: String): String {
-        // 1. Wake screen & Pulse HDMI-CEC to power TV glass
+    /**
+     * Main playback trigger. Follows a strict order:
+     * 1. Wake screen + HDMI-CEC pulse (BEFORE any app launch)
+     * 2. Wait 500ms for CEC to settle
+     * 3. Check if target app is already running (warm vs cold start)
+     * 4. Launch with provider-specific intent construction
+     * 5. Wait, then inspect actual result (focus, media session)
+     * 6. Return honest status
+     */
+    private fun triggerTvPlayback(title: String, provider: String, url: String, tmdbId: String): JSONObject {
+        // ---- Step 1: Wake screen + HDMI-CEC BEFORE launching any app ----
         try {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            @Suppress("DEPRECATION")
             val wl = pm.newWakeLock(
                 PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
                 "streamwise:wake_tv"
             )
             wl.acquire(3000)
-            // Fire KEYCODE_WAKEUP to trigger HDMI-CEC One Touch Play across the wire
-            Runtime.getRuntime().exec("input keyevent 224")
+            Log.i(TAG, "Wake lock acquired, pulsing HDMI-CEC via KEYCODE_WAKEUP")
         } catch (e: Exception) {
-            Log.w(TAG, "Could not wake screen or pulse CEC: ${e.message}")
+            Log.w(TAG, "Could not acquire wake lock: ${e.message}")
         }
 
-        // 2. Map provider to Fire TV package
+        // Fire KEYCODE_WAKEUP (224) to trigger HDMI-CEC One Touch Play.
+        // This MUST happen before launching any other app so we don't get
+        // a SecurityException from injecting keyevents into another app's window.
+        try {
+            Runtime.getRuntime().exec(arrayOf("input", "keyevent", "224")).waitFor()
+            Log.i(TAG, "KEYCODE_WAKEUP sent for HDMI-CEC")
+        } catch (e: Exception) {
+            Log.w(TAG, "KEYCODE_WAKEUP failed: ${e.message}")
+        }
+
+        // Wait for CEC to settle and TV input to switch
+        Thread.sleep(500)
+
+        // ---- Step 2: Map provider to Fire TV package ----
         val targetPackage = when (provider.lowercase()) {
             "netflix" -> "com.netflix.ninja"
             "hulu" -> "com.hulu.plus"
@@ -172,45 +189,198 @@ class TvCompanionService : Service() {
             else -> null
         }
 
-        // 3. Launch App or Universal Search
+        // ---- Step 3: Launch ----
         val launchedName: String
-        val pm = packageManager
+        val pkgMgr = packageManager
 
-        if (targetPackage != null && isAppInstalled(pm, targetPackage)) {
-            // Priority 1: Launch target provider with deep-link URI
-            val viewIntent = if (url.isNotBlank()) {
-                Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                    setPackage(targetPackage)
-                    // For Netflix on TV, CLEAR_TASK forces delivery of deep-link past the profile selection screen
-                    flags = if (targetPackage == "com.netflix.ninja") {
-                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    } else {
-                        Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    }
-                }
-            } else null
-
-            val launchIntent = viewIntent?.takeIf { it.resolveActivity(pm) != null }
-                ?: pm.getLaunchIntentForPackage(targetPackage)?.apply {
+        if (targetPackage != null && isAppInstalled(pkgMgr, targetPackage)) {
+            if (targetPackage == "com.netflix.ninja" && url.isNotBlank()) {
+                // Netflix-specific: two-step launch with source=30 extra
+                launchedName = launchNetflix(pkgMgr, url, title)
+            } else if (url.isNotBlank()) {
+                // Other providers: standard VIEW intent with LEANBACK_LAUNCHER
+                launchedName = launchGenericProvider(pkgMgr, targetPackage, url)
+            } else {
+                // No URL: just open the app
+                val launchIntent = pkgMgr.getLaunchIntentForPackage(targetPackage)?.apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
                 }
-
-            if (launchIntent != null) {
-                startActivity(launchIntent)
-                launchedName = targetPackage
-                Log.i(TAG, "Started activity for package: $targetPackage with url: $url")
-            } else {
-                startSearchFallback(title)
-                launchedName = "search"
+                if (launchIntent != null) {
+                    startActivity(launchIntent)
+                    launchedName = targetPackage
+                    Log.i(TAG, "Launched app generically: $targetPackage")
+                } else {
+                    startSearchFallback(title)
+                    launchedName = "search"
+                }
             }
         } else {
-            // Priority 2: Universal Fire TV search intent for the title
             startSearchFallback(title)
             launchedName = "search"
         }
 
-        return launchedName
+        // ---- Step 4: Wait and inspect result ----
+        Thread.sleep(2500)
+        val feedback = inspectResult(launchedName, title)
+
+        return JSONObject().apply {
+            put("status", feedback.status)
+            put("title", title)
+            put("targetApp", launchedName)
+            put("detail", feedback.detail)
+        }
     }
+
+    /**
+     * Netflix-specific launch with the required source="30" extra.
+     *
+     * Research findings:
+     * - Netflix on Android TV REQUIRES the string extra source="30" to process deep links
+     * - DO NOT use FLAG_ACTIVITY_CLEAR_TASK — it crashes Netflix's Widevine DRM
+     * - On cold start, Netflix drops the deep link during initialization.
+     *   Workaround: check if Netflix is running, if not, launch generically first,
+     *   wait for initialization, then resend the deep link.
+     * - Use http:// scheme (not nflx:// or netflix://) with LEANBACK_LAUNCHER category
+     */
+    private fun launchNetflix(pkgMgr: PackageManager, url: String, title: String): String {
+        val netflixPkg = "com.netflix.ninja"
+
+        // Normalize URL to http scheme for Netflix TV (most reliable per community docs)
+        val httpUrl = url
+            .replace("nflx://www.netflix.com/", "http://www.netflix.com/")
+            .replace("netflix://", "http://www.netflix.com/")
+
+        // Check if Netflix is already running (warm start vs cold start)
+        val isRunning = isAppInForegroundOrRecent(netflixPkg)
+
+        if (!isRunning) {
+            // Cold start: launch Netflix generically first to get past initialization + profile picker
+            Log.i(TAG, "Netflix cold start detected. Launching generically first...")
+            val genericIntent = pkgMgr.getLaunchIntentForPackage(netflixPkg)?.apply {
+                addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            if (genericIntent != null) {
+                startActivity(genericIntent)
+                // Wait for Netflix to initialize and pass profile picker
+                Thread.sleep(4000)
+                Log.i(TAG, "Netflix initialized. Now sending deep link: $httpUrl")
+            }
+        }
+
+        // Send the deep link intent with source="30"
+        val deepLinkIntent = Intent(Intent.ACTION_VIEW).apply {
+            setClassName(netflixPkg, "$netflixPkg.MainActivity")
+            data = Uri.parse(httpUrl)
+            putExtra("source", "30")  // REQUIRED: tells Netflix this is an external launch
+            addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK  // NO CLEAR_TASK — crashes Widevine DRM
+        }
+
+        try {
+            startActivity(deepLinkIntent)
+            Log.i(TAG, "Netflix deep link sent: $httpUrl with source=30")
+        } catch (e: Exception) {
+            Log.e(TAG, "Netflix deep link failed: ${e.message}. Falling back to generic launch.")
+            val fallback = pkgMgr.getLaunchIntentForPackage(netflixPkg)
+            if (fallback != null) startActivity(fallback)
+        }
+
+        return netflixPkg
+    }
+
+    /**
+     * Generic provider launch with LEANBACK_LAUNCHER category.
+     * Uses standard VIEW intent without aggressive flags.
+     */
+    private fun launchGenericProvider(pkgMgr: PackageManager, targetPackage: String, url: String): String {
+        val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            setPackage(targetPackage)
+            addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+
+        val launchIntent = if (viewIntent.resolveActivity(pkgMgr) != null) {
+            viewIntent
+        } else {
+            // Deep link URI not handled — fall back to just opening the app
+            Log.w(TAG, "Deep link URI not resolved for $targetPackage, falling back to generic launch")
+            pkgMgr.getLaunchIntentForPackage(targetPackage)?.apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+            }
+        }
+
+        if (launchIntent != null) {
+            startActivity(launchIntent)
+            Log.i(TAG, "Launched $targetPackage with url: $url")
+        }
+
+        return targetPackage
+    }
+
+    /**
+     * Check if an app is currently in the foreground or recent task stack.
+     * Used to determine cold vs warm start for Netflix two-step launch.
+     */
+    private fun isAppInForegroundOrRecent(packageName: String): Boolean {
+        return try {
+            val process = Runtime.getRuntime().exec(arrayOf("dumpsys", "activity", "recents"))
+            val output = process.inputStream.bufferedReader().readText()
+            process.waitFor()
+            output.contains(packageName)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not check recents for $packageName: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * After launching, inspect the actual result on the TV to report honest feedback.
+     * Checks window focus and media session state.
+     */
+    private fun inspectResult(targetApp: String, title: String): LaunchFeedback {
+        try {
+            // Check which window has focus
+            val focusProcess = Runtime.getRuntime().exec(arrayOf("dumpsys", "window"))
+            val focusOutput = focusProcess.inputStream.bufferedReader().readText()
+            focusProcess.waitFor()
+
+            val focusMatch = Regex("mCurrentFocus=Window\\{[^ ]+ [^ ]+ ([^}]+)\\}").find(focusOutput)
+            val currentFocus = focusMatch?.groupValues?.get(1) ?: "unknown"
+            Log.i(TAG, "Current window focus: $currentFocus")
+
+            // Check media session playback state
+            val mediaProcess = Runtime.getRuntime().exec(arrayOf("dumpsys", "media_session"))
+            val mediaOutput = mediaProcess.inputStream.bufferedReader().readText()
+            mediaProcess.waitFor()
+
+            val isPlaying = mediaOutput.contains("package=$targetApp") &&
+                    mediaOutput.contains("state=3") // PlaybackState.STATE_PLAYING = 3
+
+            return when {
+                isPlaying -> {
+                    Log.i(TAG, "✅ Playback confirmed for $targetApp")
+                    LaunchFeedback("playing", "Playback active for \"$title\"")
+                }
+                currentFocus.contains(targetApp) -> {
+                    Log.i(TAG, "⚠️ App opened but not playing: $currentFocus")
+                    LaunchFeedback("app_opened", "Opened on TV — may need profile selection or manual play")
+                }
+                currentFocus.contains("launcher") || currentFocus.contains("com.amazon.tv") -> {
+                    Log.w(TAG, "❌ App did not stay in foreground. Focus is on: $currentFocus")
+                    LaunchFeedback("failed", "App launched but returned to home screen")
+                }
+                else -> {
+                    LaunchFeedback("app_opened", "TV focus: $currentFocus")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not inspect result: ${e.message}")
+            return LaunchFeedback("unknown", "Launched but could not verify result")
+        }
+    }
+
+    private data class LaunchFeedback(val status: String, val detail: String)
 
     private fun startSearchFallback(title: String) {
         try {
