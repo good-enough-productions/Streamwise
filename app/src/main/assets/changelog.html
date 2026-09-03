@@ -1,45 +1,107 @@
-﻿<!DOCTYPE html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>Streamwise Changelog</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; padding: 16px; color: #333; }
-        h1, h2, h3 { color: #222; }
-        h1 { border-bottom: 2px solid #eaeaea; padding-bottom: 8px; }
-        .date { font-size: 0.85em; color: #666; margin-bottom: 16px; display: block; }
-        .release { background: #f9f9f9; padding: 16px; border-radius: 8px; margin-bottom: 24px; border: 1px solid #eee; }
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-color: #e6edf3;
+            --text-muted: #8b949e;
+            --border-color: #30363d;
+            --primary: #58a6ff;
+            --accent: #238636;
+            --warning: #d29922;
+            --danger: #f85149;
+            --purple: #bc8cff;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            padding: 18px;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+        }
+        h1, h2, h3 { color: #ffffff; margin-top: 0; }
+        h1 {
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            font-size: 1.6em;
+        }
+        h2 { font-size: 1.2em; color: var(--primary); }
+        .date { font-size: 0.85em; color: var(--text-muted); margin-bottom: 14px; display: block; }
+        .release {
+            background: var(--card-bg);
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
         ul { margin-top: 8px; padding-left: 20px; }
-        li { margin-bottom: 4px; }
-        .badge { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 0.75em; font-weight: bold; color: white; margin-right: 8px; }
-        .badge.feature { background: #4CAF50; }
-        .badge.fix { background: #F44336; }
-        .badge.ui { background: #2196F3; }
+        li { margin-bottom: 6px; }
+        .badge {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.75em;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 8px;
+        }
+        .badge.feature { background: #238636; color: white; }
+        .badge.fix { background: #da3633; color: white; }
+        .badge.ui { background: #1f6feb; color: white; }
+        .badge.perf { background: #8957e5; color: white; }
     </style>
 </head>
 <body>
     <h1>Streamwise Changelog</h1>
     
+    <!-- v8.2 -->
     <div class="release">
-        <h2>Custom ROI & Trial Pricing Updates</h2>
-        <span class="date">August 2026</span>
+        <h2>v8.2: Watchlist Availability Recommendation Engine & Churn Optimizer</h2>
+        <span class="date">September 2026</span>
         <ul>
-            <li><span class="badge feature">Feature</span><strong>Custom Trial Prices:</strong> You can now enter custom prices (e.g., .99 promos) in the Subs settings so your ROI calculations use your real costs.</li>
-            <li><span class="badge feature">Feature</span><strong>Auto-Expiring Trials:</strong> Set the days until a trial ends; Streamwise will automatically deactivate the service when the time is up to keep your ROI accurate.</li>
-            <li><span class="badge ui">UI/UX</span><strong>Budget Tracker:</strong> The ROI tab now acts as a monthly burn rate tracker, calling out "Cancel Candidates" that fall below the 3 hours/mo benchmark.</li>
-            <li><span class="badge ui">UI/UX</span><strong>Potential Savings:</strong> Identifies underutilized subscriptions and displays how much you could save by pausing them.</li>
-            <li><span class="badge fix">Fix</span><strong>Watchlist Filters:</strong> Fixed a bug where titles with no streaming provider data were improperly bypassing the "My Services" filter.</li>
-            <li><span class="badge feature">Feature</span><strong>In-App Documentation:</strong> Added this User Guide and Changelog directly to the app!</li>
+            <li><span class="badge feature">Feature</span><strong>Watchlist Availability Ranking:</strong> The ROI page now ranks every streaming provider (active and inactive) by how many movies on your Watchlist are currently available there.</li>
+            <li><span class="badge feature">Feature</span><strong>Strategic Opportunity Banners:</strong> Automatically surfaces "Best Opportunity to Subscribe" for inactive channels with the highest concentration of your queue, and "Safe to Pause" alerts for underutilized channels with &le;1 watchlist movie.</li>
+            <li><span class="badge ui">UI/UX</span><strong>Dual Mode ROI Switcher:</strong> Easily toggle between <em>🎯 Watchlist Match</em> and <em>📊 Spend & Usage</em> analytics.</li>
+            <li><span class="badge feature">Feature</span><strong>Expandable Watchlist Previews:</strong> See the actual movie titles on your watchlist streaming on each service with 1-tap chips to open details or launch to TV.</li>
+            <li><span class="badge ui">UI/UX</span><strong>Interactive Subscriptions Ribbon:</strong> 1-tap horizontal chip row to toggle services active/paused with instant burn rate recalculation.</li>
+            <li><span class="badge feature">Feature</span><strong>Subscription Edit Sheet & Presets:</strong> Tap any service to pick 1-tap price presets ($0 to $22.99), configure free trial countdowns, or delete custom channels.</li>
+            <li><span class="badge feature">Feature</span><strong>+ Add Service Dialog:</strong> Add custom services with 1-tap suggestions for Criterion, Peacock, Paramount+, MUBI, Shudder, BritBox, YouTube Premium, and F1 TV.</li>
+            <li><span class="badge perf">Sync</span><strong>Expanded Provider Mappings:</strong> TMDB and Watchmode availability worker now indexes 10+ additional specialty and FAST platforms.</li>
         </ul>
     </div>
 
+    <!-- v8.1 -->
     <div class="release">
-        <h2>Initial Streamwise Alpha</h2>
+        <h2>v8.1: Universal TV Auto-Discovery, Letterboxd Sync & Master Ledger</h2>
+        <span class="date">September 2026</span>
+        <ul>
+            <li><span class="badge feature">Feature</span><strong>Universal TV Auto-Discovery:</strong> Uses Wi-Fi SSDP/DIAL discovery to automatically identify Fire TVs and Smart TVs on your subnet and fetch friendly names. Zero manual IP entry required.</li>
+            <li><span class="badge feature">Feature</span><strong>Adaptive "Watch Now" Sheet:</strong> Context-aware playback sheet that dynamically routes to your discovered TV at home, or falls back to your phone if away.</li>
+            <li><span class="badge feature">Feature</span><strong>Fire TV Watch Session Tracking:</strong> Automatically times playback on your TV and triggers a check-in upon completion to log your viewing and calculate ROI.</li>
+            <li><span class="badge feature">Feature</span><strong>Quick Watched Logger:</strong> Precision logging modal with 0.5–5.0 star selector, rewatch indicator, runtime, notes, and subscription attribution.</li>
+            <li><span class="badge feature">Feature</span><strong>Letterboxd CSV Export:</strong> 1-tap export in the Vault generating <code>Downloads/letterboxd_import.csv</code> for direct import into Letterboxd.</li>
+            <li><span class="badge feature">Feature</span><strong>$0/mo Master Google Sheet Ledger:</strong> Serverless Google Apps Script webhook deployed and baked into app settings. Two-way sync with zero copy-pasting.</li>
+            <li><span class="badge feature">Feature</span><strong>"Do It Now" Feedback FAB:</strong> Floating bug and feature reporting button on every screen with Compose screenshot capture, system telemetry, and GitHub issue filing.</li>
+            <li><span class="badge perf">Database</span><strong>Room Schema v8:</strong> Added ratings, rewatches, Letterboxd URIs, sync status, runtimes, and release years.</li>
+        </ul>
+    </div>
+
+    <!-- v8.0 -->
+    <div class="release">
+        <h2>v8.0: Initial Streamwise Architecture</h2>
         <span class="date">August 2026</span>
         <ul>
-            <li><span class="badge feature">Feature</span>Watchlist functionality with TMDB and Watchmode integration.</li>
-            <li><span class="badge feature">Feature</span>Local Ollama AI integration for smart chatbot recommendations.</li>
+            <li><span class="badge feature">Feature</span>Watchlist functionality with TMDB and Watchmode streaming integration.</li>
+            <li><span class="badge feature">Feature</span>Local Ollama AI integration with Olivia for cultural trivia and pre-watch strategies.</li>
             <li><span class="badge feature">Feature</span>Baseline ROI tracking by logging watch sessions and dividing monthly subscription costs.</li>
-            <li><span class="badge feature">Feature</span>Basic device casting discovery.</li>
+            <li><span class="badge ui">UI/UX</span>"Free to Me" filter chips to view only available titles.</li>
         </ul>
     </div>
 </body>
