@@ -16,12 +16,12 @@ Streamwise is a native Android application built entirely with **Kotlin** and **
 2. **Network, TV Discovery & Cloud Sync**
    - **TMDB & Watchmode**: Resolves title metadata and streaming availability across major and FAST providers in `AvailabilitySyncWorker.kt`.
    - **SSDP / DIAL TV Discovery**: `CastingManager.kt` sweeps the local Wi-Fi subnet on startup, identifies Fire TVs / Smart TVs via XML device descriptors, and provides zero-config IP binding.
-   - **Adaptive Playback Sheet**: `WatchActionSheet.kt` routes playback to the auto-discovered TV or mobile device and tracks runtime watch sessions.
+   - **Watch Hub & TV Connect**: `WatchActionSheet.kt` always renders the TV playback card. If multicast discovery is restricted, an interactive **TV Connect Dialog** provides 1-tap subnet scanning or manual IP input with instant persistence. Also includes **Universal Cast** via Android system picker.
    - **Master Google Sheet Cloud Ledger**: Serverless Google Apps Script webhook deployed at `https://script.google.com/macros/s/AKfycbwTFjzb2NgW_Py8dhNTWY1Qen9y4D93yG0NUvzhkm1jzKfCz_gE01WQryMcNThfSXEKqQ/exec` (`UserPreferencesManager.DEFAULT_GOOGLE_SHEET_WEBHOOK_URL`) providing two-way sync for watchlist, ratings, and podcast recommendation ingestion.
 
 3. **UI (Jetpack Compose)**
    - **HomeScreen.kt**: Monolithic navigation and screen layout:
-     - *Watchlist Tab (0)*: Filtered by "Free to Me" and duration chips (`< 90m`, `< 120m`).
+     - *Watchlist Tab (0)*: Filtered by "Free to Me" and duration chips (`< 90m`, `< 120m`). Features **Instant Undo** via an animated top banner and Snackbar action whenever a title is removed.
      - *Watched Vault Tab (1)*: Viewing diary with personal ratings, rewatch badges, and 1-tap Letterboxd CSV export.
      - *ROI Churn & Budget Tab (2)*: Dual mode view featuring **🎯 Watchlist Match** (ranking services by available watchlist titles, "Best Opportunity to Subscribe" and "Safe to Pause" banners, preview chips) and **📊 Spend & Usage** (burn rate, cost/hour, cancel candidates).
      - *Agent Chat Tab (3)*: Local AI assistant (Olivia).

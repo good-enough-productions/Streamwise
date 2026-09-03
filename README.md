@@ -52,7 +52,7 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 ## 🎬 Master the Interface
 
 ### The 4 Main Tabs
-1. **Watchlist (Queue):** Your unified movie and TV queue. Includes **"Free to Me"** filter to hide paywalls, **Duration Chips** (`< 90m`, `< 120m`) for quick picks, and Olivia's synthesized cultural trivia and pre-watch notes.
+1. **Watchlist (Queue):** Your unified movie and TV queue. Features **Instant Undo** (recovers accidentally deleted movies via an animated top banner and Snackbar action), **"Free to Me"** filter to hide paywalls, **Duration Chips** (`< 90m`, `< 120m`) for quick picks, and Olivia's synthesized cultural trivia and pre-watch notes.
 2. **Watched (The Vault):** Your personal viewing diary. Tap any title to log a **0.5–5.0 star rating**, mark rewatches, and attribute subscriptions. Tap **"Export to Letterboxd"** for a 1-tap CSV export in standard Letterboxd format (`Downloads/letterboxd_import.csv`).
 3. **ROI Stats (Churn Optimizer & Budget):**
    - **🎯 Watchlist Match Mode:** Ranks every streaming service by how many movies on your Watchlist are currently streaming on them. Features **"Best Opportunity to Subscribe"** and **"Safe to Pause"** opportunity banners, cost-per-movie metrics, and expandable movie title preview chips.
@@ -60,9 +60,9 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
    - **Quick Subscriptions Ribbon & Edit Sheet:** 1-tap active/paused toggle, price presets (`$0 Free`, `$5.99`, `$7.99`, `$9.99`, `$13.99`, `$15.49`, `$19.99`, `$22.99`), auto-expiring free trial countdowns, and a `+ Add Service` modal.
 4. **Agent (Chat):** Speak directly with Olivia for recommendations, trivia, or feature planning.
 
-### 📺 Universal TV Auto-Discovery & "Watch Now"
-- **Wi-Fi SSDP / DIAL Discovery:** Auto-detects Amazon Fire TVs and Smart TVs on your subnet with friendly name resolution. Zero manual IP entry required.
-- **Adaptive "Watch Now" Sheet:** Context-aware routing that targets your discovered TV when at home, or falls back to your device when on the go.
+### 📺 Universal TV Auto-Discovery & "Watch Now" Hub
+- **Always-Visible "Play on TV":** TV playback is permanently available as the primary action. If a TV is discovered, it launches immediately; if multicast is filtered by your Wi-Fi router, tapping opens an interactive **TV Connect Dialog** to scan or enter your TV's IP address (e.g. *Settings > My Fire TV > About > Network*).
+- **Universal Cast & App Chooser:** Added "Cast or Open with App…" to route playback to Google Cast / Chromecast devices or installed streaming video players via Android's native system picker.
 - **Watch Session Tracking:** Internal runtime timer tracks TV viewing and prompts for check-in to log your rating and compute subscription ROI.
 
 ### ☁️ $0/mo Master Google Sheet Cloud Ledger
