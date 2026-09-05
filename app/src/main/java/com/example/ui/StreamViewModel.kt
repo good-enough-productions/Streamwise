@@ -155,6 +155,104 @@ class StreamViewModel(
         _statusMessage.value = "AI Engine set to $engine"
     }
 
+    // Pro Tier Subscription State
+    private val _isProUser = MutableStateFlow(userPreferences.isProUser)
+    val isProUser: StateFlow<Boolean> = _isProUser.asStateFlow()
+
+    // First-Run Onboarding State
+    private val _isFirstLaunchCompleted = MutableStateFlow(userPreferences.isFirstLaunchCompleted)
+    val isFirstLaunchCompleted: StateFlow<Boolean> = _isFirstLaunchCompleted.asStateFlow()
+
+    // New Availability Alerts Setting
+    private val _notifyNewAvailability = MutableStateFlow(userPreferences.notifyNewAvailability)
+    val notifyNewAvailability: StateFlow<Boolean> = _notifyNewAvailability.asStateFlow()
+
+    val filterOnlyMyServicesDefault: Boolean
+        get() = userPreferences.filterOnlyMyServicesDefault
+
+    fun setProUser(isPro: Boolean) {
+        userPreferences.isProUser = isPro
+        _isProUser.value = isPro
+        _statusMessage.value = if (isPro) "Streamwise Pro activated! All features unlocked." else "Reverted to Free tier."
+    }
+
+    fun setNotifyNewAvailability(enabled: Boolean) {
+        userPreferences.notifyNewAvailability = enabled
+        _notifyNewAvailability.value = enabled
+        _statusMessage.value = if (enabled) "Availability notifications enabled." else "Availability notifications disabled."
+    }
+
+    fun completeOnboarding(selectedProviderIds: Set<String>, targetUsername: String?) {
+        viewModelScope.launch {
+            userPreferences.isFirstLaunchCompleted = true
+            _isFirstLaunchCompleted.value = true
+
+            // Update providers
+            allProviders.value.forEach { provider ->
+                val shouldBeActive = selectedProviderIds.contains(provider.id)
+                if (provider.isActive != shouldBeActive) {
+                    repository.updateStreamingProvider(provider.copy(isActive = shouldBeActive))
+                }
+            }
+
+            if (!targetUsername.isNullOrBlank()) {
+                syncLetterboxdWatchlist(targetUsername)
+            } else {
+                _statusMessage.value = "Welcome to Streamwise! Your queue is ready."
+            }
+        }
+    }
+
+    fun resetOnboarding() {
+        userPreferences.isFirstLaunchCompleted = false
+        _isFirstLaunchCompleted.value = false
+        _statusMessage.value = "Onboarding wizard reset."
+    }
+
+    fun testAvailabilityNotification() {
+        NotificationHelper.showTestAvailabilityAlert(getApplication())
+        _statusMessage.value = "Sent test availability notification!"
+    }
+
+    fun addTvShow(title: String, associatedProviders: List<String>, seasons: Int? = null, episodes: Int? = null) {
+        viewModelScope.launch {
+            if (title.isBlank()) return@launch
+            val providerString = if (associatedProviders.isEmpty()) null else associatedProviders.joinToString(",")
+            val item = MediaItem(
+                title = title.trim(),
+                mediaType = "TV",
+                totalSeasons = seasons,
+                totalEpisodes = episodes,
+                status = MediaStatus.WATCHLIST.name,
+                providerIds = providerString
+            )
+            repository.insertMediaItem(item)
+            enqueueTmdbSync(showMessage = false)
+            _statusMessage.value = "\"${title.trim()}\" (TV Series) added to watchlist!"
+        }
+    }
+
+    fun logTvEpisode(item: MediaItem, season: Int, episode: Int, providerId: String?, rating: Double? = null, durationMinutes: Int = 45) {
+        viewModelScope.launch {
+            val updated = item.copy(
+                lastWatchedSeason = season,
+                lastWatchedEpisode = episode,
+                userRating = rating ?: item.userRating,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateMediaItem(updated)
+
+            repository.addWatchSession(
+                mediaItemId = item.id,
+                mediaItemTitle = "${item.title} (S${season}E${episode})",
+                providerId = providerId,
+                durationMinutes = durationMinutes,
+                notes = "Logged TV episode Season $season Episode $episode"
+            )
+            _statusMessage.value = "Logged ${item.title} S${season}E${episode} (${durationMinutes}m)!"
+        }
+    }
+
     // Casting State
     val discoveredDevices: StateFlow<List<CastDevice>> = CastingManager.discoveredDevices
     val isScanningDevices: StateFlow<Boolean> = CastingManager.isScanning
@@ -879,14 +977,15 @@ class StreamViewModel(
     /**
      * Inserts standard custom entries manually from inside the App home view.
      */
-    fun addCustomWatchlistItem(title: String, associatedProviders: List<String>) {
+    fun addCustomWatchlistItem(title: String, associatedProviders: List<String>, mediaType: String = "MOVIE") {
         viewModelScope.launch {
             if (title.isBlank()) return@launch
             val providerString = if (associatedProviders.isEmpty()) null else associatedProviders.joinToString(",")
             val item = MediaItem(
                 title = title.trim(),
                 status = MediaStatus.WATCHLIST.name,
-                providerIds = providerString
+                providerIds = providerString,
+                mediaType = mediaType
             )
             repository.insertMediaItem(item)
             enqueueTmdbSync(showMessage = false)
@@ -901,7 +1000,8 @@ class StreamViewModel(
         multilineTitles: String, 
         associatedProviders: List<String>,
         userNotes: String? = null,
-        importSource: String? = null
+        importSource: String? = null,
+        mediaType: String = "MOVIE"
     ) {
         viewModelScope.launch {
             val titles = multilineTitles
@@ -920,7 +1020,8 @@ class StreamViewModel(
                     status = MediaStatus.WATCHLIST.name,
                     providerIds = providerString,
                     userNotes = userNotes,
-                    importSource = importSource
+                    importSource = importSource,
+                    mediaType = mediaType
                 )
                 repository.insertMediaItem(item)
             }

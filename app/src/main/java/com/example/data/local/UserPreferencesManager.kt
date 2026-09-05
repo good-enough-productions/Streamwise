@@ -46,6 +46,22 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getString(KEY_AI_ENGINE, AI_ENGINE_GEMINI) ?: AI_ENGINE_GEMINI
         set(value) { prefs.edit().putString(KEY_AI_ENGINE, value).apply() }
 
+    var isFirstLaunchCompleted: Boolean
+        get() = prefs.getBoolean(KEY_FIRST_LAUNCH_COMPLETED, false)
+        set(value) { prefs.edit().putBoolean(KEY_FIRST_LAUNCH_COMPLETED, value).apply() }
+
+    var isProUser: Boolean
+        get() = prefs.getBoolean(KEY_IS_PRO_USER, false)
+        set(value) { prefs.edit().putBoolean(KEY_IS_PRO_USER, value).apply() }
+
+    var filterOnlyMyServicesDefault: Boolean
+        get() = prefs.getBoolean(KEY_FILTER_ONLY_MY_SERVICES_DEFAULT, true)
+        set(value) { prefs.edit().putBoolean(KEY_FILTER_ONLY_MY_SERVICES_DEFAULT, value).apply() }
+
+    var notifyNewAvailability: Boolean
+        get() = prefs.getBoolean(KEY_NOTIFY_NEW_AVAILABILITY, true)
+        set(value) { prefs.edit().putBoolean(KEY_NOTIFY_NEW_AVAILABILITY, value).apply() }
+
     companion object {
         private const val PREFS_NAME = "user_preferences"
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
@@ -57,6 +73,10 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_GITHUB_TOKEN = "github_token"
         private const val KEY_GOOGLE_SHEET_WEBHOOK_URL = "google_sheet_webhook_url"
         private const val KEY_FIRE_TV_IP = "fire_tv_ip"
+        private const val KEY_FIRST_LAUNCH_COMPLETED = "first_launch_completed"
+        private const val KEY_IS_PRO_USER = "is_pro_user"
+        private const val KEY_FILTER_ONLY_MY_SERVICES_DEFAULT = "filter_only_my_services_default"
+        private const val KEY_NOTIFY_NEW_AVAILABILITY = "notify_new_availability"
 
         const val AI_ENGINE_GEMINI = "GEMINI"
         const val AI_ENGINE_OLLAMA = "OLLAMA"

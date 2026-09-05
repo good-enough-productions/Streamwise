@@ -12,24 +12,46 @@ object NotificationHelper {
     private const val CHANNEL_NAME = "Movie Availability"
     private const val CHANNEL_DESC = "Notifications when a watchlist movie becomes streamable"
 
-    fun showAvailabilityNotification(context: Context, title: String, providerName: String) {
+    fun showAvailabilityNotification(context: Context, title: String, providerName: String, isTvShow: Boolean = false) {
         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT).apply {
+            val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
                 description = CHANNEL_DESC
             }
             notificationManager.createNotificationChannel(channel)
         }
 
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("extra_media_title", title)
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            context,
+            title.hashCode(),
+            launchIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+
+        val mediaTypeLabel = if (isTvShow) "TV Show" else "Movie"
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_dialog_info) // Fallback icon
-            .setContentTitle("Now Streaming!")
-            .setContentText("\"$title\" is now available on $providerName.")
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("🎬 Now Streaming on $providerName!")
+            .setContentText("\"$title\" ($mediaTypeLabel) is now streamable on your active subscriptions. Tap to watch.")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
         notificationManager.notify(title.hashCode(), builder.build())
+    }
+
+    fun showTestAvailabilityAlert(context: Context) {
+        showAvailabilityNotification(
+            context = context,
+            title = "Severance",
+            providerName = "Apple TV+",
+            isTvShow = true
+        )
     }
 
     private const val RENEWAL_CHANNEL_ID = "renewal_alerts"
