@@ -126,13 +126,20 @@ interface TmdbApiService {
         @Path("tv_id") tvId: Int,
         @Query("api_key") apiKey: String
     ): TmdbCreditsResponse
+
+    @GET("movie/{movie_id}/release_dates")
+    suspend fun getMovieReleaseDates(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbMovieReleaseDatesResponse
 }
 
 @JsonClass(generateAdapter = true)
 data class TmdbMovieDetails(
     @Json(name = "id") val id: Int,
     @Json(name = "runtime") val runtime: Int? = null,
-    @Json(name = "release_date") val releaseDate: String? = null
+    @Json(name = "release_date") val releaseDate: String? = null,
+    @Json(name = "status") val status: String? = null
 )
 
 @JsonClass(generateAdapter = true)
@@ -168,6 +175,37 @@ data class TmdbTvDetails(
     @Json(name = "name") val name: String? = null,
     @Json(name = "number_of_seasons") val numberOfSeasons: Int? = null,
     @Json(name = "number_of_episodes") val numberOfEpisodes: Int? = null,
-    @Json(name = "first_air_date") val firstAirDate: String? = null
+    @Json(name = "first_air_date") val firstAirDate: String? = null,
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "in_production") val inProduction: Boolean? = null,
+    @Json(name = "next_episode_to_air") val nextEpisodeToAir: TmdbNextEpisode? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbNextEpisode(
+    @Json(name = "id") val id: Int? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "air_date") val airDate: String? = null,
+    @Json(name = "season_number") val seasonNumber: Int? = null,
+    @Json(name = "episode_number") val episodeNumber: Int? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbMovieReleaseDatesResponse(
+    @Json(name = "id") val id: Int,
+    @Json(name = "results") val results: List<TmdbCountryReleaseDates> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbCountryReleaseDates(
+    @Json(name = "iso_3166_1") val countryCode: String,
+    @Json(name = "release_dates") val releaseDates: List<TmdbReleaseDateItem> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbReleaseDateItem(
+    @Json(name = "certification") val certification: String? = null,
+    @Json(name = "release_date") val releaseDate: String? = null,
+    @Json(name = "type") val type: Int = 3
 )
 

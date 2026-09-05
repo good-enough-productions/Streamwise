@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -98,6 +98,18 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE media_items ADD COLUMN totalEpisodes INTEGER")
                 db.execSQL("ALTER TABLE media_items ADD COLUMN lastWatchedSeason INTEGER")
                 db.execSQL("ALTER TABLE media_items ADD COLUMN lastWatchedEpisode INTEGER")
+            }
+        }
+
+        private val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN nextAirDate TEXT")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN nextEpisodeTitle TEXT")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN releaseStatus TEXT")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN digitalReleaseDate TEXT")
+                // Seed initial release radar status for Severance and The Bear
+                db.execSQL("UPDATE media_items SET releaseStatus = 'RETURNING_SERIES', nextAirDate = '2026-10-17', nextEpisodeTitle = 'S2E1: Hello Ms. Cobel' WHERE title LIKE '%Severance%'")
+                db.execSQL("UPDATE media_items SET releaseStatus = 'RETURNING_SERIES', nextAirDate = '2026-06-25', nextEpisodeTitle = 'S4E1: The Kitchen' WHERE title LIKE '%The Bear%'")
             }
         }
     }
@@ -208,17 +220,23 @@ abstract class AppDatabase : RoomDatabase() {
                     totalEpisodes = 19,
                     status = com.example.data.model.MediaStatus.WATCHLIST.name,
                     providerIds = "apple",
-                    overview = "Mark leads a team of office workers whose memories have been surgically divided between their work and personal lives."
+                    overview = "Mark leads a team of office workers whose memories have been surgically divided between their work and personal lives.",
+                    releaseStatus = "RETURNING_SERIES",
+                    nextAirDate = "2026-10-17",
+                    nextEpisodeTitle = "S2E1: Hello Ms. Cobel"
                 ),
                 MediaItem(
                     title = "The Bear",
                     releaseYear = "2022",
                     mediaType = "TV",
-                    totalSeasons = 3,
-                    totalEpisodes = 28,
+                    totalSeasons = 4,
+                    totalEpisodes = 38,
                     status = com.example.data.model.MediaStatus.WATCHLIST.name,
                     providerIds = "hulu",
-                    overview = "A young chef from the fine dining world returns to Chicago to run his family's Italian beef sandwich shop."
+                    overview = "A young chef from the fine dining world returns to Chicago to run his family's Italian beef sandwich shop.",
+                    releaseStatus = "RETURNING_SERIES",
+                    nextAirDate = "2026-06-25",
+                    nextEpisodeTitle = "S4E1: The Kitchen"
                 ),
                 MediaItem(
                     title = "Shōgun",
