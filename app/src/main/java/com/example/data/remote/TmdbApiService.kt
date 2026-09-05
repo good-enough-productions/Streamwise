@@ -101,6 +101,31 @@ interface TmdbApiService {
     suspend fun getGenreList(
         @Query("api_key") apiKey: String
     ): TmdbGenreListResponse
+
+    @GET("search/tv")
+    suspend fun searchTv(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String,
+        @Query("first_air_date_year") year: String? = null
+    ): TmdbTvSearchResponse
+
+    @GET("tv/{tv_id}/watch/providers")
+    suspend fun getTvWatchProviders(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbWatchProvidersResponse
+
+    @GET("tv/{tv_id}")
+    suspend fun getTvDetails(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbTvDetails
+
+    @GET("tv/{tv_id}/credits")
+    suspend fun getTvCredits(
+        @Path("tv_id") tvId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbCreditsResponse
 }
 
 @JsonClass(generateAdapter = true)
@@ -120,3 +145,29 @@ data class TmdbGenre(
     @Json(name = "id") val id: Int,
     @Json(name = "name") val name: String
 )
+
+@JsonClass(generateAdapter = true)
+data class TmdbTvSearchResponse(
+    @Json(name = "results") val results: List<TmdbTvSearchResult>
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbTvSearchResult(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String,
+    @Json(name = "overview") val overview: String?,
+    @Json(name = "poster_path") val posterPath: String?,
+    @Json(name = "vote_average") val voteAverage: Double?,
+    @Json(name = "first_air_date") val firstAirDate: String?,
+    @Json(name = "genre_ids") val genreIds: List<Int>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbTvDetails(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "number_of_seasons") val numberOfSeasons: Int? = null,
+    @Json(name = "number_of_episodes") val numberOfEpisodes: Int? = null,
+    @Json(name = "first_air_date") val firstAirDate: String? = null
+)
+

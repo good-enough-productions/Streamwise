@@ -45,9 +45,22 @@ data class MediaItem(
     // Runtime duration in minutes for <90m and <120m filtering
     val runtimeMinutes: Int? = null,
     // Release year (e.g., "1995")
-    val releaseYear: String? = null
+    val releaseYear: String? = null,
+    // Media type: "MOVIE" or "TV"
+    val mediaType: String = "MOVIE",
+    // TV Show metadata
+    val totalSeasons: Int? = null,
+    val totalEpisodes: Int? = null,
+    val lastWatchedSeason: Int? = null,
+    val lastWatchedEpisode: Int? = null
 ) {
     // Utility to parse provider IDs array
     val providersList: List<String>
         get() = providerIds?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+
+    val isTvShow: Boolean
+        get() = mediaType.equals("TV", ignoreCase = true)
+
+    val isPodcastRec: Boolean
+        get() = importSource?.startsWith("Podcast", ignoreCase = true) == true
 }

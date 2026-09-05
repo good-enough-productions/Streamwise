@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -88,6 +88,16 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE media_items ADD COLUMN syncedToSheet INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE media_items ADD COLUMN runtimeMinutes INTEGER")
                 db.execSQL("ALTER TABLE media_items ADD COLUMN releaseYear TEXT")
+            }
+        }
+
+        private val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN mediaType TEXT NOT NULL DEFAULT 'MOVIE'")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN totalSeasons INTEGER")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN totalEpisodes INTEGER")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN lastWatchedSeason INTEGER")
+                db.execSQL("ALTER TABLE media_items ADD COLUMN lastWatchedEpisode INTEGER")
             }
         }
     }
@@ -187,6 +197,75 @@ abstract class AppDatabase : RoomDatabase() {
                 dao.insertWatchSessions(watchSessions)
                 Log.d("AppDatabase", "Seeded ${watchSessions.size} historical watch sessions from CSV successfully.")
             }
+
+            // Seed Curated TV Shows and Film Podcast Recommendations
+            val curatedItems = listOf(
+                MediaItem(
+                    title = "Severance",
+                    releaseYear = "2022",
+                    mediaType = "TV",
+                    totalSeasons = 2,
+                    totalEpisodes = 19,
+                    status = com.example.data.model.MediaStatus.WATCHLIST.name,
+                    providerIds = "apple",
+                    overview = "Mark leads a team of office workers whose memories have been surgically divided between their work and personal lives."
+                ),
+                MediaItem(
+                    title = "The Bear",
+                    releaseYear = "2022",
+                    mediaType = "TV",
+                    totalSeasons = 3,
+                    totalEpisodes = 28,
+                    status = com.example.data.model.MediaStatus.WATCHLIST.name,
+                    providerIds = "hulu",
+                    overview = "A young chef from the fine dining world returns to Chicago to run his family's Italian beef sandwich shop."
+                ),
+                MediaItem(
+                    title = "Shōgun",
+                    releaseYear = "2024",
+                    mediaType = "TV",
+                    totalSeasons = 1,
+                    totalEpisodes = 10,
+                    status = com.example.data.model.MediaStatus.WATCHLIST.name,
+                    providerIds = "hulu",
+                    overview = "When a mysterious European ship is found marooned in a nearby fishing village, Lord Toranaga discovers secrets that could tip the scales of power."
+                ),
+                MediaItem(
+                    title = "Cure",
+                    releaseYear = "1997",
+                    mediaType = "MOVIE",
+                    status = com.example.data.model.MediaStatus.WATCHLIST.name,
+                    providerIds = "criterion,tubi",
+                    importSource = "Podcast: The Big Picture",
+                    userNotes = "Sean Fennessey: 'One of the greatest psychological thrillers of the 90s, masterclass in dread.'",
+                    runtimeMinutes = 111,
+                    overview = "A detective investigates a series of gruesome murders where each victim has an X carved into their neck, committed by different people who claim no memory of why they did it."
+                ),
+                MediaItem(
+                    title = "Heat",
+                    releaseYear = "1995",
+                    mediaType = "MOVIE",
+                    status = com.example.data.model.MediaStatus.WATCHLIST.name,
+                    providerIds = "netflix",
+                    importSource = "Podcast: The Rewatchables",
+                    userNotes = "Bill Simmons & Chris Ryan: 'The definitive crime epic and apex mountain for Pacino and De Niro together.'",
+                    runtimeMinutes = 170,
+                    overview = "A master criminal and a veteran cop play a high-stakes cat-and-mouse game through the streets of Los Angeles."
+                ),
+                MediaItem(
+                    title = "Blow Out",
+                    releaseYear = "1981",
+                    mediaType = "MOVIE",
+                    status = com.example.data.model.MediaStatus.WATCHLIST.name,
+                    providerIds = "criterion,max",
+                    importSource = "Podcast: Blank Check",
+                    userNotes = "David Sims & Griffin Newman: 'Brian De Palma firing on every cylinder with John Travolta\\'s most haunting performance.'",
+                    runtimeMinutes = 108,
+                    overview = "A movie sound recordist accidentally records the audio evidence of a political assassination, putting him in deadly danger."
+                )
+            )
+            dao.insertMediaItems(curatedItems)
+            Log.d("AppDatabase", "Seeded ${curatedItems.size} curated TV shows and podcast recommendations.")
         }
 
         private fun parseCsv(context: Context, fileName: String): List<CsvRow> {

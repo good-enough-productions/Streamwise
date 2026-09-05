@@ -149,6 +149,54 @@ fun QuickLogDialog(
                         )
                     }
 
+                    // TV Episode Stepper if logging a TV series
+                    if (initialMovie?.isTvShow == true) {
+                        var seasonNum by remember { mutableStateOf(initialMovie.lastWatchedSeason ?: 1) }
+                        var episodeNum by remember { mutableStateOf((initialMovie.lastWatchedEpisode ?: 0) + 1) }
+
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "📺 TV Episode Check-in",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        text = "Season $seasonNum · Episode $episodeNum",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    OutlinedButton(
+                                        onClick = { if (episodeNum > 1) episodeNum-- },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text("Ep -")
+                                    }
+                                    Button(
+                                        onClick = { episodeNum++ },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text("Ep +")
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Rating Selector (0.5 to 5.0 stars)
                     Column {
                         Row(

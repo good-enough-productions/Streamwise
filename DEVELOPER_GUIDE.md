@@ -5,16 +5,17 @@ Streamwise is a native Android application built entirely with **Kotlin** and **
 
 ### Key Components
 
-1. **Local Database (Room Schema v8)**
-   - **AppDatabase.kt**: SQLite database powered by Android Room with migration path `MIGRATION_7_8`.
+1. **Local Database (Room Schema v9)**
+   - **AppDatabase.kt**: SQLite database powered by Android Room with migration path `MIGRATION_8_9`.
    - **Entities**:
-     - `MediaItem`: Represents a movie or TV show. Schema v8 adds `userRating` (0.5–5.0), `isRewatch`, `letterboxdUri`, `syncedToSheet`, `runtimeMinutes`, and `releaseYear`.
+     - `MediaItem`: Represents a movie, TV series, or podcast recommendation. Schema v9 adds `mediaType` ("MOVIE", "TV", "PODCAST"), `totalSeasons`, `totalEpisodes`, `lastWatchedSeason`, and `lastWatchedEpisode`. Schema v8 columns: `userRating` (0.5–5.0), `isRewatch`, `letterboxdUri`, `syncedToSheet`, `runtimeMinutes`, and `releaseYear`.
      - `StreamingProvider`: Represents a platform (Netflix, Hulu, Criterion, etc.). Custom user pricing, trial durations, and active states are stored here to drive ROI math.
      - `WatchSession`: Every time an item is checked off or watched on TV, a session is logged to track hours spent on a given platform.
    - **MediaDao.kt**: Contains Room queries, monthly usage aggregations (`getMonthlyUsageStats`), and custom provider deletions.
 
 2. **Network, TV Companion, Cloud AI & Ingestion**
-   - **TMDB & Watchmode**: Resolves title metadata, exact runtimes in minutes (`GET /movie/{id}`), release dates, and streaming availability across major and FAST providers in `AvailabilitySyncWorker.kt`.
+   - **TMDB Movies & TV Endpoints**: Ingests title metadata, exact runtimes, release dates, seasons, episode counts, and streaming availability across providers in `AvailabilitySyncWorker.kt`.
+   - **New Availability Alerts (`NotificationHelper.kt`)**: Background worker checks when queued titles become available on active subscriptions and fires tap-launchable push notifications.
    - **Letterboxd Watchlist Crawler & CSV Parser (`LetterboxdImporter.kt`)**: Scrapes public Letterboxd profile pages (`letterboxd.com/{username}/watchlist/page/{n}/`) directly with 1 tap, parsing film posters, slugs, and titles with zero API key dependencies. Also parses exported `watched.csv` and `watchlist.csv` files.
    - **Cloud-Native AI Advisor (`GeminiClient.kt`)**: Native REST HTTP client for Google's `gemini-2.0-flash` model. Operates at ~$0.015/user/month unit economics for instant conversational recommendations and pre-watch cultural synthesis, bypassing local Ollama server dependencies.
    - **Renewal Radar & 1-Click Cancellation (`SubscriptionRenewalManager.kt`)**: Maintains verified deep-link cancellation URLs for 12+ providers (Netflix, Max, Disney+, Hulu, Paramount+, Criterion, Apple, Prime, Peacock). Computes days-until-renewal, fires proactive notification alerts, and renders direct 1-tap browser intent launchers.
@@ -25,13 +26,14 @@ Streamwise is a native Android application built entirely with **Kotlin** and **
    - **Master Google Sheet Cloud Ledger**: Serverless Google Apps Script webhook providing two-way sync for watchlist, ratings, and podcast recommendation ingestion.
 
 3. **UI (Jetpack Compose)**
+   - **OnboardingDialog.kt**: 3-step interactive first-run onboarding wizard (service picker, Letterboxd sync, ROI spend preview).
+   - **UpgradePaywallSheet.kt**: Streamwise Pro paywall sheet ($3.99/mo or $39.99/yr with 7-day free trial) gating unlimited services, TV tracking, podcast recs, and background alerts.
    - **HomeScreen.kt**: Monolithic navigation and screen layout:
-     - *Watchlist Tab (0)*: Filtered by "Free to Me" and duration chips (`< 90m`, `< 120m`). Features **1-Tap Letterboxd Import**, **Instant Undo** on deletion, live match counter, and Olivia's pre-watch synthesis.
-     - *Watched Vault Tab (1)*: Viewing diary with personal ratings, rewatch badges, and 1-tap Letterboxd CSV export.
+     - *Watchlist Tab (0)*: Filtered by "Free to Me" default and media format chips (`All`, `🎬 Movies`, `📺 TV Shows`, `🎙️ Podcast Recs`) as well as duration chips (`< 90m`, `< 120m`). Features **1-Tap Letterboxd Import**, **Instant Undo** on deletion, live match counter, and Olivia's pre-watch synthesis.
+     - *Watched Vault Tab (1)*: Viewing diary with personal ratings, rewatch badges, TV episode progress, and 1-tap Letterboxd CSV export.
      - *ROI Churn & Renewal Radar Tab (2)*: Dual mode view featuring **🎯 Watchlist Match** (ranking services by available watchlist titles, "Best Opportunity to Subscribe", "Safe to Pause" banners, **Renewal Radar** countdown badges, and **1-Click Official Cancellation** links) and **📊 Spend & Usage** (burn rate, cost/hour, cancel candidates).
      - *Agent Chat Tab (3)*: Conversational AI assistant (Olivia) routed through Gemini 2.0 Flash or local Ollama.
-   - **SubscriptionEditSheet.kt & AddServiceDialog.kt**: Modal pricing presets, trial expiration tracker, and custom provider additions.
-   - **QuickLogDialog.kt**: 0.5–5.0 star selector, rewatches, and notes.
+   - **QuickLogDialog.kt**: 0.5–5.0 star selector, TV episode check-in steppers (Season and Episode counters), rewatches, and notes.
    - **FeedbackDialog.kt**: Floating FAB on every screen that captures Compose screenshots, gathers device diagnostics, and creates GitHub issues labeled `jules-triage`.
    - **GuideDialog.kt**: Renders `user_guide.html` and `changelog.html` from `app/src/main/assets` directly inside an Android WebView.
 

@@ -69,13 +69,16 @@ fun HomeScreen(
     val aiEngine by viewModel.aiEngine.collectAsState()
     val isLetterboxdSyncing by viewModel.isLetterboxdSyncing.collectAsState()
     val recentlyDeletedItem by viewModel.recentlyDeletedItem.collectAsState()
+    val isProUser by viewModel.isProUser.collectAsState()
+    val isFirstLaunchCompleted by viewModel.isFirstLaunchCompleted.collectAsState()
+    val notifyNewAvailability by viewModel.notifyNewAvailability.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
     var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Agent
-    var filterOnlyMyServices by remember { mutableStateOf(false) }
+    var filterOnlyMyServices by remember { mutableStateOf(viewModel.filterOnlyMyServicesDefault) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showQuickLogDialog by remember { mutableStateOf(false) }
     var quickLogInitialMovie by remember { mutableStateOf<MediaItem?>(null) }
@@ -84,6 +87,7 @@ fun HomeScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
     var showLetterboxdImportDialog by remember { mutableStateOf(false) }
+    var showPaywallSheet by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
     var editingProvider by remember { mutableStateOf<StreamingProvider?>(null) }
     var showAddServiceDialog by remember { mutableStateOf(false) }
@@ -117,11 +121,31 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Streamwise",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Streamwise",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isProUser) Color(0xFFFFD700) else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .clickable { showPaywallSheet = true }
+                                .testTag("pro_badge_topbar")
+                        ) {
+                            Text(
+                                text = if (isProUser) "★ PRO" else "FREE",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                color = if (isProUser) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 },
                 actions = {
                     IconButton(
@@ -360,8 +384,8 @@ fun HomeScreen(
             AddMediaDialog(
                 allProviders = allProviders,
                 onDismiss = { showAddDialog = false },
-                onAdd = { titlesInput, selectedProviderIds, notes, source ->
-                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source)
+                onAdd = { titlesInput, selectedProviderIds, notes, source, mediaType ->
+                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source, mediaType)
                     showAddDialog = false
                 }
             )
@@ -419,6 +443,18 @@ fun HomeScreen(
                 onSyncGoogleSheet = { viewModel.syncWithGoogleSheet() },
                 onExportLetterboxd = { viewModel.exportToLetterboxdCsv() },
                 onSimulateResume = simulateForegroundReturn,
+                isProUser = isProUser,
+                onOpenPaywall = {
+                    showSettingsDialog = false
+                    showPaywallSheet = true
+                },
+                notifyNewAvailability = notifyNewAvailability,
+                onToggleAvailabilityAlerts = { viewModel.setNotifyNewAvailability(it) },
+                onTestAvailabilityAlert = { viewModel.testAvailabilityNotification() },
+                onResetOnboarding = {
+                    viewModel.resetOnboarding()
+                    showSettingsDialog = false
+                },
                 onDismiss = { showSettingsDialog = false }
             )
         }
@@ -568,6 +604,26 @@ fun HomeScreen(
                 }
             )
         }
+
+        // First-Launch Onboarding Wizard
+        if (!isFirstLaunchCompleted) {
+            OnboardingDialog(
+                availableProviders = allProviders,
+                onComplete = { selectedProviderIds, letterboxdUser ->
+                    viewModel.completeOnboarding(selectedProviderIds, letterboxdUser)
+                }
+            )
+        }
+
+        // Streamwise Pro Upgrade Paywall Sheet
+        if (showPaywallSheet) {
+            UpgradePaywallSheet(
+                isCurrentPro = isProUser,
+                onDismiss = { showPaywallSheet = false },
+                onUpgrade = { viewModel.setProUser(true) },
+                onDowngrade = { viewModel.setProUser(false) }
+            )
+        }
     } // End Scaffold
 
             if (showcaseState.isGuideModeActive) {
@@ -611,6 +667,7 @@ fun WatchlistTabContent(
     var showFreeOnly by remember { mutableStateOf(false) }
     var selectedGenre by remember { mutableStateOf<String?>(null) }
     var runtimeFilter by remember { mutableStateOf<Int?>(null) } // null: All, 90: <90m, 120: <120m
+    var mediaTypeFilter by remember { mutableStateOf("ALL") } // "ALL", "MOVIES", "TV", "PODCASTS"
 
     val allGenres = remember(watchlistItems) {
         watchlistItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
@@ -620,10 +677,14 @@ fun WatchlistTabContent(
     }
 
     // Filter items according to state
-    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, selectedGenre, runtimeFilter) {
+    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, selectedGenre, runtimeFilter, mediaTypeFilter) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
+
+            if (mediaTypeFilter == "MOVIES" && (item.isTvShow || item.isPodcastRec)) return@filter false
+            if (mediaTypeFilter == "TV" && !item.isTvShow) return@filter false
+            if (mediaTypeFilter == "PODCASTS" && !item.isPodcastRec) return@filter false
 
             if (selectedPlatformId != null) {
                 if (item.providersList.contains(selectedPlatformId) != true) return@filter false
@@ -815,6 +876,49 @@ fun WatchlistTabContent(
                     )
                 }
             }
+        }
+
+        // Media Type Ribbon (All / Movies / TV Shows / Podcasts)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Format:",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(end = 4.dp)
+            )
+
+            FilterChip(
+                selected = mediaTypeFilter == "ALL",
+                onClick = { mediaTypeFilter = "ALL" },
+                label = { Text("All Media", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "ALL") FontWeight.Bold else FontWeight.Normal) },
+                modifier = Modifier.testTag("filter_media_all")
+            )
+            FilterChip(
+                selected = mediaTypeFilter == "MOVIES",
+                onClick = { mediaTypeFilter = "MOVIES" },
+                label = { Text("🎬 Movies", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "MOVIES") FontWeight.Bold else FontWeight.Normal) },
+                modifier = Modifier.testTag("filter_media_movies")
+            )
+            FilterChip(
+                selected = mediaTypeFilter == "TV",
+                onClick = { mediaTypeFilter = "TV" },
+                label = { Text("📺 TV Shows", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "TV") FontWeight.Bold else FontWeight.Normal) },
+                modifier = Modifier.testTag("filter_media_tv")
+            )
+            FilterChip(
+                selected = mediaTypeFilter == "PODCASTS",
+                onClick = { mediaTypeFilter = "PODCASTS" },
+                label = { Text("🎙️ Podcast Recs", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "PODCASTS") FontWeight.Bold else FontWeight.Normal) },
+                modifier = Modifier.testTag("filter_media_podcasts")
+            )
         }
 
         // Hot-Platform Horizontal Ribbon Filter
@@ -1294,6 +1398,49 @@ fun MediaItemCard(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+
+                        if (item.isTvShow) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                val seasonText = if (item.totalSeasons != null) "${item.totalSeasons} Seasons" else "TV Series"
+                                val epText = if (item.lastWatchedEpisode != null) " · S${item.lastWatchedSeason ?: 1}E${item.lastWatchedEpisode}" else ""
+                                Text(
+                                    text = "📺 $seasonText$epText",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+                    }
+
+                    if (item.isPodcastRec && !item.userNotes.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "🎙️ \"${item.userNotes}\"",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 11.sp,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
@@ -2573,9 +2720,10 @@ fun ManageServicesTabContent(
 fun AddMediaDialog(
     allProviders: List<StreamingProvider>,
     onDismiss: () -> Unit,
-    onAdd: (String, List<String>, String?, String?) -> Unit
+    onAdd: (String, List<String>, String?, String?, String) -> Unit
 ) {
     var titlesInput by remember { mutableStateOf("") }
+    var selectedMediaType by remember { mutableStateOf("MOVIE") }
     var userNotes by remember { mutableStateOf("") }
     var importSource by remember { mutableStateOf("") }
     val selectedProviders = remember { mutableStateListOf<String>() }
@@ -2595,11 +2743,55 @@ fun AddMediaDialog(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Media Type Selector Ribbon
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = selectedMediaType == "MOVIE",
+                        onClick = { selectedMediaType = "MOVIE" },
+                        label = { Text("🎬 Movie", fontSize = 11.sp) }
+                    )
+                    FilterChip(
+                        selected = selectedMediaType == "TV",
+                        onClick = { selectedMediaType = "TV" },
+                        label = { Text("📺 TV Show", fontSize = 11.sp) }
+                    )
+                    FilterChip(
+                        selected = selectedMediaType == "PODCAST",
+                        onClick = { 
+                            selectedMediaType = "PODCAST"
+                            if (importSource.isBlank()) {
+                                importSource = "Podcast Recommendation"
+                            }
+                        },
+                        label = { Text("🎙️ Podcast Rec", fontSize = 11.sp) }
+                    )
+                }
+
                 OutlinedTextField(
                     value = titlesInput,
                     onValueChange = { titlesInput = it },
-                    label = { Text("Movie / Show Titles") },
-                    placeholder = { Text("One title per line\nSeverance\nDune: Part Two\nThe Godfather") },
+                    label = { 
+                        Text(
+                            when (selectedMediaType) {
+                                "TV" -> "TV Series Title(s)"
+                                "PODCAST" -> "Recommended Title(s)"
+                                else -> "Movie / Show Title(s)"
+                            }
+                        ) 
+                    },
+                    placeholder = { 
+                        Text(
+                            when (selectedMediaType) {
+                                "TV" -> "One title per line\nSeverance\nThe Bear\nShōgun"
+                                "PODCAST" -> "One title per line\nCure\nHeat\nBlow Out"
+                                else -> "One title per line\nSeverance\nDune: Part Two\nThe Godfather"
+                            }
+                        ) 
+                    },
                     singleLine = false,
                     minLines = 3,
                     maxLines = 6,
@@ -2618,8 +2810,18 @@ fun AddMediaDialog(
                 OutlinedTextField(
                     value = userNotes,
                     onValueChange = { userNotes = it },
-                    label = { Text("Personal Notes (Optional)") },
-                    placeholder = { Text("e.g. Danny recommended this") },
+                    label = { 
+                        Text(
+                            if (selectedMediaType == "PODCAST") "Host Quote / Episode Context" 
+                            else "Personal Notes (Optional)"
+                        ) 
+                    },
+                    placeholder = { 
+                        Text(
+                            if (selectedMediaType == "PODCAST") "e.g. \"Kurosawa's modern masterwork\" - The Big Picture" 
+                            else "e.g. Danny recommended this"
+                        ) 
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2628,7 +2830,12 @@ fun AddMediaDialog(
                     value = importSource,
                     onValueChange = { importSource = it },
                     label = { Text("Source / Origins (Optional)") },
-                    placeholder = { Text("e.g. Podcast: The Big Picture") },
+                    placeholder = { 
+                        Text(
+                            if (selectedMediaType == "PODCAST") "Podcast: The Big Picture" 
+                            else "e.g. Podcast: The Big Picture, Letterboxd, Friend"
+                        ) 
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2696,7 +2903,7 @@ fun AddMediaDialog(
             Button(
                 onClick = {
                     if (parsedTitles.isNotEmpty()) {
-                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource)
+                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource, selectedMediaType)
                     }
                 },
                 enabled = parsedTitles.isNotEmpty(),
@@ -3228,6 +3435,12 @@ fun SettingsDialog(
     onSyncGoogleSheet: () -> Unit,
     onExportLetterboxd: () -> Unit,
     onSimulateResume: () -> Unit,
+    isProUser: Boolean = false,
+    onOpenPaywall: () -> Unit = {},
+    notifyNewAvailability: Boolean = true,
+    onToggleAvailabilityAlerts: (Boolean) -> Unit = {},
+    onTestAvailabilityAlert: () -> Unit = {},
+    onResetOnboarding: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var activeSubTab by remember { mutableStateOf(0) } // 0: Subs, 1: Cloud/Sheet, 2: Fire TV, 3: APIs, 4: AI/Local, 5: Dev
@@ -3294,11 +3507,120 @@ fun SettingsDialog(
                     0 -> {
                         val scrollState = rememberScrollState()
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .verticalScroll(scrollState)
                         ) {
+                            // Pro Subscription Tier Card
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isProUser) Color(0xFFFFD700).copy(alpha = 0.2f)
+                                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Icon(
+                                                imageVector = Icons.Default.Star,
+                                                contentDescription = null,
+                                                tint = if (isProUser) Color(0xFFFF8C00) else MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Text(
+                                                text = if (isProUser) "Streamwise Pro Active" else "Free Tier (Max 2 Services)",
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                        }
+                                        Text(
+                                            text = if (isProUser) "Unlimited services, TV shows, and alerts active." else "Upgrade for unlimited streaming & auto-alerts.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    Button(
+                                        onClick = onOpenPaywall,
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text(if (isProUser) "Manage" else "Upgrade", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            // Availability Alerts Card
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Availability Alerts",
+                                                fontWeight = FontWeight.Bold,
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            Text(
+                                                text = "Alerts when watchlist titles become streamable.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Switch(
+                                            checked = notifyNewAvailability,
+                                            onCheckedChange = onToggleAvailabilityAlerts
+                                        )
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = onTestAvailabilityAlert,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Test Availability Notification", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            // Replay Onboarding Button
+                            OutlinedButton(
+                                onClick = onResetOnboarding,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Re-run First-Time Setup Wizard", fontSize = 12.sp)
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
                             Text(
                                 "Manage Subscriptions",
                                 style = MaterialTheme.typography.titleSmall,
@@ -3309,13 +3631,17 @@ fun SettingsDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             
                             allProviders.forEach { provider ->
                                 ProviderSettingsCard(
                                     provider = provider,
                                     onUpdate = { active, cost, start, end -> 
-                                        onProviderUpdate(provider.id, active, cost, start, end)
+                                        if (!isProUser && active && allProviders.count { it.isActive && it.id != provider.id } >= 2) {
+                                            onOpenPaywall()
+                                        } else {
+                                            onProviderUpdate(provider.id, active, cost, start, end)
+                                        }
                                     }
                                 )
                             }
