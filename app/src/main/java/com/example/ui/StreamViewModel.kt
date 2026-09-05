@@ -167,6 +167,10 @@ class StreamViewModel(
     private val _notifyNewAvailability = MutableStateFlow(userPreferences.notifyNewAvailability)
     val notifyNewAvailability: StateFlow<Boolean> = _notifyNewAvailability.asStateFlow()
 
+    // Beta Feedback FAB Setting
+    private val _enableBetaFeedback = MutableStateFlow(userPreferences.enableBetaFeedback)
+    val enableBetaFeedback: StateFlow<Boolean> = _enableBetaFeedback.asStateFlow()
+
     val filterOnlyMyServicesDefault: Boolean
         get() = userPreferences.filterOnlyMyServicesDefault
 
@@ -174,6 +178,12 @@ class StreamViewModel(
         userPreferences.isProUser = isPro
         _isProUser.value = isPro
         _statusMessage.value = if (isPro) "Streamwise Pro activated! All features unlocked." else "Reverted to Free tier."
+    }
+
+    fun setEnableBetaFeedback(enabled: Boolean) {
+        userPreferences.enableBetaFeedback = enabled
+        _enableBetaFeedback.value = enabled
+        _statusMessage.value = if (enabled) "Beta feedback button enabled." else "Beta feedback button hidden."
     }
 
     fun setNotifyNewAvailability(enabled: Boolean) {
@@ -703,7 +713,10 @@ class StreamViewModel(
 
                 var importedCount = 0
                 if (getConn.responseCode in 200..299) {
-                    val respText = getConn.inputStream.bufferedReader().use { it.readText() }
+                    val respText = getConn.inputStream.bufferedReader().use { it.readText() }.trim()
+                    if (respText.startsWith("<") || respText.startsWith("<!DOCTYPE", ignoreCase = true)) {
+                        throw IllegalStateException("Google Sheet Webhook returned an HTML authentication page. Ensure your Apps Script Web App is deployed with 'Who has access: Anyone'.")
+                    }
                     val json = JSONObject(respText)
                     if (json.optBoolean("success")) {
                         val itemsArray = json.optJSONArray("items")
