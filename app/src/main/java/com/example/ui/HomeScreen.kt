@@ -111,6 +111,7 @@ fun HomeScreen(
         }
     }
 
+    val enableBetaFeedback by viewModel.enableBetaFeedback.collectAsState()
     val showcaseState = remember { ShowcaseState() }
 
     CompositionLocalProvider(LocalShowcaseState provides showcaseState) {
@@ -119,16 +120,20 @@ fun HomeScreen(
                 modifier = modifier.testTag("home_scaffold"),
                 snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
+            var showTopBarOverflow by remember { mutableStateOf(false) }
             TopAppBar(
                 title = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.wrapContentWidth()
                     ) {
                         Text(
                             "Streamwise",
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            softWrap = false
                         )
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -142,7 +147,9 @@ fun HomeScreen(
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Black,
                                 color = if (isProUser) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -158,35 +165,49 @@ fun HomeScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    IconButton(
-                        onClick = { showLetterboxdImportDialog = true },
-                        modifier = Modifier.testTag("import_letterboxd_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AddCircle,
-                            contentDescription = "Import from Letterboxd",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(
-                        onClick = { viewModel.exportToLetterboxdCsv() },
-                        modifier = Modifier.testTag("export_letterboxd_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Export for Letterboxd (CSV)",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    IconButton(
-                        onClick = { showGuideDialog = true },
-                        modifier = Modifier.testTag("guide_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "User Guide",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+                    Box {
+                        IconButton(
+                            onClick = { showTopBarOverflow = true },
+                            modifier = Modifier.testTag("topbar_overflow_menu")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More Options",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showTopBarOverflow,
+                            onDismissRequest = { showTopBarOverflow = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("User Guide") },
+                                leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                                onClick = {
+                                    showTopBarOverflow = false
+                                    showGuideDialog = true
+                                },
+                                modifier = Modifier.testTag("guide_button")
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Import from Letterboxd") },
+                                leadingIcon = { Icon(Icons.Default.AddCircle, contentDescription = null) },
+                                onClick = {
+                                    showTopBarOverflow = false
+                                    showLetterboxdImportDialog = true
+                                },
+                                modifier = Modifier.testTag("import_letterboxd_button")
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Export Letterboxd CSV") },
+                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
+                                onClick = {
+                                    showTopBarOverflow = false
+                                    viewModel.exportToLetterboxdCsv()
+                                },
+                                modifier = Modifier.testTag("export_letterboxd_button")
+                            )
+                        }
                     }
                     IconButton(
                         onClick = { showSettingsDialog = true },
@@ -218,9 +239,12 @@ fun HomeScreen(
                 modifier = Modifier.navigationBarsPadding()
             ) {
                 // Floating Feedback Button (Do-It-Now pipeline)
-                FloatingFeedbackButton(
-                    onClick = { showFeedbackDialog = true }
-                )
+                if (enableBetaFeedback) {
+                    FloatingFeedbackButton(
+                        onClick = { showFeedbackDialog = true },
+                        modifier = if (selectedTab == 3) Modifier.padding(bottom = 76.dp) else Modifier
+                    )
+                }
 
                 if (selectedTab == 0) {
                     ExtendedFloatingActionButton(
@@ -455,6 +479,8 @@ fun HomeScreen(
                     viewModel.resetOnboarding()
                     showSettingsDialog = false
                 },
+                enableBetaFeedback = enableBetaFeedback,
+                onToggleBetaFeedback = { viewModel.setEnableBetaFeedback(it) },
                 onDismiss = { showSettingsDialog = false }
             )
         }
@@ -668,6 +694,7 @@ fun WatchlistTabContent(
     var selectedGenre by remember { mutableStateOf<String?>(null) }
     var runtimeFilter by remember { mutableStateOf<Int?>(null) } // null: All, 90: <90m, 120: <120m
     var mediaTypeFilter by remember { mutableStateOf("ALL") } // "ALL", "MOVIES", "TV", "PODCASTS"
+    var showAdvancedFilters by remember { mutableStateOf(false) }
 
     val allGenres = remember(watchlistItems) {
         watchlistItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
@@ -794,11 +821,11 @@ fun WatchlistTabContent(
         }
         // ... (TMDB Key Warning Box)
 
-        // Search & Sorting controls
+        // 1. Search, Sort, and Filter Panel Toggle Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp),
+                .padding(bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -824,7 +851,7 @@ fun WatchlistTabContent(
 
             // Sort Selector Button
             var sortExpanded by remember { mutableStateOf(false) }
-            Box(modifier = Modifier.weight(1.2f)) {
+            Box(modifier = Modifier.weight(1.1f)) {
                 OutlinedButton(
                     onClick = { sortExpanded = true },
                     modifier = Modifier
@@ -877,143 +904,42 @@ fun WatchlistTabContent(
                     )
                 }
             }
+
+            // Filter Drawer Toggle Button
+            val isCustomFilterActive = selectedPlatformId != null || selectedGenre != null
+            FilledTonalIconButton(
+                onClick = { showAdvancedFilters = !showAdvancedFilters },
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (isCustomFilterActive || showAdvancedFilters) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                ),
+                modifier = Modifier
+                    .size(52.dp)
+                    .testTag("toggle_filters_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.List,
+                    contentDescription = "Toggle extra filters",
+                    tint = if (isCustomFilterActive || showAdvancedFilters) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
-        // Media Type Ribbon (All / Movies / TV Shows / Podcasts)
+        // 2. Unified Quick Filter Ribbon (Single Horizontal Scrollable Row - NO squishing!)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 10.dp)
+                .padding(bottom = 8.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                "Format:",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(end = 4.dp)
-            )
-
             FilterChip(
-                selected = mediaTypeFilter == "ALL",
-                onClick = { mediaTypeFilter = "ALL" },
-                label = { Text("All Media", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "ALL") FontWeight.Bold else FontWeight.Normal) },
-                modifier = Modifier.testTag("filter_media_all")
-            )
-            FilterChip(
-                selected = mediaTypeFilter == "MOVIES",
-                onClick = { mediaTypeFilter = "MOVIES" },
-                label = { Text("🎬 Movies", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "MOVIES") FontWeight.Bold else FontWeight.Normal) },
-                modifier = Modifier.testTag("filter_media_movies")
-            )
-            FilterChip(
-                selected = mediaTypeFilter == "TV",
-                onClick = { mediaTypeFilter = "TV" },
-                label = { Text("📺 TV Shows", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "TV") FontWeight.Bold else FontWeight.Normal) },
-                modifier = Modifier.testTag("filter_media_tv")
-            )
-            FilterChip(
-                selected = mediaTypeFilter == "PODCASTS",
-                onClick = { mediaTypeFilter = "PODCASTS" },
-                label = { Text("🎙️ Podcast Recs", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "PODCASTS") FontWeight.Bold else FontWeight.Normal) },
-                modifier = Modifier.testTag("filter_media_podcasts")
-            )
-            FilterChip(
-                selected = mediaTypeFilter == "RADAR",
-                onClick = { mediaTypeFilter = "RADAR" },
-                label = { Text("🗓️ Release Radar", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "RADAR") FontWeight.Bold else FontWeight.Normal) },
-                modifier = Modifier.testTag("filter_media_radar")
-            )
-        }
-
-        // Hot-Platform Horizontal Ribbon Filter
-        val filterProviders = remember(allProviders) { allProviders.filter { it.isActive || it.costPerMonth == 0.0 } }
-        if (filterProviders.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Services:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-
-                FilterChip(
-                    selected = selectedPlatformId == null,
-                    onClick = { selectedPlatformId = null },
-                    label = { Text("All Platforms", fontSize = 11.sp) }
-                )
-
-                filterProviders.forEach { provider ->
-                    FilterChip(
-                        selected = selectedPlatformId == provider.id,
-                        onClick = {
-                            selectedPlatformId = if (selectedPlatformId == provider.id) null else provider.id
-                        },
-                        label = { Text(provider.name, fontSize = 11.sp) }
-                    )
-                }
-            }
-        }
-
-        // Genre Horizontal Ribbon Filter
-        if (allGenres.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Genres:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-
-                FilterChip(
-                    selected = selectedGenre == null,
-                    onClick = { selectedGenre = null },
-                    label = { Text("All Genres", fontSize = 11.sp) }
-                )
-
-                allGenres.forEach { genre ->
-                    FilterChip(
-                        selected = selectedGenre == genre,
-                        onClick = {
-                            selectedGenre = if (selectedGenre == genre) null else genre
-                        },
-                        label = { Text(genre, fontSize = 11.sp) }
-                    )
-                }
-            }
-        }
-
-        // Filter Selection Pills + Sync button
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilterChip(
-                selected = !filterOnlyMyServices && !showFreeOnly,
+                selected = !filterOnlyMyServices && !showFreeOnly && runtimeFilter == null && mediaTypeFilter == "ALL",
                 onClick = { 
                     onFilterToggle(false)
                     showFreeOnly = false
+                    runtimeFilter = null
+                    mediaTypeFilter = "ALL"
                 },
                 label = { Text("All", fontSize = 11.sp) },
                 modifier = Modifier.testTag("filter_all_chip")
@@ -1042,6 +968,34 @@ fun WatchlistTabContent(
             )
 
             FilterChip(
+                selected = mediaTypeFilter == "MOVIES",
+                onClick = { mediaTypeFilter = if (mediaTypeFilter == "MOVIES") "ALL" else "MOVIES" },
+                label = { Text("🎬 Movies", fontSize = 11.sp) },
+                modifier = Modifier.testTag("filter_media_movies")
+            )
+
+            FilterChip(
+                selected = mediaTypeFilter == "TV",
+                onClick = { mediaTypeFilter = if (mediaTypeFilter == "TV") "ALL" else "TV" },
+                label = { Text("📺 TV", fontSize = 11.sp) },
+                modifier = Modifier.testTag("filter_media_tv")
+            )
+
+            FilterChip(
+                selected = mediaTypeFilter == "PODCASTS",
+                onClick = { mediaTypeFilter = if (mediaTypeFilter == "PODCASTS") "ALL" else "PODCASTS" },
+                label = { Text("🎙️ Podcasts", fontSize = 11.sp) },
+                modifier = Modifier.testTag("filter_media_podcasts")
+            )
+
+            FilterChip(
+                selected = mediaTypeFilter == "RADAR",
+                onClick = { mediaTypeFilter = if (mediaTypeFilter == "RADAR") "ALL" else "RADAR" },
+                label = { Text("🗓️ Radar", fontSize = 11.sp) },
+                modifier = Modifier.testTag("filter_media_radar")
+            )
+
+            FilterChip(
                 selected = runtimeFilter == 90,
                 onClick = { runtimeFilter = if (runtimeFilter == 90) null else 90 },
                 label = { Text("< 90m", fontSize = 11.sp, fontWeight = if (runtimeFilter == 90) FontWeight.Bold else FontWeight.Normal) },
@@ -1066,8 +1020,18 @@ fun WatchlistTabContent(
             )
 
             AssistChip(
+                onClick = {
+                    if (processedItems.isNotEmpty()) {
+                        onMovieClick(processedItems.random())
+                    }
+                },
+                label = { Text("🎲 Surprise Me", fontSize = 11.sp) },
+                modifier = Modifier.testTag("surprise_me_button")
+            )
+
+            AssistChip(
                 onClick = onOpenLetterboxdImport,
-                label = { Text("Letterboxd", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                label = { Text("Letterboxd", fontSize = 11.sp) },
                 leadingIcon = {
                     if (isLetterboxdSyncing) {
                         CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
@@ -1078,42 +1042,105 @@ fun WatchlistTabContent(
                 modifier = Modifier.testTag("watchlist_import_letterboxd_chip")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            IconButton(
-                onClick = {
-                    if (processedItems.isNotEmpty()) {
-                        onMovieClick(processedItems.random())
-                    }
-                },
-                modifier = Modifier
-                    .size(36.dp)
-                    .testTag("surprise_me_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Pick random film from filter",
-                    tint = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
             IconButton(
                 onClick = onSyncClick,
                 modifier = Modifier
-                    .size(36.dp)
+                    .size(32.dp)
                     .testTag("sync_providers_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Sync streaming availability from TMDB",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
 
-        if (runtimeFilter != null || filterOnlyMyServices || showFreeOnly || selectedPlatformId != null || selectedGenre != null) {
+        // 3. Expandable Advanced Filter Panel (Services & Genres)
+        val filterProviders = remember(allProviders) { allProviders.filter { it.isActive || it.costPerMonth == 0.0 } }
+        AnimatedVisibility(
+            visible = showAdvancedFilters,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (filterProviders.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Services:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(end = 4.dp)
+                            )
+                            FilterChip(
+                                selected = selectedPlatformId == null,
+                                onClick = { selectedPlatformId = null },
+                                label = { Text("All Platforms", fontSize = 11.sp) }
+                            )
+                            filterProviders.forEach { provider ->
+                                FilterChip(
+                                    selected = selectedPlatformId == provider.id,
+                                    onClick = { selectedPlatformId = if (selectedPlatformId == provider.id) null else provider.id },
+                                    label = { Text(provider.name, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+                    }
+
+                    if (allGenres.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "Genres:",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(end = 4.dp)
+                            )
+                            FilterChip(
+                                selected = selectedGenre == null,
+                                onClick = { selectedGenre = null },
+                                label = { Text("All Genres", fontSize = 11.sp) }
+                            )
+                            allGenres.forEach { genre ->
+                                FilterChip(
+                                    selected = selectedGenre == genre,
+                                    onClick = { selectedGenre = if (selectedGenre == genre) null else genre },
+                                    label = { Text(genre, fontSize = 11.sp) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Active Filters Summary and Reset Bar
+        val isAnyFilterActive = runtimeFilter != null || filterOnlyMyServices || showFreeOnly || selectedPlatformId != null || selectedGenre != null || mediaTypeFilter != "ALL"
+        if (isAnyFilterActive) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1122,7 +1149,7 @@ fun WatchlistTabContent(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "${processedItems.size} ${if (processedItems.size == 1) "movie" else "movies"} matching filters",
+                    text = "${processedItems.size} ${if (processedItems.size == 1) "title" else "titles"} matching filters",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -1133,6 +1160,7 @@ fun WatchlistTabContent(
                         showFreeOnly = false
                         selectedPlatformId = null
                         selectedGenre = null
+                        mediaTypeFilter = "ALL"
                         onFilterToggle(false)
                     },
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
@@ -1170,7 +1198,8 @@ fun WatchlistTabContent(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = if (mediaTypeFilter == "RADAR") "No Upcoming Releases Tracked Yet"
+                            text = if (watchlistItems.isEmpty()) "Your Watchlist is Empty"
+                                   else if (mediaTypeFilter == "RADAR") "No Upcoming Releases Tracked Yet"
                                    else if (filterOnlyMyServices) "No Titles Available on Your Subscriptions"
                                    else "No titles matching your filter",
                             style = MaterialTheme.typography.titleMedium,
@@ -1179,20 +1208,44 @@ fun WatchlistTabContent(
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = if (mediaTypeFilter == "RADAR") "As returning series premiere dates and digital movie drops are scheduled, they'll appear here automatically."
-                                   else if (filterOnlyMyServices) "Try turning off 'Free to Me' to view all queued titles, or activate suggested services in ROI Stats."
-                                   else "Tap the + button to add movies, TV shows, or podcast recommendations.",
+                            text = if (watchlistItems.isEmpty()) "Add movies or TV shows using the '+' button, or import your Letterboxd watchlist."
+                                   else if (mediaTypeFilter == "RADAR") "As returning series premiere dates and digital movie drops are scheduled, they'll appear here automatically."
+                                   else if (filterOnlyMyServices) "Try turning off 'My Services' to view all queued titles, or activate suggested services in ROI Stats."
+                                   else "Try adjusting your filters or search query.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
-                        if (filterOnlyMyServices && mediaTypeFilter != "RADAR") {
-                            Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
+                        if (watchlistItems.isEmpty()) {
+                            Button(
+                                onClick = onOpenLetterboxdImport,
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Import Letterboxd Watchlist")
+                            }
+                        } else if (filterOnlyMyServices && mediaTypeFilter != "RADAR") {
                             Button(
                                 onClick = { onFilterToggle(false) },
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text("Show All Watchlist Titles")
+                            }
+                        } else if (isAnyFilterActive) {
+                            OutlinedButton(
+                                onClick = {
+                                    runtimeFilter = null
+                                    showFreeOnly = false
+                                    selectedPlatformId = null
+                                    selectedGenre = null
+                                    mediaTypeFilter = "ALL"
+                                    onFilterToggle(false)
+                                },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Reset All Filters")
                             }
                         }
                     }
@@ -1676,27 +1729,26 @@ fun WatchedTabContent(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "${processedItems.size} Titles Logged",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.outline,
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.weight(1f))
-
-            IconButton(onClick = onQuickLogClick) {
-                Icon(Icons.Default.Add, contentDescription = "Quick Log Film", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            }
-
-            IconButton(onClick = onExportLetterboxdClick) {
-                Icon(Icons.Default.Share, contentDescription = "Export Letterboxd CSV", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-            }
-
-            IconButton(onClick = onSyncClick) {
-                Icon(Icons.Default.Refresh, contentDescription = "Sync with Google Sheet", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            if (selectedGenre != null || searchQuery.isNotBlank()) {
+                TextButton(
+                    onClick = {
+                        selectedGenre = null
+                        searchQuery = ""
+                    },
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                ) {
+                    Text("Clear filter", fontSize = 11.sp)
+                }
             }
         }
 
@@ -3437,6 +3489,8 @@ fun SettingsDialog(
     onToggleAvailabilityAlerts: (Boolean) -> Unit = {},
     onTestAvailabilityAlert: () -> Unit = {},
     onResetOnboarding: () -> Unit = {},
+    enableBetaFeedback: Boolean = true,
+    onToggleBetaFeedback: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var activeSubTab by remember { mutableStateOf(0) } // 0: Subs, 1: Cloud/Sheet, 2: Fire TV, 3: APIs, 4: AI/Local, 5: Dev
@@ -4105,6 +4159,32 @@ fun SettingsDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text(
+                                        "Enable Beta Feedback",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "Display floating feedback button on all screens to report issues directly to Jules & Antigravity.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                Switch(
+                                    checked = enableBetaFeedback,
+                                    onCheckedChange = onToggleBetaFeedback,
+                                    modifier = Modifier.testTag("enable_feedback_switch")
+                                )
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
                             OutlinedButton(
                                 onClick = onSimulateResume,
