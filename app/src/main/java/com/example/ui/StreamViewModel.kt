@@ -85,6 +85,22 @@ class StreamViewModel(
     private val _fireTvIp = MutableStateFlow(userPreferences.fireTvIp)
     val fireTvIp: StateFlow<String> = _fireTvIp.asStateFlow()
 
+    // Persisted Gemini API key
+    private val _geminiApiKey = MutableStateFlow(userPreferences.geminiApiKey)
+    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
+
+    // Persisted Letterboxd Username
+    private val _letterboxdUsername = MutableStateFlow(userPreferences.letterboxdUsername)
+    val letterboxdUsername: StateFlow<String> = _letterboxdUsername.asStateFlow()
+
+    // Persisted AI Engine (GEMINI vs OLLAMA)
+    private val _aiEngine = MutableStateFlow(userPreferences.aiEngine)
+    val aiEngine: StateFlow<String> = _aiEngine.asStateFlow()
+
+    // Letterboxd Sync State
+    private val _isLetterboxdSyncing = MutableStateFlow(false)
+    val isLetterboxdSyncing: StateFlow<Boolean> = _isLetterboxdSyncing.asStateFlow()
+
     fun saveTmdbApiKey(key: String) {
         userPreferences.tmdbApiKey = key
         _tmdbApiKey.value = key.trim()
@@ -121,6 +137,24 @@ class StreamViewModel(
         _statusMessage.value = "Fire TV IP saved: $ip"
     }
 
+    fun saveGeminiApiKey(key: String) {
+        userPreferences.geminiApiKey = key
+        _geminiApiKey.value = key.trim()
+        _statusMessage.value = if (key.isBlank()) "Gemini API key cleared." else "Gemini API key saved."
+    }
+
+    fun saveLetterboxdUsername(username: String) {
+        userPreferences.letterboxdUsername = username
+        _letterboxdUsername.value = username.trim().removePrefix("@")
+        _statusMessage.value = "Letterboxd profile saved: @${_letterboxdUsername.value}"
+    }
+
+    fun saveAiEngine(engine: String) {
+        userPreferences.aiEngine = engine
+        _aiEngine.value = engine
+        _statusMessage.value = "AI Engine set to $engine"
+    }
+
     // Casting State
     val discoveredDevices: StateFlow<List<CastDevice>> = CastingManager.discoveredDevices
     val isScanningDevices: StateFlow<Boolean> = CastingManager.isScanning
@@ -143,6 +177,31 @@ class StreamViewModel(
                 providers.forEach { provider ->
                     if (provider.isActive && provider.trialEndDate != null && provider.trialEndDate < now) {
                         repository.updateStreamingProvider(provider.copy(isActive = false))
+                    }
+                }
+            }
+        }
+
+        // Renewal Radar: Evaluate underutilized subscriptions renewing in <= 3 days
+        viewModelScope.launch(Dispatchers.IO) {
+            allProviders.collect { providers ->
+                val active = providers.filter { it.isActive && (it.userCostPerMonth ?: it.costPerMonth) > 0.0 }
+                val roiStats = repository.getCurrentMonthUsageStats().firstOrNull() ?: emptyList()
+                val statsMap = roiStats.associateBy { it.providerId }
+
+                active.forEach { prov ->
+                    val renewal = com.example.data.model.SubscriptionRenewalManager.getRenewalStatus(prov)
+                    if (renewal.isImminent) {
+                        val hours = statsMap[prov.id]?.totalHours ?: 0.0
+                        if (hours < 0.5) {
+                            com.example.ui.NotificationHelper.showRenewalAlert(
+                                context = getApplication(),
+                                providerName = prov.name,
+                                monthlyCost = prov.userCostPerMonth ?: prov.costPerMonth,
+                                hoursWatched = hours,
+                                cancelUrl = renewal.cancelUrl
+                            )
+                        }
                     }
                 }
             }
@@ -260,16 +319,34 @@ class StreamViewModel(
                     Avoid triggering issues for casual praise or general movie questions.
                 """.trimIndent()
 
-                val api = com.example.data.remote.OllamaClient.getApiService(ollamaHost.value)
-                val requestMessages = mutableListOf(com.example.data.remote.OllamaChatMessage("system", systemPrompt))
-                requestMessages.addAll(currentChat)
+                var replyContent: String? = null
+                val currentEngine = aiEngine.value
+                val geminiKey = geminiApiKey.value.ifBlank { com.example.BuildConfig.GEMINI_API_KEY }
 
-                val request = com.example.data.remote.OllamaChatRequest(
-                    messages = requestMessages
-                )
-                val response = api.chat(request)
+                if (currentEngine == UserPreferencesManager.AI_ENGINE_GEMINI && geminiKey.isNotBlank() && geminiKey != "MY_GEMINI_API_KEY") {
+                    val geminiRes = com.example.data.remote.GeminiClient.generateContent(
+                        apiKey = geminiKey,
+                        prompt = userMessage,
+                        systemInstruction = systemPrompt,
+                        chatHistory = currentChat.dropLast(1)
+                    )
+                    replyContent = geminiRes.getOrNull()
+                }
+
+                if (replyContent == null) {
+                    val api = com.example.data.remote.OllamaClient.getApiService(ollamaHost.value)
+                    val requestMessages = mutableListOf(com.example.data.remote.OllamaChatMessage("system", systemPrompt))
+                    requestMessages.addAll(currentChat)
+
+                    val request = com.example.data.remote.OllamaChatRequest(
+                        messages = requestMessages
+                    )
+                    val response = api.chat(request)
+                    replyContent = response.message.content
+                }
                 
-                var replyContent = response.message.content
+                var finalReply = replyContent ?: "Unable to connect to AI engine (Gemini or Ollama)."
+                replyContent = finalReply
                 
                 // --- Agentic Log Persistence (Local Sync) ---
                 logConversationLocally(userMessage, replyContent)
@@ -855,6 +932,108 @@ class StreamViewModel(
                 "Added ${titles.size} titles to watchlist. Matching from TMDB started."
             }
         }
+    }
+
+    /**
+     * 1-Tap Letterboxd Watchlist Ingestion:
+     * Scrapes public Letterboxd profile watchlist and populates Room database.
+     */
+    fun syncLetterboxdWatchlist(targetUsername: String? = null) {
+        val user = targetUsername?.ifBlank { null } ?: letterboxdUsername.value
+        if (user.isBlank()) {
+            _statusMessage.value = "Please enter your Letterboxd username first."
+            return
+        }
+
+        saveLetterboxdUsername(user)
+        _isLetterboxdSyncing.value = true
+        _statusMessage.value = "Syncing @$user's Letterboxd Watchlist..."
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val result = com.example.data.remote.LetterboxdImporter.fetchWatchlist(
+                    username = user,
+                    maxPages = 15,
+                    onProgress = { page, count ->
+                        _statusMessage.value = "Letterboxd sync (page $page): $count movies found..."
+                    }
+                )
+
+                if (result.isSuccess) {
+                    val movies = result.getOrNull() ?: emptyList()
+                    val existing = repository.allMediaItems.first()
+                    val existingTitles = existing.map { it.title.lowercase().trim() }.toSet()
+
+                    var newAdded = 0
+                    movies.forEach { m ->
+                        if (!existingTitles.contains(m.title.lowercase().trim())) {
+                            repository.insertMediaItem(
+                                MediaItem(
+                                    title = m.title,
+                                    releaseYear = m.releaseYear,
+                                    letterboxdUri = m.letterboxdUri,
+                                    status = MediaStatus.WATCHLIST.name,
+                                    importSource = "Letterboxd Sync (@$user)"
+                                )
+                            )
+                            newAdded++
+                        }
+                    }
+
+                    enqueueTmdbSync(showMessage = false)
+                    _statusMessage.value = "Imported $newAdded new titles from @$user's Letterboxd Watchlist!"
+                } else {
+                    val err = result.exceptionOrNull()?.message ?: "Unknown error"
+                    _statusMessage.value = "Letterboxd sync failed: $err"
+                }
+            } catch (e: Exception) {
+                _statusMessage.value = "Letterboxd sync error: ${e.message}"
+            } finally {
+                _isLetterboxdSyncing.value = false
+            }
+        }
+    }
+
+    /**
+     * Ingests movies from Letterboxd CSV text (e.g. watched.csv or watchlist.csv).
+     */
+    fun importLetterboxdCsv(csvContent: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val movies = com.example.data.remote.LetterboxdImporter.parseLetterboxdCsv(csvContent)
+                val existing = repository.allMediaItems.first()
+                val existingTitles = existing.map { it.title.lowercase().trim() }.toSet()
+
+                var added = 0
+                movies.forEach { m ->
+                    if (!existingTitles.contains(m.title.lowercase().trim())) {
+                        repository.insertMediaItem(
+                            MediaItem(
+                                title = m.title,
+                                releaseYear = m.releaseYear,
+                                letterboxdUri = m.letterboxdUri,
+                                status = MediaStatus.WATCHLIST.name,
+                                importSource = "Letterboxd CSV"
+                            )
+                        )
+                        added++
+                    }
+                }
+
+                enqueueTmdbSync(showMessage = false)
+                _statusMessage.value = "Imported $added movies from Letterboxd CSV!"
+            } catch (e: Exception) {
+                _statusMessage.value = "CSV import error: ${e.message}"
+            }
+        }
+    }
+
+    /**
+     * Opens official provider cancellation webpage directly in browser/Chrome Custom Tabs.
+     */
+    fun openProviderCancellation(context: android.content.Context, providerId: String) {
+        com.example.data.model.SubscriptionRenewalManager.openCancellationPage(context, providerId)
+        _statusMessage.value = "Opening cancellation page for $providerId..."
     }
 
     /**

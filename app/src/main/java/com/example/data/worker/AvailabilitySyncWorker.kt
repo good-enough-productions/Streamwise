@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import com.example.StreamApp
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
+import com.example.data.local.UserPreferencesManager
 import com.example.data.remote.OllamaChatMessage
 import com.example.data.remote.OllamaChatRequest
 import com.example.data.remote.OllamaClient
@@ -203,21 +204,64 @@ class AvailabilitySyncWorker(
                             val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
                             val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
 
-                            // Synthesis 2.0: Use local Ollama (Gemma) for personalized research
-                            val localSynthesis = generatePersonalizedSynthesis(
-                                host = ollamaHost,
-                                movieTitle = item.title,
-                                overview = syncedOverview,
-                                keywords = topKeywords,
-                                cast = topCast,
-                                history = historySummary
-                            )
+                            // Synthesis 2.0: Cloud-native Gemini 2.0 Flash or local Ollama (Gemma)
+                            val geminiKey = (userPrefs?.geminiApiKey ?: "").ifBlank { com.example.BuildConfig.GEMINI_API_KEY }
+                            val useGemini = (userPrefs?.aiEngine ?: UserPreferencesManager.AI_ENGINE_GEMINI) == UserPreferencesManager.AI_ENGINE_GEMINI && 
+                                            geminiKey.isNotBlank() && geminiKey != "MY_GEMINI_API_KEY"
 
-                            if (localSynthesis != null) {
-                                syncedTrivia = localSynthesis
-                                Log.d(TAG, "Local LLM Synthesis successful for \"${item.title}\"")
+                            var aiSynthesis: String? = null
+                            if (useGemini) {
+                                val prompt = """
+                                    You are an advanced cinematic research agent called "Olivia". 
+                                    Generate a structured research card for the movie: "${item.title}".
+                                    
+                                    Context provided:
+                                    - Overview: $syncedOverview
+                                    - Keywords: $topKeywords
+                                    - Cast: $topCast
+                                    - User's Watch History: $historySummary
+                                    
+                                    Format your response EXACTLY as a Markdown YAML card like this:
+                                    ---
+                                    focus_topics: "[List 3-5 main themes]"
+                                    featured_cast: "$topCast"
+                                    personal_relevance_score: "[Score 1-10 based on history]"
+                                    ---
+                                    
+                                    ### Why this belongs on your Watchlist:
+                                    - Cultural Impact: [Brief summary of themes]
+                                    - Historical Connection: [Connect this movie to 1-2 titles from the user's watch history if possible]
+                                    - Smart Sourcing: [Final recommendation punchline]
+                                    
+                                    Be concise, professional, and use a technical, "deep-wiki" tone.
+                                """.trimIndent()
+
+                                val geminiRes = com.example.data.remote.GeminiClient.generateContent(
+                                    apiKey = geminiKey,
+                                    prompt = prompt
+                                )
+                                aiSynthesis = geminiRes.getOrNull()
+                                if (aiSynthesis != null) {
+                                    Log.d(TAG, "Gemini 2.0 Flash Synthesis successful for \"${item.title}\"")
+                                }
+                            }
+
+                            if (aiSynthesis == null) {
+                                aiSynthesis = generatePersonalizedSynthesis(
+                                    host = ollamaHost,
+                                    movieTitle = item.title,
+                                    overview = syncedOverview,
+                                    keywords = topKeywords,
+                                    cast = topCast,
+                                    history = historySummary
+                                )
+                            }
+
+                            if (aiSynthesis != null) {
+                                syncedTrivia = aiSynthesis
+                                Log.d(TAG, "AI Synthesis successful for \"${item.title}\"")
                             } else {
-                                // Fallback to basic template if Ollama is offline
+                                // Fallback to basic template if offline
                                 syncedTrivia = """
                                     ---
                                     focus_topics: "$topKeywords"
@@ -230,7 +274,7 @@ class AvailabilitySyncWorker(
                                     - Talent Profile: Features notable performances by $topCast.
                                     - Smart Sourcing: Cross-referenced with history summary: $historySummary.
                                 """.trimIndent()
-                                Log.d(TAG, "Ollama offline. Using basic template synthesis for \"${item.title}\"")
+                                Log.d(TAG, "AI engines offline. Using basic template synthesis for \"${item.title}\"")
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "Synthesis Agent failed for \"${item.title}\": ${e.message}")
