@@ -313,29 +313,29 @@ fun HomeScreen(
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("ROI Stats", fontSize = 11.sp) },
-                    icon = { Icon(Icons.Default.Star, contentDescription = "ROI stats tab") },
+                    text = { Text("My Services", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.Subscriptions, contentDescription = "My Services tab") },
                     modifier = Modifier
                         .testTag("tab_budget")
                         .showcaseTarget(
                             "roi_tab", 
-                            "Budget & ROI Tracker", 
-                            "Displays a dashboard of your monthly streaming burn rate. It calculates the cost per hour of each service based on your watch history.",
-                            "Use this at the end of the month to identify 'Cancel Candidates' (services you aren't using enough) and save money."
+                            "Services & Spend", 
+                            "Displays your active streaming subscriptions, monthly spend, and hours watched.",
+                            "Use this to manage active channels, monitor renewal dates, and optimize your monthly streaming costs."
                         )
                 )
                 Tab(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
-                    text = { Text("Agent", fontSize = 11.sp) },
-                    icon = { Icon(Icons.Default.Person, contentDescription = "AI Agent tab") },
+                    text = { Text("Olivia AI", fontSize = 11.sp) },
+                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Olivia AI tab") },
                     modifier = Modifier
                         .testTag("tab_agent")
                         .showcaseTarget(
                             "agent_tab", 
-                            "Private AI Chatbot", 
-                            "Connects directly to your home Ollama server (e.g. llama3) to provide completely private, localized recommendations without sending your data to the cloud.",
-                            "Use this when you have no idea what to watch and want hyper-specific suggestions, like 'a 90s thriller on Hulu under 2 hours'."
+                            "Olivia AI Concierge", 
+                            "Your personal streaming concierge powered by Gemini 2.0 Flash or local Ollama.",
+                            "Ask hyper-specific questions like 'What should I watch tonight on Criterion?'"
                         )
                 )
             }
@@ -588,8 +588,8 @@ fun HomeScreen(
             val currentTabName = when (selectedTab) {
                 0 -> "Watchlist"
                 1 -> "Watched History"
-                2 -> "ROI Stats"
-                3 -> "Olivia Agent Chat"
+                2 -> "My Services"
+                3 -> "Olivia AI Chat"
                 else -> "Main"
             }
             FeedbackDialog(
@@ -1210,7 +1210,7 @@ fun WatchlistTabContent(
                         Text(
                             text = if (watchlistItems.isEmpty()) "Add movies or TV shows using the '+' button, or import your Letterboxd watchlist."
                                    else if (mediaTypeFilter == "RADAR") "As returning series premiere dates and digital movie drops are scheduled, they'll appear here automatically."
-                                   else if (filterOnlyMyServices) "Try turning off 'My Services' to view all queued titles, or activate suggested services in ROI Stats."
+                                   else if (filterOnlyMyServices) "Try turning off 'My Services' to view all queued titles, or activate suggested services in the My Services tab."
                                    else "Try adjusting your filters or search query.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
