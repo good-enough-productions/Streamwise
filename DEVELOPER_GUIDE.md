@@ -13,20 +13,23 @@ Streamwise is a native Android application built entirely with **Kotlin** and **
      - `WatchSession`: Every time an item is checked off or watched on TV, a session is logged to track hours spent on a given platform.
    - **MediaDao.kt**: Contains Room queries, monthly usage aggregations (`getMonthlyUsageStats`), and custom provider deletions.
 
-2. **Network, TV Companion & Cloud Sync**
+2. **Network, TV Companion, Cloud AI & Ingestion**
    - **TMDB & Watchmode**: Resolves title metadata, exact runtimes in minutes (`GET /movie/{id}`), release dates, and streaming availability across major and FAST providers in `AvailabilitySyncWorker.kt`.
+   - **Letterboxd Watchlist Crawler & CSV Parser (`LetterboxdImporter.kt`)**: Scrapes public Letterboxd profile pages (`letterboxd.com/{username}/watchlist/page/{n}/`) directly with 1 tap, parsing film posters, slugs, and titles with zero API key dependencies. Also parses exported `watched.csv` and `watchlist.csv` files.
+   - **Cloud-Native AI Advisor (`GeminiClient.kt`)**: Native REST HTTP client for Google's `gemini-2.0-flash` model. Operates at ~$0.015/user/month unit economics for instant conversational recommendations and pre-watch cultural synthesis, bypassing local Ollama server dependencies.
+   - **Renewal Radar & 1-Click Cancellation (`SubscriptionRenewalManager.kt`)**: Maintains verified deep-link cancellation URLs for 12+ providers (Netflix, Max, Disney+, Hulu, Paramount+, Criterion, Apple, Prime, Peacock). Computes days-until-renewal, fires proactive notification alerts, and renders direct 1-tap browser intent launchers.
    - **Native TV Companion (`TvCompanionService.kt`)**: An embedded lightweight HTTP server listening on port 8998 with `BootReceiver.kt` and screen wake-lock capabilities. Receives JSON launch payloads (`/launch`) and initiates native Fire OS package activities (Netflix `com.netflix.ninja`, Disney+ `com.disney.disneyplus`, Hulu, Prime Video, Tubi, Pluto, etc.) or universal search.
-   - **Deep-Link Relay (`FireTvRelay.kt`)**: Communicates with `TvCompanionService` over Wi-Fi, returning detailed confirmation messages (e.g. `🎬 Playing "Inside Out 2" on Danny's Fire TV via Disney+!`) and fallback warnings.
+   - **Deep-Link Relay (`FireTvRelay.kt`)**: Communicates with `TvCompanionService` over Wi-Fi, returning detailed confirmation messages and fallback warnings.
    - **Hybrid Subnet Sweep TV Discovery**: `CastingManager.kt` performs a concurrent TCP port sweep (5555, 8008, 8009, 8998) across the local `/24` subnet on startup, bypassing router multicast isolation to identify Fire TVs (*Danny's Fire TV*) and Google Cast devices in < 200ms with real-time UI scan progress.
-   - **Watch Hub & TV Connect**: `WatchActionSheet.kt` always renders the TV playback card. If multicast discovery is restricted, an interactive **TV Connect Dialog** provides 1-tap subnet scanning or manual IP input with instant persistence. Also includes **Universal Cast** via Android system picker.
-   - **Master Google Sheet Cloud Ledger**: Serverless Google Apps Script webhook deployed at `https://script.google.com/macros/s/AKfycbwTFjzb2NgW_Py8dhNTWY1Qen9y4D93yG0NUvzhkm1jzKfCz_gE01WQryMcNThfSXEKqQ/exec` (`UserPreferencesManager.DEFAULT_GOOGLE_SHEET_WEBHOOK_URL`) providing two-way sync for watchlist, ratings, and podcast recommendation ingestion.
+   - **Watch Hub & TV Connect**: `WatchActionSheet.kt` renders TV playback card, interactive **TV Connect Dialog**, and **Universal Cast** via Android system picker.
+   - **Master Google Sheet Cloud Ledger**: Serverless Google Apps Script webhook providing two-way sync for watchlist, ratings, and podcast recommendation ingestion.
 
 3. **UI (Jetpack Compose)**
    - **HomeScreen.kt**: Monolithic navigation and screen layout:
-     - *Watchlist Tab (0)*: Filtered by "Free to Me" and duration chips (`< 90m`, `< 120m`) with live match counter and "Clear all filters" button. Duration sorting ("Shortest Duration"). Features **Instant Undo** via an animated top banner and Snackbar action whenever a title is removed.
+     - *Watchlist Tab (0)*: Filtered by "Free to Me" and duration chips (`< 90m`, `< 120m`). Features **1-Tap Letterboxd Import**, **Instant Undo** on deletion, live match counter, and Olivia's pre-watch synthesis.
      - *Watched Vault Tab (1)*: Viewing diary with personal ratings, rewatch badges, and 1-tap Letterboxd CSV export.
-     - *ROI Churn & Budget Tab (2)*: Dual mode view featuring **🎯 Watchlist Match** (ranking services by available watchlist titles, "Best Opportunity to Subscribe" and "Safe to Pause" banners, preview chips) and **📊 Spend & Usage** (burn rate, cost/hour, cancel candidates).
-     - *Agent Chat Tab (3)*: Local AI assistant (Olivia).
+     - *ROI Churn & Renewal Radar Tab (2)*: Dual mode view featuring **🎯 Watchlist Match** (ranking services by available watchlist titles, "Best Opportunity to Subscribe", "Safe to Pause" banners, **Renewal Radar** countdown badges, and **1-Click Official Cancellation** links) and **📊 Spend & Usage** (burn rate, cost/hour, cancel candidates).
+     - *Agent Chat Tab (3)*: Conversational AI assistant (Olivia) routed through Gemini 2.0 Flash or local Ollama.
    - **SubscriptionEditSheet.kt & AddServiceDialog.kt**: Modal pricing presets, trial expiration tracker, and custom provider additions.
    - **QuickLogDialog.kt**: 0.5–5.0 star selector, rewatches, and notes.
    - **FeedbackDialog.kt**: Floating FAB on every screen that captures Compose screenshots, gathers device diagnostics, and creates GitHub issues labeled `jules-triage`.

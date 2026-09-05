@@ -52,13 +52,14 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 ## 🎬 Master the Interface
 
 ### The 4 Main Tabs
-1. **Watchlist (Queue):** Your unified movie and TV queue. Features **Instant Undo** (recovers accidentally deleted movies via an animated top banner and Snackbar action), **"Free to Me"** filter to hide paywalls, **Duration Chips** (`< 90m`, `< 120m`) and **Duration Sorting** ("Shortest Duration") powered by exact TMDB movie runtime metadata, live matching filter counts with "Clear all filters", and Olivia's synthesized cultural trivia and pre-watch notes.
-2. **Watched (The Vault):** Your personal viewing diary. Tap any title to log a **0.5–5.0 star rating**, mark rewatches, and attribute subscriptions. Tap **"Export to Letterboxd"** for a 1-tap CSV export in standard Letterboxd format (`Downloads/letterboxd_import.csv`).
-3. **ROI Stats (Churn Optimizer & Budget):**
+1. **Watchlist (Queue):** Your unified movie and TV queue. Features **1-Tap Letterboxd Import** (zero-API-key public profile crawler & CSV parser), **Instant Undo** (recovers accidentally deleted movies via animated banner), **"Free to Me"** filter to hide paywalls, **Duration Chips** (`< 90m`, `< 120m`) and **Duration Sorting** ("Shortest Duration") powered by exact TMDB movie runtime metadata, live matching filter counts, and Olivia's synthesized cultural trivia.
+2. **Watched (The Vault):** Your personal viewing diary. Tap any title to log a **0.5–5.0 star rating**, mark rewatches, and attribute subscriptions. Full two-way compatibility with **Letterboxd Import & Export** (`Downloads/letterboxd_import.csv`).
+3. **ROI Stats (Churn Optimizer & Renewal Radar):**
    - **🎯 Watchlist Match Mode:** Ranks every streaming service by how many movies on your Watchlist are currently streaming on them. Features **"Best Opportunity to Subscribe"** and **"Safe to Pause"** opportunity banners, cost-per-movie metrics, and expandable movie title preview chips.
+   - **⚡ Renewal Radar & 1-Click Cancellation:** Displays proactive countdown badges (e.g. *Renews in 3 days*) before billing cycles, with single-tap direct deep-links into official cancellation management portals (Netflix, Max, Disney+, Hulu, Paramount+, Criterion, Apple TV+, Prime, Peacock).
    - **📊 Spend & Usage Mode:** Real-time monthly burn rate calculations, hours watched, cost-per-hour efficiency, and underutilized subscription cancel candidate alerts.
    - **Quick Subscriptions Ribbon & Edit Sheet:** 1-tap active/paused toggle, price presets (`$0 Free`, `$5.99`, `$7.99`, `$9.99`, `$13.99`, `$15.49`, `$19.99`, `$22.99`), auto-expiring free trial countdowns, and a `+ Add Service` modal.
-4. **Agent (Chat):** Speak directly with Olivia for recommendations, trivia, or feature planning.
+4. **Agent (Olivia):** Powered by **Google Gemini 2.0 Flash** for sub-second cloud-native recommendations and streaming synthesis (~$0.015/user/mo unit economics), with optional toggle to private local Ollama in Settings. Speak directly with Olivia for recommendations, trivia, or feature planning.
 
 ### 📺 Native TV Companion, Auto-Discovery & "Watch Now" Hub
 - **Zero-Latency Fire TV Companion (`TvCompanionService`):** Runs an embedded HTTP receiver on port 8998 on your Fire TV or Android TV. When you tap **"Play on Fire TV"** from the phone, it wakes the TV via screen wake-lock and natively launches the installed streaming app (Netflix, Disney+, Hulu, Prime Video, Tubi, Pluto TV, YouTube) with a search query for the movie, while automatically starting your watch timer.

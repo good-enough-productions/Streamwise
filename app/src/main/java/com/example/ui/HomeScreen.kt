@@ -39,10 +39,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.example.data.local.ProviderUsageStats
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
 import com.example.data.model.StreamingProvider
+import com.example.data.model.SubscriptionRenewalManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +64,10 @@ fun HomeScreen(
     val googleSheetWebhookUrl by viewModel.googleSheetWebhookUrl.collectAsState()
     val fireTvIp by viewModel.fireTvIp.collectAsState()
     val githubToken by viewModel.githubToken.collectAsState()
+    val geminiApiKey by viewModel.geminiApiKey.collectAsState()
+    val letterboxdUsername by viewModel.letterboxdUsername.collectAsState()
+    val aiEngine by viewModel.aiEngine.collectAsState()
+    val isLetterboxdSyncing by viewModel.isLetterboxdSyncing.collectAsState()
     val recentlyDeletedItem by viewModel.recentlyDeletedItem.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -75,6 +83,7 @@ fun HomeScreen(
     var showFeedbackDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
+    var showLetterboxdImportDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
     var editingProvider by remember { mutableStateOf<StreamingProvider?>(null) }
     var showAddServiceDialog by remember { mutableStateOf(false) }
@@ -122,6 +131,16 @@ fun HomeScreen(
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Sync with Google Sheet",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(
+                        onClick = { showLetterboxdImportDialog = true },
+                        modifier = Modifier.testTag("import_letterboxd_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AddCircle,
+                            contentDescription = "Import from Letterboxd",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -289,6 +308,8 @@ fun HomeScreen(
                         onWatchClick = { watchActionItem = it },
                         onDeleteClick = { viewModel.deleteItem(it) },
                         onSyncClick = { viewModel.syncWithGoogleSheet() },
+                        onOpenLetterboxdImport = { showLetterboxdImportDialog = true },
+                        isLetterboxdSyncing = isLetterboxdSyncing,
                         tmdbApiKey = tmdbApiKey,
                         onOpenSettings = { showSettingsDialog = true },
                         onMovieClick = { detailMovieItem = it },
@@ -318,7 +339,8 @@ fun HomeScreen(
                         onToggleProvider = { id, active -> viewModel.toggleStreamingProvider(id, active) },
                         onEditProvider = { editingProvider = it },
                         onAddServiceClick = { showAddServiceDialog = true },
-                        onMovieClick = { detailMovieItem = it }
+                        onMovieClick = { detailMovieItem = it },
+                        onOpenCancellation = { id -> viewModel.openProviderCancellation(context, id) }
                     )
                     3 -> {
                         val chatMessages by viewModel.chatMessages.collectAsState()
@@ -380,6 +402,14 @@ fun HomeScreen(
                 onSaveWatchmodeApiKey = { viewModel.saveWatchmodeApiKey(it) },
                 ollamaHost = ollamaHost,
                 onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
+                geminiApiKey = geminiApiKey,
+                onSaveGeminiApiKey = { viewModel.saveGeminiApiKey(it) },
+                letterboxdUsername = letterboxdUsername,
+                onSaveLetterboxdUsername = { viewModel.saveLetterboxdUsername(it) },
+                aiEngine = aiEngine,
+                onSaveAiEngine = { viewModel.saveAiEngine(it) },
+                onSyncLetterboxd = { viewModel.syncLetterboxdWatchlist() },
+                isLetterboxdSyncing = isLetterboxdSyncing,
                 githubToken = githubToken,
                 onSaveGithubToken = { viewModel.saveGithubToken(it) },
                 googleSheetWebhookUrl = googleSheetWebhookUrl,
@@ -390,6 +420,18 @@ fun HomeScreen(
                 onExportLetterboxd = { viewModel.exportToLetterboxdCsv() },
                 onSimulateResume = simulateForegroundReturn,
                 onDismiss = { showSettingsDialog = false }
+            )
+        }
+
+        // Letterboxd Import Dialog
+        if (showLetterboxdImportDialog) {
+            LetterboxdImportDialog(
+                username = letterboxdUsername,
+                isSyncing = isLetterboxdSyncing,
+                onSaveUsername = { viewModel.saveLetterboxdUsername(it) },
+                onSyncWeb = { viewModel.syncLetterboxdWatchlist(it) },
+                onImportCsv = { viewModel.importLetterboxdCsv(it) },
+                onDismiss = { showLetterboxdImportDialog = false }
             )
         }
         
@@ -547,6 +589,8 @@ fun WatchlistTabContent(
     onWatchClick: (MediaItem) -> Unit,
     onDeleteClick: (MediaItem) -> Unit,
     onSyncClick: () -> Unit = {},
+    onOpenLetterboxdImport: () -> Unit = {},
+    isLetterboxdSyncing: Boolean = false,
     tmdbApiKey: String,
     onOpenSettings: () -> Unit,
     onMovieClick: (MediaItem) -> Unit,
@@ -908,6 +952,19 @@ fun WatchlistTabContent(
                     }
                 },
                 modifier = Modifier.testTag("filter_runtime_120_chip")
+            )
+
+            AssistChip(
+                onClick = onOpenLetterboxdImport,
+                label = { Text("Letterboxd", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                leadingIcon = {
+                    if (isLetterboxdSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(14.dp))
+                    }
+                },
+                modifier = Modifier.testTag("watchlist_import_letterboxd_chip")
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -1543,7 +1600,8 @@ fun MonthlyRoiContent(
     onToggleProvider: (String, Boolean) -> Unit,
     onEditProvider: (StreamingProvider) -> Unit,
     onAddServiceClick: () -> Unit,
-    onMovieClick: (MediaItem) -> Unit
+    onMovieClick: (MediaItem) -> Unit,
+    onOpenCancellation: (String) -> Unit = {}
 ) {
     var selectedViewTab by remember { mutableStateOf(RoiViewTab.WATCHLIST_OPTIMIZER) }
     var filterMode by remember { mutableStateOf("ALL") } // ALL, ACTIVE, INACTIVE
@@ -1713,6 +1771,7 @@ fun MonthlyRoiContent(
             if (topSafeToPause != null) {
                 item {
                     val price = topSafeToPause.provider.userCostPerMonth ?: topSafeToPause.provider.costPerMonth
+                    val renewalDays = SubscriptionRenewalManager.getDaysUntilRenewal(topSafeToPause.provider)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
@@ -1740,12 +1799,22 @@ fun MonthlyRoiContent(
                                         Text("↓", color = MaterialTheme.colorScheme.onError, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
-                                Text(
-                                    "Safe to Pause: ${topSafeToPause.provider.name}",
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onErrorContainer
-                                )
+                                Column {
+                                    Text(
+                                        "Safe to Pause: ${topSafeToPause.provider.name}",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                    )
+                                    if (renewalDays != null) {
+                                        Text(
+                                            "Renews in $renewalDays days · Pause before next charge!",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
                             Text(
                                 "Only ${topSafeToPause.count} movie on your watchlist is on ${topSafeToPause.provider.name}. Pause this subscription to save $${String.format("%.2f", price)}/mo.",
@@ -1754,13 +1823,23 @@ fun MonthlyRoiContent(
                             )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
+                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedButton(
                                     onClick = { onToggleProvider(topSafeToPause.provider.id, false) },
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("Pause ${topSafeToPause.provider.name}", fontWeight = FontWeight.Bold)
+                                    Text("Mark Paused", fontWeight = FontWeight.SemiBold)
+                                }
+                                Button(
+                                    onClick = { onOpenCancellation(topSafeToPause.provider.id) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Pause 1-Click (Official)", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -1876,12 +1955,16 @@ fun MonthlyRoiContent(
                                             )
                                         }
                                     }
+                                    val renewalDays = if (provider.isActive) SubscriptionRenewalManager.getDaysUntilRenewal(provider) else null
+                                    val isImminentRenewal = renewalDays != null && renewalDays <= 3
                                     Text(
                                         text = if (effectiveCost == 0.0) "Free with ads"
                                                else "$${String.format("%.2f", effectiveCost)}/mo" +
-                                                    (coverage.costPerTitle?.let { " · $${String.format("%.2f", it)} / movie" } ?: ""),
+                                                    (coverage.costPerTitle?.let { " · $${String.format("%.2f", it)} / movie" } ?: "") +
+                                                    (renewalDays?.let { " · Renews in ${it}d" } ?: ""),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
+                                        color = if (isImminentRenewal) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                                        fontWeight = if (isImminentRenewal) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
 
@@ -1902,6 +1985,18 @@ fun MonthlyRoiContent(
                                     }
 
                                     if (provider.isActive) {
+                                        IconButton(
+                                            onClick = { onOpenCancellation(provider.id) },
+                                            modifier = Modifier.size(32.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = "Official Cancellation Page",
+                                                modifier = Modifier.size(16.dp),
+                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
+                                            )
+                                        }
+
                                         Switch(
                                             checked = true,
                                             onCheckedChange = { onToggleProvider(provider.id, false) }
@@ -2942,6 +3037,168 @@ fun ProviderSelector(
 }
 
 // ==========================================
+// COMPOSABLE: Letterboxd Import Dialog
+// ==========================================
+@Composable
+fun LetterboxdImportDialog(
+    username: String,
+    isSyncing: Boolean,
+    onSaveUsername: (String) -> Unit,
+    onSyncWeb: (String) -> Unit,
+    onImportCsv: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var inputUsername by remember(username) { mutableStateOf(username) }
+    val context = LocalContext.current
+    val csvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            try {
+                val text = context.contentResolver.openInputStream(it)?.bufferedReader().use { reader ->
+                    reader?.readText()
+                }
+                if (!text.isNullOrBlank()) {
+                    onImportCsv(text)
+                    onDismiss()
+                }
+            } catch (e: Exception) {
+                // Handled in ViewModel
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!isSyncing) onDismiss() },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Import from Letterboxd", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    "Import your public Letterboxd watchlist directly with 1 tap, or upload an exported CSV file.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                // Option 1: Live Web Sync
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "Option 1: 1-Tap Public Sync (No Key Required)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Enter your Letterboxd username to crawl your public watchlist pages automatically.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        OutlinedTextField(
+                            value = inputUsername,
+                            onValueChange = { inputUsername = it },
+                            label = { Text("Letterboxd Username") },
+                            placeholder = { Text("e.g. your_username") },
+                            singleLine = true,
+                            enabled = !isSyncing,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Button(
+                            onClick = {
+                                val clean = inputUsername.trim().removePrefix("@")
+                                if (clean.isNotBlank()) {
+                                    onSaveUsername(clean)
+                                    onSyncWeb(clean)
+                                }
+                            },
+                            enabled = !isSyncing && inputUsername.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Syncing Watchlist...")
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Sync Live Watchlist", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                // Option 2: CSV File Import
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "Option 2: Import CSV File",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            "Upload a watchlist.csv or watched.csv exported from your Letterboxd account settings.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+
+                        OutlinedButton(
+                            onClick = { csvLauncher.launch("*/*") },
+                            enabled = !isSyncing,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Select CSV File", fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isSyncing
+            ) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+// ==========================================
 // COMPOSABLE: Settings Dialog
 // ==========================================
 @Composable
@@ -2954,6 +3211,14 @@ fun SettingsDialog(
     onSaveWatchmodeApiKey: (String) -> Unit,
     ollamaHost: String,
     onSaveOllamaHost: (String) -> Unit,
+    geminiApiKey: String,
+    onSaveGeminiApiKey: (String) -> Unit,
+    letterboxdUsername: String,
+    onSaveLetterboxdUsername: (String) -> Unit,
+    aiEngine: String,
+    onSaveAiEngine: (String) -> Unit,
+    onSyncLetterboxd: () -> Unit = {},
+    isLetterboxdSyncing: Boolean = false,
     githubToken: String,
     onSaveGithubToken: (String) -> Unit,
     googleSheetWebhookUrl: String,
@@ -3244,14 +3509,65 @@ fun SettingsDialog(
                                     }
                                 }
                             }
+
+                            // Letterboxd Section
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Letterboxd Watchlist Sync", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("No API key required. Streamwise crawls public Letterboxd watchlists with 1 tap.", style = MaterialTheme.typography.bodySmall)
+
+                                    var lbInput by remember(letterboxdUsername) { mutableStateOf(letterboxdUsername) }
+                                    OutlinedTextField(
+                                        value = lbInput,
+                                        onValueChange = { lbInput = it },
+                                        label = { Text("Letterboxd Username") },
+                                        placeholder = { Text("e.g. username") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = { onSaveLetterboxdUsername(lbInput) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("Save Profile", fontSize = 12.sp)
+                                        }
+
+                                        FilledTonalButton(
+                                            onClick = onSyncLetterboxd,
+                                            enabled = !isLetterboxdSyncing && lbInput.isNotBlank(),
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            if (isLetterboxdSyncing) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Text("Sync Watchlist", fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     4 -> {
                         val context = LocalContext.current
                         var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
+                        var geminiInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
+                        var showGeminiKey by remember { mutableStateOf(false) }
                         var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
                         var showToken by remember { mutableStateOf(false) }
                         val scrollState = rememberScrollState()
+                        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                         
                         // Founder's Manual Loader
                         val manualHtml = remember {
@@ -3269,33 +3585,120 @@ fun SettingsDialog(
                                 .verticalScroll(scrollState)
                         ) {
                             Text(
-                                "Local AI Synthesis (Ollama)",
+                                "AI Intelligence Engine (Olivia)",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Synthesis 2.0 uses your local Ollama instance (Gemma 4) to analyze watch history for personalized research.",
+                                "Choose between ultra-fast Cloud AI (Gemini 2.0 Flash) or local private AI (Ollama).",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            OutlinedTextField(
-                                value = hostInput,
-                                onValueChange = { hostInput = it },
-                                label = { Text("Ollama Host IP") },
-                                placeholder = { Text("e.g. 192.168.1.100") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Button(
-                                onClick = { onSaveOllamaHost(hostInput) },
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Save Ollama Host")
+                                FilterChip(
+                                    selected = aiEngine != "OLLAMA",
+                                    onClick = { onSaveAiEngine("GEMINI") },
+                                    label = { Text("Gemini 2.0 Flash", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                    leadingIcon = { if (aiEngine != "OLLAMA") Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                                FilterChip(
+                                    selected = aiEngine == "OLLAMA",
+                                    onClick = { onSaveAiEngine("OLLAMA") },
+                                    label = { Text("Local Ollama", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                                    leadingIcon = { if (aiEngine == "OLLAMA") Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            if (aiEngine != "OLLAMA") {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("Google Gemini 2.0 Flash (Cloud-Native)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            "Cloud streaming advisor & conversational recommendations. Instant response times with no local server required (~$0.01/mo unit economics).",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+
+                                        OutlinedTextField(
+                                            value = geminiInput,
+                                            onValueChange = { geminiInput = it },
+                                            label = { Text("Gemini API Key (BYOK)") },
+                                            placeholder = { Text("AIzaSy...") },
+                                            singleLine = true,
+                                            visualTransformation = if (showGeminiKey) VisualTransformation.None else PasswordVisualTransformation(),
+                                            trailingIcon = {
+                                                IconButton(onClick = { showGeminiKey = !showGeminiKey }) {
+                                                    Icon(
+                                                        imageVector = if (showGeminiKey) Icons.Default.Clear else Icons.Default.Search,
+                                                        contentDescription = null
+                                                    )
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Button(
+                                            onClick = { onSaveGeminiApiKey(geminiInput) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Save Gemini Key", fontSize = 12.sp)
+                                        }
+
+                                        TextButton(
+                                            onClick = { uriHandler.openUri("https://aistudio.google.com/apikey") },
+                                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                                        ) {
+                                            Text("Get free API Key at Google AI Studio ↗", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            } else {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Text("Local Ollama Server", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            "Private, offline AI running on your local home network (e.g. Gemma 4).",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+
+                                        OutlinedTextField(
+                                            value = hostInput,
+                                            onValueChange = { hostInput = it },
+                                            label = { Text("Ollama Host IP") },
+                                            placeholder = { Text("e.g. 192.168.1.100") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Button(
+                                            onClick = { onSaveOllamaHost(hostInput) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Save Ollama Host", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
                             }
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
