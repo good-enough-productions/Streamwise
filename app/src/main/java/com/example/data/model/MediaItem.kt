@@ -52,7 +52,12 @@ data class MediaItem(
     val totalSeasons: Int? = null,
     val totalEpisodes: Int? = null,
     val lastWatchedSeason: Int? = null,
-    val lastWatchedEpisode: Int? = null
+    val lastWatchedEpisode: Int? = null,
+    // Release Radar & Anticipation Tracker
+    val nextAirDate: String? = null,           // e.g. "2026-10-14"
+    val nextEpisodeTitle: String? = null,      // e.g. "S2E1: Hello Ms. Cobel"
+    val releaseStatus: String? = null,         // e.g. "RETURNING_SERIES", "IN_THEATERS", "STREAMING_SOON", "ENDED"
+    val digitalReleaseDate: String? = null     // e.g. "2026-11-04"
 ) {
     // Utility to parse provider IDs array
     val providersList: List<String>
@@ -63,4 +68,11 @@ data class MediaItem(
 
     val isPodcastRec: Boolean
         get() = importSource?.startsWith("Podcast", ignoreCase = true) == true
+
+    val hasUpcomingRelease: Boolean
+        get() = !nextAirDate.isNullOrBlank() || 
+                !digitalReleaseDate.isNullOrBlank() || 
+                releaseStatus.equals("RETURNING_SERIES", ignoreCase = true) || 
+                releaseStatus.equals("IN_THEATERS", ignoreCase = true) ||
+                releaseStatus.equals("STREAMING_SOON", ignoreCase = true)
 }

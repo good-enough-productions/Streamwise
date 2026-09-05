@@ -107,6 +107,10 @@ class AvailabilitySyncWorker(
                 var syncedReleaseYear: String? = item.releaseYear
                 var syncedSeasons: Int? = item.totalSeasons
                 var syncedEpisodes: Int? = item.totalEpisodes
+                var syncedNextAirDate: String? = item.nextAirDate
+                var syncedNextEpisodeTitle: String? = item.nextEpisodeTitle
+                var syncedReleaseStatus: String? = item.releaseStatus
+                var syncedDigitalReleaseDate: String? = item.digitalReleaseDate
 
                 try {
                     Log.d(TAG, "Syncing metadata for: \"${item.title}\" (Type: ${item.mediaType}, Current TMDB ID: $syncedTmdbId)")
@@ -131,7 +135,19 @@ class AvailabilitySyncWorker(
                                 val details = com.example.data.remote.TmdbClient.tmdbApiService.getTvDetails(tvId, apiKey)
                                 syncedSeasons = details.numberOfSeasons ?: syncedSeasons
                                 syncedEpisodes = details.numberOfEpisodes ?: syncedEpisodes
-                                Log.d(TAG, "TV details for \"${item.title}\": $syncedSeasons seasons, $syncedEpisodes episodes")
+                                
+                                if (details.nextEpisodeToAir != null) {
+                                    val next = details.nextEpisodeToAir
+                                    syncedNextAirDate = next.airDate ?: syncedNextAirDate
+                                    syncedNextEpisodeTitle = "S${next.seasonNumber ?: 1}E${next.episodeNumber ?: 1}" + (if (!next.name.isNullOrBlank()) ": ${next.name}" else "")
+                                    syncedReleaseStatus = "RETURNING_SERIES"
+                                } else if (details.status?.equals("Returning Series", ignoreCase = true) == true || details.inProduction == true) {
+                                    syncedReleaseStatus = "RETURNING_SERIES"
+                                } else if (details.status?.equals("Ended", ignoreCase = true) == true) {
+                                    syncedReleaseStatus = "ENDED"
+                                }
+                                
+                                Log.d(TAG, "TV details for \"${item.title}\": $syncedSeasons seasons, status=$syncedReleaseStatus, nextAirDate=$syncedNextAirDate")
                             } catch (e: Exception) {
                                 Log.w(TAG, "Could not fetch TV details for \"${item.title}\": ${e.message}")
                             }
@@ -177,7 +193,28 @@ class AvailabilitySyncWorker(
                                 if (!details.releaseDate.isNullOrBlank()) {
                                     syncedReleaseYear = details.releaseDate.take(4)
                                 }
-                                Log.d(TAG, "Movie details for \"${item.title}\": ${syncedRuntimeMinutes}m, Year: $syncedReleaseYear")
+                                if (details.status?.equals("In Production", ignoreCase = true) == true || details.status?.equals("Post Production", ignoreCase = true) == true) {
+                                    syncedReleaseStatus = "IN_PRODUCTION"
+                                } else {
+                                    try {
+                                        val rdResponse = com.example.data.remote.TmdbClient.tmdbApiService.getMovieReleaseDates(movieId, apiKey)
+                                        val usRelease = rdResponse.results.firstOrNull { it.countryCode.equals("US", ignoreCase = true) }
+                                        if (usRelease != null) {
+                                            val digital = usRelease.releaseDates.firstOrNull { it.type == 4 || it.type == 6 }
+                                            if (digital?.releaseDate != null) {
+                                                syncedDigitalReleaseDate = digital.releaseDate.take(10)
+                                                syncedReleaseStatus = "STREAMING_SOON"
+                                            }
+                                            val theatrical = usRelease.releaseDates.firstOrNull { it.type == 3 || it.type == 2 }
+                                            if (theatrical?.releaseDate != null && syncedDigitalReleaseDate == null && syncedProviders == null) {
+                                                syncedReleaseStatus = "IN_THEATERS"
+                                            }
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "Could not fetch release dates for \"${item.title}\": ${e.message}")
+                                    }
+                                }
+                                Log.d(TAG, "Movie details for \"${item.title}\": ${syncedRuntimeMinutes}m, Year: $syncedReleaseYear, Status: $syncedReleaseStatus")
                             } catch (e: Exception) {
                                 Log.w(TAG, "Could not fetch movie details for \"${item.title}\": ${e.message}")
                             }
@@ -329,11 +366,23 @@ class AvailabilitySyncWorker(
                     releaseYear = syncedReleaseYear,
                     totalSeasons = syncedSeasons,
                     totalEpisodes = syncedEpisodes,
+                    nextAirDate = syncedNextAirDate,
+                    nextEpisodeTitle = syncedNextEpisodeTitle,
+                    releaseStatus = syncedReleaseStatus,
+                    digitalReleaseDate = syncedDigitalReleaseDate,
                     updatedAt = System.currentTimeMillis()
                 )
 
                 repository.updateMediaItem(updatedItem)
-                Log.d(TAG, "Successfully synced availability for \"${item.title}\": $syncedProviders")
+                Log.d(TAG, "Successfully synced availability for \"${item.title}\": $syncedProviders, ReleaseStatus: $syncedReleaseStatus")
+
+                if (!syncedNextAirDate.isNullOrBlank() && (userPrefs?.notifyNewAvailability ?: true)) {
+                    com.example.ui.NotificationHelper.showReleaseRadarNotification(
+                        context = applicationContext,
+                        title = item.title,
+                        returnInfo = "${syncedNextEpisodeTitle ?: "New Episode"} arrives on $syncedNextAirDate!"
+                    )
+                }
             }
 
             return Result.success()

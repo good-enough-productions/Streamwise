@@ -685,6 +685,7 @@ fun WatchlistTabContent(
             if (mediaTypeFilter == "MOVIES" && (item.isTvShow || item.isPodcastRec)) return@filter false
             if (mediaTypeFilter == "TV" && !item.isTvShow) return@filter false
             if (mediaTypeFilter == "PODCASTS" && !item.isPodcastRec) return@filter false
+            if (mediaTypeFilter == "RADAR" && !item.hasUpcomingRelease) return@filter false
 
             if (selectedPlatformId != null) {
                 if (item.providersList.contains(selectedPlatformId) != true) return@filter false
@@ -704,7 +705,7 @@ fun WatchlistTabContent(
                 if (provs.none { freeProviderIds.contains(it) }) return@filter false
             }
 
-            if (filterOnlyMyServices) {
+            if (filterOnlyMyServices && mediaTypeFilter != "RADAR") {
                 // Return items having at least one of their available platforms as locally active/subscribed
                 val provs = item.providersList
                 provs.isNotEmpty() && provs.any { activeProviderIds.contains(it) }
@@ -918,6 +919,12 @@ fun WatchlistTabContent(
                 onClick = { mediaTypeFilter = "PODCASTS" },
                 label = { Text("🎙️ Podcast Recs", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "PODCASTS") FontWeight.Bold else FontWeight.Normal) },
                 modifier = Modifier.testTag("filter_media_podcasts")
+            )
+            FilterChip(
+                selected = mediaTypeFilter == "RADAR",
+                onClick = { mediaTypeFilter = "RADAR" },
+                label = { Text("🗓️ Release Radar", fontSize = 11.sp, fontWeight = if (mediaTypeFilter == "RADAR") FontWeight.Bold else FontWeight.Normal) },
+                modifier = Modifier.testTag("filter_media_radar")
             )
         }
 
@@ -1142,30 +1149,53 @@ fun WatchlistTabContent(
                     .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(24.dp)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ),
+                    shape = RoundedCornerShape(18.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.List,
-                        contentDescription = "Empty list",
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "No titles in this category.",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        if (filterOnlyMyServices) "Try activating more subscriptions in 'My Services' or share links directly into Stream Manager."
-                        else "Tap the FAB or share titles from utilities to start indexing of movies/shows.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        textAlign = TextAlign.Center
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (mediaTypeFilter == "RADAR") Icons.Default.DateRange else Icons.Default.List,
+                            contentDescription = "Empty list",
+                            modifier = Modifier.size(56.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = if (mediaTypeFilter == "RADAR") "No Upcoming Releases Tracked Yet"
+                                   else if (filterOnlyMyServices) "No Titles Available on Your Subscriptions"
+                                   else "No titles matching your filter",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (mediaTypeFilter == "RADAR") "As returning series premiere dates and digital movie drops are scheduled, they'll appear here automatically."
+                                   else if (filterOnlyMyServices) "Try turning off 'Free to Me' to view all queued titles, or activate suggested services in ROI Stats."
+                                   else "Tap the + button to add movies, TV shows, or podcast recommendations.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        if (filterOnlyMyServices && mediaTypeFilter != "RADAR") {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = { onFilterToggle(false) },
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Show All Watchlist Titles")
+                            }
+                        }
+                    }
                 }
             }
         } else {
@@ -1200,6 +1230,7 @@ fun MediaItemCard(
     val activeSubscribedIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
     }
+    var isExpanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -1257,152 +1288,39 @@ fun MediaItemCard(
                         }
                     }
 
-                    // User Rating or TMDB Rating Display
+                    // Consolidated Horizontal Metadata Ribbon
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(vertical = 2.dp)
                     ) {
                         if (item.userRating != null) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = "Your Letterboxd Rating",
-                                tint = Color(0xFFFF8C00),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "★ ${String.format("%.1f", item.userRating)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFF8C00), modifier = Modifier.size(12.dp))
+                            Text("★ ${String.format("%.1f", item.userRating)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         } else if (item.rating != null && item.rating > 0.0) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = "TMDB Rating",
-                                tint = Color(0xFFFFD700),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = String.format("%.1f", item.rating),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
+                            Text(String.format("%.1f", item.rating), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
                         }
 
                         if (item.releaseYear != null) {
-                            Text(
-                                text = "${item.releaseYear}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                        }
-
-                        if (item.isRewatch) {
-                            Text(
-                                text = "↻ Rewatch",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.tertiary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(item.releaseYear, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                         }
 
                         if (item.runtimeMinutes != null && item.runtimeMinutes > 0) {
-                            Text(
-                                text = "${item.runtimeMinutes}m",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("${item.runtimeMinutes}m", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                         }
 
-                        if (!item.genres.isNullOrEmpty()) {
-                            Text(
-                                text = "• ${item.genres}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                        if (item.isRewatch) {
+                            Text("↻ Rewatch", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    if (item.status == MediaStatus.PENDING_METADATA.name) {
-                        Badge(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(10.dp))
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text("matching", fontSize = 9.sp)
-                            }
-                        }
-                    }
-
-                    // Vibe Match & Source Badges
+                    // Badges Ribbon: Format, TV Season, and Release Radar
                     Row(
-                        modifier = Modifier.padding(vertical = 4.dp),
+                        modifier = Modifier.padding(vertical = 2.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Extract relevance score from YAML trivia if present
-                        val relevanceScore = remember(item.trivia) {
-                            item.trivia?.lines()
-                                ?.find { it.contains("personal_relevance_score:") }
-                                ?.substringAfter(":")
-                                ?.trim()
-                                ?.replace("\"", "")
-                                ?.replace("'", "")
-                                ?.replace("[", "")
-                                ?.replace("]", "")
-                        }
-
-                        if (!relevanceScore.isNullOrEmpty()) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(Icons.Default.Favorite, null, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.primary)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Match: $relevanceScore/10", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                }
-                            }
-                        }
-
-                        if (!item.importSource.isNullOrEmpty()) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = item.importSource,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-
                         if (item.isTvShow) {
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
@@ -1417,6 +1335,83 @@ fun MediaItemCard(
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     color = MaterialTheme.colorScheme.onTertiaryContainer
+                                )
+                            }
+                        }
+
+                        // Release Radar Badges
+                        if (!item.nextAirDate.isNullOrBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "🗓️ Next: ${item.nextEpisodeTitle ?: "New Episode"} (${item.nextAirDate})",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        } else if (item.releaseStatus?.equals("RETURNING_SERIES", ignoreCase = true) == true) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "⏳ Next Season in Production",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        } else if (item.releaseStatus?.equals("IN_THEATERS", ignoreCase = true) == true) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFF8B2500).copy(alpha = 0.2f),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "🎟️ In Theaters · Streaming Soon",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF7043),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        } else if (!item.digitalReleaseDate.isNullOrBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer,
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "🎬 Streaming: ${item.digitalReleaseDate}",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        if (!item.importSource.isNullOrEmpty() && !item.isPodcastRec) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = item.importSource,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -1448,13 +1443,14 @@ fun MediaItemCard(
                     }
 
                     if (!item.overview.isNullOrEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
                             text = item.overview,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            maxLines = if (isExpanded) 8 else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable { isExpanded = !isExpanded }
                         )
                     }
                 }
@@ -4562,6 +4558,34 @@ fun AgentChatTabContent(
                         }
                     }
                 }
+            }
+        }
+
+        // Quick Action Prompt Chips
+        val quickPrompts = listOf(
+            "🎬 What to watch tonight?",
+            "💡 Which subscription to cancel?",
+            "⏱️ Shortest movie on list",
+            "🗓️ When does Severance return?",
+            "🍿 High-rated thriller"
+        )
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(quickPrompts) { prompt ->
+                SuggestionChip(
+                    onClick = { onSendMessage(prompt) },
+                    label = { Text(prompt, style = MaterialTheme.typography.bodySmall) },
+                    colors = SuggestionChipDefaults.suggestionChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp)
+                )
             }
         }
 

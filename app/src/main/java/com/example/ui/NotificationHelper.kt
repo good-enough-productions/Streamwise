@@ -54,6 +54,38 @@ object NotificationHelper {
         )
     }
 
+    fun showReleaseRadarNotification(context: Context, title: String, returnInfo: String) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_HIGH).apply {
+                description = CHANNEL_DESC
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("extra_media_title", title)
+        }
+        val pendingIntent = android.app.PendingIntent.getActivity(
+            context,
+            (title + "_radar").hashCode(),
+            launchIntent,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) android.app.PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("🗓️ Release Radar: $title")
+            .setContentText(returnInfo)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+
+        notificationManager.notify((title + "_radar").hashCode(), builder.build())
+    }
+
     private const val RENEWAL_CHANNEL_ID = "renewal_alerts"
     private const val RENEWAL_CHANNEL_NAME = "Subscription Renewal Radar"
 
