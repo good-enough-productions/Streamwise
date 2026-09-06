@@ -561,7 +561,7 @@ fun WatchlistTabContent(
         watchlistItems.filter { item ->
             item.status != MediaStatus.WATCHED.name &&
             item.providersList.any { activeProviderIds.contains(it) || freeProviderIds.contains(it) }
-        }.sortedByDescending { it.rating ?: 0.0 }.take(8)
+        }.distinctBy { it.title.trim().lowercase() }.sortedByDescending { it.rating ?: 0.0 }.take(8)
     }
 
     // Filter items according to state
@@ -598,7 +598,7 @@ fun WatchlistTabContent(
             } else {
                 true
             }
-        }
+        }.distinctBy { it.title.trim().lowercase() }
     }
 
     val processedItems = remember(filteredItems, searchQuery, sortBy) {
@@ -1239,7 +1239,7 @@ fun WatchedTabContent(
             val matchesSearch = item.title.contains(searchQuery, ignoreCase = true)
             val matchesGenre = selectedGenre == null || item.genres?.contains(selectedGenre!!, ignoreCase = true) == true
             matchesSearch && matchesGenre
-        }
+        }.distinctBy { it.title.trim().lowercase() }
     }
 
     val processedItems = remember(filteredItems, sortBy) {

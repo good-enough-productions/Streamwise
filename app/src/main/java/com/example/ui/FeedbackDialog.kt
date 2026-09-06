@@ -405,7 +405,7 @@ private suspend fun submitIssue(
         }
 
         // 2. Central Shared Feedback Proxy Cloud Function (No client PAT required)
-        val proxyUrl = "https://us-central1-ai-assistant-438903.cloudfunctions.net/submitFeedback"
+        val proxyUrl = "https://feedback-proxy-rljydlcchq-uc.a.run.app"
         val proxyPayload = JSONObject().apply {
             put("repo", "Streamwise")
             put("title", "[$type]: $title")
@@ -418,17 +418,23 @@ private suspend fun submitIssue(
         val conn = (URL(proxyUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             setRequestProperty("Content-Type", "application/json")
-            connectTimeout = 10000
-            readTimeout = 10000
+            connectTimeout = 15000
+            readTimeout = 15000
             doOutput = true
         }
 
         conn.outputStream.use { it.write(proxyPayload.toString().toByteArray()) }
         val code = conn.responseCode
         if (code in 200..299) {
-            return@withContext Result.success("Feedback submitted to Jules for triage!")
+            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+            val json = try { JSONObject(responseText) } catch (e: Exception) { null }
+            val issueUrl = json?.optString("issueUrl")
+            val msg = if (!issueUrl.isNullOrBlank()) "Feedback submitted! Jules issue opened." else "Feedback submitted to Jules for triage!"
+            return@withContext Result.success(msg)
         } else {
-            return@withContext Result.failure(Exception("Submission returned HTTP $code. Check connection or enter GitHub Token in Settings."))
+            val errorText = try { conn.errorStream?.bufferedReader()?.use { it.readText() } } catch (e: Exception) { null }
+            val errDetail = if (!errorText.isNullOrBlank()) " ($errorText)" else ""
+            return@withContext Result.failure(Exception("Submission returned HTTP $code$errDetail. Check connection or enter GitHub Token in Settings."))
         }
     } catch (e: Exception) {
         Result.failure(e)

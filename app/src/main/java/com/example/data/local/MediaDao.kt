@@ -50,6 +50,40 @@ interface MediaDao {
     @Query("SELECT title FROM media_items")
     suspend fun getAllTitles(): List<String>
 
+    @Query("SELECT * FROM media_items")
+    suspend fun getAllMediaItemsList(): List<MediaItem>
+
+    @Query("DELETE FROM media_items WHERE id IN (:ids)")
+    suspend fun deleteMediaItemsByIdList(ids: List<Long>): Int
+
+    @Query("DELETE FROM watch_sessions WHERE mediaItemId NOT IN (SELECT id FROM media_items)")
+    suspend fun deleteOrphanedWatchSessions(): Int
+
+    @Transaction
+    suspend fun deduplicateMediaItems(): Int {
+        val all = getAllMediaItemsList()
+        val duplicates = all.groupBy { it.title.trim().lowercase() to it.status }
+        val idsToDelete = mutableListOf<Long>()
+        for ((_, group) in duplicates) {
+            if (group.size > 1) {
+                val sorted = group.sortedWith(
+                    compareByDescending<MediaItem> { !it.imageUrl.isNullOrBlank() }
+                        .thenByDescending { !it.tmdbId.isNullOrBlank() }
+                        .thenByDescending { !it.providerIds.isNullOrBlank() }
+                        .thenBy { it.id }
+                )
+                idsToDelete.addAll(sorted.drop(1).map { it.id })
+            }
+        }
+        if (idsToDelete.isNotEmpty()) {
+            idsToDelete.chunked(500).forEach { chunk ->
+                deleteMediaItemsByIdList(chunk)
+            }
+        }
+        deleteOrphanedWatchSessions()
+        return idsToDelete.size
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWatchSessions(sessions: List<WatchSession>)
 
