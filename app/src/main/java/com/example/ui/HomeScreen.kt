@@ -85,6 +85,7 @@ fun HomeScreen(
     val isSyncingLetterboxd by viewModel.isSyncingLetterboxd.collectAsState()
     val letterboxdSyncResult by viewModel.letterboxdSyncResult.collectAsState()
     val letterboxdFileImportResult by viewModel.letterboxdFileImportResult.collectAsState()
+    val isSyncingPodcasts by viewModel.isSyncingPodcasts.collectAsState()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -278,7 +279,7 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.navigationBarsPadding()
             ) {
-                // Global Jules Beta Feedback FAB
+                // Global Beta Feedback FAB
                 if (enableBetaFeedback) {
                     FloatingFeedbackButton(
                         onClick = { showFeedbackDialog = true }
@@ -375,6 +376,8 @@ fun HomeScreen(
                             podcastEpisodes = viewModel.podcastEpisodes,
                             movieNews = viewModel.movieNews,
                             watchedItems = watchedItems,
+                            isSyncingPodcasts = isSyncingPodcasts,
+                            onSyncPodcastRecs = { viewModel.syncPodcastRecommendations() },
                             onAddRecommendation = { title, reason -> viewModel.addRecommendationToWatchlist(title, reason) }
                         )
                     }
@@ -452,6 +455,8 @@ fun HomeScreen(
                 onSaveGoogleSheetWebhookUrl = { viewModel.saveGoogleSheetWebhookUrl(it) },
                 isSyncingToSheet = isSyncingToSheet,
                 onSyncLetterboxdToSheet = { viewModel.syncLetterboxdToGoogleSheet() },
+                isSyncingPodcasts = isSyncingPodcasts,
+                onSyncPodcastRecs = { viewModel.syncPodcastRecommendations() },
                 enableBetaFeedback = enableBetaFeedback,
                 onToggleBetaFeedback = { viewModel.setEnableBetaFeedback(it) },
                 onPickLetterboxdFile = { letterboxdFileLauncher.launch(arrayOf("*/*", "text/*", "text/csv", "application/zip")) },
@@ -552,7 +557,7 @@ fun HomeScreen(
             )
         }
 
-        // Autonomous Jules Feedback Dialog
+        // Beta Feedback Dialog (Backlog-first, Jules opt-in)
         if (showFeedbackDialog) {
             val githubToken by viewModel.githubToken.collectAsState()
             val currentTabName = when (selectedTab) {
@@ -4007,6 +4012,8 @@ fun SettingsDialog(
     onSaveGoogleSheetWebhookUrl: (String) -> Unit = {},
     isSyncingToSheet: Boolean = false,
     onSyncLetterboxdToSheet: () -> Unit = {},
+    isSyncingPodcasts: Boolean = false,
+    onSyncPodcastRecs: () -> Unit = {},
     enableBetaFeedback: Boolean = true,
     onToggleBetaFeedback: (Boolean) -> Unit = {},
     onPickLetterboxdFile: () -> Unit = {},
@@ -4285,6 +4292,21 @@ fun SettingsDialog(
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text("Sync Sheet", fontSize = 12.sp)
                                         }
+                                    }
+
+                                    FilledTonalButton(
+                                        onClick = onSyncPodcastRecs,
+                                        enabled = !isSyncingPodcasts && sheetWebhookInput.isNotBlank(),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        if (isSyncingPodcasts) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        }
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("🎙️ Sync Gemini Spark Podcast Recs", fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -4686,7 +4708,7 @@ fun SettingsDialog(
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            "Display floating button on all screens to capture screen diagnostics and file issues directly to Jules & Antigravity.",
+                                            "Display floating button on all screens to capture screen diagnostics and file issues to the project backlog.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.outline
                                         )
@@ -5310,6 +5332,8 @@ fun ExploreTabContent(
     podcastEpisodes: List<com.example.data.model.PodcastEpisode>,
     movieNews: List<com.example.data.model.MovieNewsItem>,
     watchedItems: List<MediaItem> = emptyList(),
+    isSyncingPodcasts: Boolean = false,
+    onSyncPodcastRecs: () -> Unit = {},
     onAddRecommendation: ((String, String) -> Unit)? = null
 ) {
     Column(
@@ -5909,6 +5933,8 @@ fun ExploreTabContent(
                 // SubTab 2: 🎙️ Podcasts Hub
                 PodcastsExploreView(
                     podcastEpisodes = podcastEpisodes,
+                    isSyncingPodcasts = isSyncingPodcasts,
+                    onSyncPodcastRecs = onSyncPodcastRecs,
                     onAskOlivia = { prompt ->
                         onSubTabChange(1)
                         onSendMessage(prompt)
@@ -5936,6 +5962,8 @@ fun ExploreTabContent(
 @Composable
 fun PodcastsExploreView(
     podcastEpisodes: List<com.example.data.model.PodcastEpisode>,
+    isSyncingPodcasts: Boolean = false,
+    onSyncPodcastRecs: () -> Unit = {},
     onAskOlivia: (String) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
@@ -5956,6 +5984,53 @@ fun PodcastsExploreView(
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        // Gemini Spark Podcast Recs Banner
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    Text(
+                        "Gemini Spark Tracker",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        "Sync new film recommendations from Google Sheet into Watchlist & Vault",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                    )
+                }
+                FilledTonalButton(
+                    onClick = onSyncPodcastRecs,
+                    enabled = !isSyncingPodcasts,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    if (isSyncingPodcasts) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Sync Recs", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // Show Filter Row
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),

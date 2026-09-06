@@ -63,7 +63,7 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 
 ### ⚙️ Unified 4-Tab Settings Hub
 Access all configuration options from the Top App Bar gear icon:
-- **Profile & Letterboxd:** User display name, Letterboxd username (`scriptedmind`), live RSS sync trigger, local CSV/ZIP file picker, export for Letterboxd, 1-tap direct web links (`watchlist/export/`, `settings/data/`, `import/`), and Google Sheet webhook.
+- **Profile & Letterboxd:** User display name, Letterboxd username (`scriptedmind`), live RSS sync trigger, local CSV/ZIP file picker, export for Letterboxd, 1-tap direct web links (`watchlist/export/`, `settings/data/`, `import/`), 1-tap **Gemini Spark Podcast Recs** sync, and Google Sheet webhook.
 - **Services (19):** Toggle active subscriptions and customize monthly pricing across all 19 providers.
 - **Guides & Docs:** Instant offline viewers for the in-app User Guide and Changelog.
 - **Updates & System:** Built-in **GitHub OTA Auto-Updater** (checking releases, downloading APKs, and launching Android Package Installer) plus API secrets management.

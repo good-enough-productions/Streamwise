@@ -43,9 +43,8 @@ import java.net.URL
 
 /**
  * Floating Feedback Button (FAB) + Modal Dialog.
- * Powers the autonomous Jules feedback loop defined in project architecture:
  * Captures screen screenshot, aggregates system diagnostics, and files a GitHub Issue
- * directly for Jules and Antigravity autonomous triage.
+ * to the project backlog. Users can optionally assign to Jules AI for autonomous triage.
  */
 @Composable
 fun FloatingFeedbackButton(
@@ -63,7 +62,7 @@ fun FloatingFeedbackButton(
     ) {
         Icon(
             imageVector = Icons.Default.Feedback,
-            contentDescription = "Report Feedback / Issue to Jules",
+            contentDescription = "Send Feedback",
             modifier = Modifier.size(20.dp)
         )
     }
@@ -337,7 +336,7 @@ fun FeedbackDialog(
                             strokeWidth = 2.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Dispatching to Jules...")
+                        Text(if (delegateToJules) "Dispatching to Jules..." else "Submitting to backlog...")
                     } else {
                         Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
