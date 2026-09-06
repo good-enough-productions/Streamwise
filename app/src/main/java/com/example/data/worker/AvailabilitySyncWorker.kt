@@ -7,7 +7,6 @@ import androidx.work.WorkerParameters
 import com.example.StreamApp
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
-import com.example.data.local.UserPreferencesManager
 import com.example.data.remote.OllamaChatMessage
 import com.example.data.remote.OllamaChatRequest
 import com.example.data.remote.OllamaClient
@@ -36,14 +35,16 @@ class AvailabilitySyncWorker(
         val repository = app?.container?.mediaRepository ?: return Result.failure()
 
         try {
-            // Zero-Touch Automation: Prioritize watchlist items missing key providers or metadata (capped to 20 to protect execution window)
+            // Zero-Touch Automation: Identify watchlist items missing key research metadata or availability info
             val allItems = repository.allMediaItems.first()
             val watchlistItems = allItems.filter { 
                 it.status == MediaStatus.PENDING_METADATA.name || it.status == MediaStatus.WATCHLIST.name 
             }
             val pendingOrActiveItems = if (watchlistItems.isNotEmpty()) {
-                watchlistItems.sortedBy { if (it.providerIds.isNullOrEmpty() || it.imageUrl.isNullOrEmpty()) 0 else 1 }.take(20)
+                // Prioritize watchlist items that are missing providers or metadata (capped to 20 to respect WorkManager execution window)
+                watchlistItems.sortedBy { if (it.providerIds.isNullOrEmpty() || it.trivia.isNullOrEmpty()) 0 else 1 }.take(20)
             } else {
+                // If watchlist is up-to-date, backfill any items missing essential metadata
                 allItems.filter { it.imageUrl.isNullOrEmpty() || it.genres.isNullOrEmpty() }.take(20)
             }
 
@@ -83,7 +84,14 @@ class AvailabilitySyncWorker(
                 "No history yet"
             }
 
-            val ollamaHost = userPrefs?.ollamaHost ?: "192.168.1.100"
+            val ollamaHost = userPrefs?.ollamaHost ?: "192.168.86.217"
+            // Fast reachability check to prevent 60-second socket timeouts when laptop is sleeping/off-network
+            var isOllamaAvailable = OllamaClient.isHostReachable(ollamaHost, timeoutMs = 2000)
+            if (!isOllamaAvailable) {
+                Log.i(TAG, "Local Ollama host ($ollamaHost) is currently unreachable. Using offline template synthesis for this sync run.")
+            } else {
+                Log.i(TAG, "Local Ollama host ($ollamaHost) is reachable.")
+            }
 
             val watchmodeKey = userPrefs?.watchmodeApiKey ?: ""
             val isWatchmodeConfigured = watchmodeKey.isNotEmpty()
@@ -104,248 +112,131 @@ class AvailabilitySyncWorker(
                 var syncedTmdbId: String? = item.tmdbId
                 var syncedTrivia: String? = item.trivia
                 var syncedGenres: String? = item.genres
-                var syncedRuntimeMinutes: Int? = item.runtimeMinutes
-                var syncedReleaseYear: String? = item.releaseYear
-                var syncedSeasons: Int? = item.totalSeasons
-                var syncedEpisodes: Int? = item.totalEpisodes
-                var syncedNextAirDate: String? = item.nextAirDate
-                var syncedNextEpisodeTitle: String? = item.nextEpisodeTitle
-                var syncedReleaseStatus: String? = item.releaseStatus
-                var syncedDigitalReleaseDate: String? = item.digitalReleaseDate
 
                 try {
-                    Log.d(TAG, "Syncing metadata for: \"${item.title}\" (Type: ${item.mediaType}, Current TMDB ID: $syncedTmdbId)")
+                    Log.d(TAG, "Syncing metadata for: \"${item.title}\" (Current TMDB ID: $syncedTmdbId)")
+                    // 1. Search for TMDB movie ID
+                    val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
+                    val match = searchResponse.results.firstOrNull()
+                    if (match != null) {
+                        val movieId = match.id
+                        Log.d(TAG, "Found match for \"${item.title}\": ID $movieId, Genres: ${match.genreIds}")
+                        syncedTmdbId = movieId.toString()
+                        syncedOverview = match.overview ?: item.overview
+                        syncedRating = match.voteAverage ?: item.rating
+                        syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
 
-                    if (item.isTvShow) {
-                        // --- TV SHOW SYNC ---
-                        val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchTv(apiKey, item.title)
-                        val match = searchResponse.results.firstOrNull()
-                        if (match != null) {
-                            val tvId = match.id
-                            Log.d(TAG, "Found TV match for \"${item.title}\": ID $tvId")
-                            syncedTmdbId = tvId.toString()
-                            syncedOverview = match.overview ?: item.overview
-                            syncedRating = match.voteAverage ?: item.rating
-                            syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
-                            if (!match.firstAirDate.isNullOrBlank()) {
-                                syncedReleaseYear = match.firstAirDate.take(4)
-                            }
-                            syncedGenres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
+                        // 2. Fetch Providers for TMDB Movie ID
+                        val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(movieId, apiKey)
+                        val usCountry = providerResponse.results?.get("US")
+                        val usProvidersList = mutableListOf<com.example.data.remote.TmdbProvider>()
+                        usCountry?.flatrate?.let { usProvidersList.addAll(it) }
+                        usCountry?.free?.let { usProvidersList.addAll(it) }
+                        usCountry?.ads?.let { usProvidersList.addAll(it) }
 
-                            try {
-                                val details = com.example.data.remote.TmdbClient.tmdbApiService.getTvDetails(tvId, apiKey)
-                                syncedSeasons = details.numberOfSeasons ?: syncedSeasons
-                                syncedEpisodes = details.numberOfEpisodes ?: syncedEpisodes
-                                
-                                if (details.nextEpisodeToAir != null) {
-                                    val next = details.nextEpisodeToAir
-                                    syncedNextAirDate = next.airDate ?: syncedNextAirDate
-                                    syncedNextEpisodeTitle = "S${next.seasonNumber ?: 1}E${next.episodeNumber ?: 1}" + (if (!next.name.isNullOrBlank()) ": ${next.name}" else "")
-                                    syncedReleaseStatus = "RETURNING_SERIES"
-                                } else if (details.status?.equals("Returning Series", ignoreCase = true) == true || details.inProduction == true) {
-                                    syncedReleaseStatus = "RETURNING_SERIES"
-                                } else if (details.status?.equals("Ended", ignoreCase = true) == true) {
-                                    syncedReleaseStatus = "ENDED"
+                        Log.d(TAG, "TMDB Providers for \"${item.title}\": ${usProvidersList.joinToString { it.providerName }}")
+
+                        if (usProvidersList.isNotEmpty()) {
+                            syncedProviders = mapTmdbProvidersToLocal(usProvidersList)
+                        } else {
+                            // FALLBACK: If TMDB has no provider data, check Watchmode if configured
+                            if (isWatchmodeConfigured) {
+                                try {
+                                    Log.d(TAG, "TMDB had no providers for \"${item.title}\". Querying Watchmode fallback...")
+                                    val wmSearch = com.example.data.remote.WatchmodeClient.instance.searchTitle(watchmodeKey, searchValue = item.title)
+                                    val wmMatch = wmSearch.results.firstOrNull()
+                                    if (wmMatch != null) {
+                                        val wmSources = com.example.data.remote.WatchmodeClient.instance.getTitleSources(wmMatch.id, watchmodeKey)
+                                        if (wmSources.isNotEmpty()) {
+                                            syncedProviders = mapWatchmodeProvidersToLocal(wmSources)
+                                            Log.d(TAG, "Watchmode match found! Sources: ${wmSources.joinToString { it.name }} -> Mapped: $syncedProviders")
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Watchmode fallback failed for \"${item.title}\": ${e.message}")
                                 }
-                                
-                                Log.d(TAG, "TV details for \"${item.title}\": $syncedSeasons seasons, status=$syncedReleaseStatus, nextAirDate=$syncedNextAirDate")
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Could not fetch TV details for \"${item.title}\": ${e.message}")
-                            }
-
-                            // Watch Providers for TV
-                            try {
-                                val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getTvWatchProviders(tvId, apiKey)
-                                val usCountry = providerResponse.results?.get("US")
-                                val usProvidersList = mutableListOf<com.example.data.remote.TmdbProvider>()
-                                usCountry?.flatrate?.let { usProvidersList.addAll(it) }
-                                usCountry?.free?.let { usProvidersList.addAll(it) }
-                                usCountry?.ads?.let { usProvidersList.addAll(it) }
-
-                                if (usProvidersList.isNotEmpty()) {
-                                    syncedProviders = mapTmdbProvidersToLocal(usProvidersList)
-                                }
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Could not fetch TV providers for \"${item.title}\": ${e.message}")
-                            }
-
-                            if (syncedProviders != null && (userPrefs?.notifyNewAvailability ?: true)) {
-                                checkAndNotifyAvailability(item, syncedProviders, repository)
+                            } else {
+                                syncedProviders = null
                             }
                         }
-                    } else {
-                        // --- MOVIE SYNC ---
-                        val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
-                        val match = searchResponse.results.firstOrNull()
-                        if (match != null) {
-                            val movieId = match.id
-                            Log.d(TAG, "Found match for \"${item.title}\": ID $movieId, Genres: ${match.genreIds}")
-                            syncedTmdbId = movieId.toString()
-                            syncedOverview = match.overview ?: item.overview
-                            syncedRating = match.voteAverage ?: item.rating
-                            syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+                        
+                        Log.d(TAG, "Mapped Local Providers for \"${item.title}\": $syncedProviders")
 
-                            // 1.1 Fetch exact runtime and release date from movie details
-                            try {
-                                val details = com.example.data.remote.TmdbClient.tmdbApiService.getMovieDetails(movieId, apiKey)
-                                if (details.runtime != null && details.runtime > 0) {
-                                    syncedRuntimeMinutes = details.runtime
-                                }
-                                if (!details.releaseDate.isNullOrBlank()) {
-                                    syncedReleaseYear = details.releaseDate.take(4)
-                                }
-                                if (details.status?.equals("In Production", ignoreCase = true) == true || details.status?.equals("Post Production", ignoreCase = true) == true) {
-                                    syncedReleaseStatus = "IN_PRODUCTION"
-                                } else {
-                                    try {
-                                        val rdResponse = com.example.data.remote.TmdbClient.tmdbApiService.getMovieReleaseDates(movieId, apiKey)
-                                        val usRelease = rdResponse.results.firstOrNull { it.countryCode.equals("US", ignoreCase = true) }
-                                        if (usRelease != null) {
-                                            val digital = usRelease.releaseDates.firstOrNull { it.type == 4 || it.type == 6 }
-                                            if (digital?.releaseDate != null) {
-                                                syncedDigitalReleaseDate = digital.releaseDate.take(10)
-                                                syncedReleaseStatus = "STREAMING_SOON"
-                                            }
-                                            val theatrical = usRelease.releaseDates.firstOrNull { it.type == 3 || it.type == 2 }
-                                            if (theatrical?.releaseDate != null && syncedDigitalReleaseDate == null && syncedProviders == null) {
-                                                syncedReleaseStatus = "IN_THEATERS"
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.w(TAG, "Could not fetch release dates for \"${item.title}\": ${e.message}")
-                                    }
-                                }
-                                Log.d(TAG, "Movie details for \"${item.title}\": ${syncedRuntimeMinutes}m, Year: $syncedReleaseYear, Status: $syncedReleaseStatus")
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Could not fetch movie details for \"${item.title}\": ${e.message}")
-                            }
-
-                            // 2. Fetch Providers for TMDB Movie ID
-                            val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(movieId, apiKey)
-                            val usCountry = providerResponse.results?.get("US")
-                            val usProvidersList = mutableListOf<com.example.data.remote.TmdbProvider>()
-                            usCountry?.flatrate?.let { usProvidersList.addAll(it) }
-                            usCountry?.free?.let { usProvidersList.addAll(it) }
-                            usCountry?.ads?.let { usProvidersList.addAll(it) }
-
-                            Log.d(TAG, "TMDB Providers for \"${item.title}\": ${usProvidersList.joinToString { it.providerName }}")
-
-                            if (usProvidersList.isNotEmpty()) {
-                                syncedProviders = mapTmdbProvidersToLocal(usProvidersList)
-                            } else {
-                                // FALLBACK: If TMDB has no provider data, check Watchmode if configured
-                                if (isWatchmodeConfigured) {
-                                    try {
-                                        Log.d(TAG, "TMDB had no providers for \"${item.title}\". Querying Watchmode fallback...")
-                                        val wmSearch = com.example.data.remote.WatchmodeClient.instance.searchTitle(watchmodeKey, searchValue = item.title)
-                                        val wmMatch = wmSearch.results.firstOrNull()
-                                        if (wmMatch != null) {
-                                            val wmSources = com.example.data.remote.WatchmodeClient.instance.getTitleSources(wmMatch.id, watchmodeKey)
-                                            if (wmSources.isNotEmpty()) {
-                                                syncedProviders = mapWatchmodeProvidersToLocal(wmSources)
-                                                Log.d(TAG, "Watchmode match found! Sources: ${wmSources.joinToString { it.name }} -> Mapped: $syncedProviders")
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        Log.e(TAG, "Watchmode fallback failed for \"${item.title}\": ${e.message}")
-                                    }
-                                } else {
-                                    syncedProviders = null
-                                }
-                            }
+                        // 2.1 Availability Notification Logic: Check if it's now available on an accessible service
+                        // Trigger if newly available on any ACTIVE subscription OR any FREE service (Tubi, Freevee, etc.)
+                        if (syncedProviders != null) {
+                            val allProvidersList = repository.allStreamingProviders.first()
+                            // Accessibile = Paid & Active OR Cost is 0.0
+                            val accessibleProviders = allProvidersList.filter { it.isActive || it.costPerMonth == 0.0 }
+                            val oldProviders = item.providersList.toSet()
+                            val newProviders = syncedProviders.split(",").map { it.trim() }.toSet()
                             
-                            Log.d(TAG, "Mapped Local Providers for \"${item.title}\": $syncedProviders")
-
-                            if (syncedProviders != null && (userPrefs?.notifyNewAvailability ?: true)) {
-                                checkAndNotifyAvailability(item, syncedProviders, repository)
+                            val newlyAvailableOn = newProviders.filter { pId ->
+                                !oldProviders.contains(pId) && accessibleProviders.any { it.id == pId }
                             }
 
-                            // Extract genres from search result
-                            syncedGenres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
-
-                            // 3. Synthesis Agent Research: Fetch Keywords, Cast, and Genres
-                            try {
-                                val keywordsResponse = com.example.data.remote.TmdbClient.tmdbApiService.getKeywords(movieId, apiKey)
-                                val creditsResponse = com.example.data.remote.TmdbClient.tmdbApiService.getCredits(movieId, apiKey)
-                                
-                                val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
-                                val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
-
-                                // Synthesis 2.0: Cloud-native Gemini 2.0 Flash or local Ollama (Gemma)
-                                val geminiKey = (userPrefs?.geminiApiKey ?: "").ifBlank { com.example.BuildConfig.GEMINI_API_KEY }
-                                val useGemini = (userPrefs?.aiEngine ?: UserPreferencesManager.AI_ENGINE_GEMINI) == UserPreferencesManager.AI_ENGINE_GEMINI && 
-                                                geminiKey.isNotBlank() && geminiKey != "MY_GEMINI_API_KEY"
-
-                                var aiSynthesis: String? = null
-                                if (useGemini) {
-                                    val prompt = """
-                                        You are an advanced cinematic research agent called "Olivia". 
-                                        Generate a structured research card for the movie: "${item.title}".
-                                        
-                                        Context provided:
-                                        - Overview: $syncedOverview
-                                        - Keywords: $topKeywords
-                                        - Cast: $topCast
-                                        - User's Watch History: $historySummary
-                                        
-                                        Format your response EXACTLY as a Markdown YAML card like this:
-                                        ---
-                                        focus_topics: "[List 3-5 main themes]"
-                                        featured_cast: "$topCast"
-                                        personal_relevance_score: "[Score 1-10 based on history]"
-                                        ---
-                                        
-                                        ### Why this belongs on your Watchlist:
-                                        - Cultural Impact: [Brief summary of themes]
-                                        - Historical Connection: [Connect this movie to 1-2 titles from the user's watch history if possible]
-                                        - Smart Sourcing: [Final recommendation punchline]
-                                        
-                                        Be concise, professional, and use a technical, "deep-wiki" tone.
-                                    """.trimIndent()
-
-                                    val geminiRes = com.example.data.remote.GeminiClient.generateContent(
-                                        apiKey = geminiKey,
-                                        prompt = prompt
-                                    )
-                                    aiSynthesis = geminiRes.getOrNull()
-                                    if (aiSynthesis != null) {
-                                        Log.d(TAG, "Gemini 2.0 Flash Synthesis successful for \"${item.title}\"")
-                                    }
-                                }
-
-                                if (aiSynthesis == null) {
-                                    aiSynthesis = generatePersonalizedSynthesis(
-                                        host = ollamaHost,
-                                        movieTitle = item.title,
-                                        overview = syncedOverview,
-                                        keywords = topKeywords,
-                                        cast = topCast,
-                                        history = historySummary
-                                    )
-                                }
-
-                                if (aiSynthesis != null) {
-                                    syncedTrivia = aiSynthesis
-                                    Log.d(TAG, "AI Synthesis successful for \"${item.title}\"")
-                                } else {
-                                    // Fallback to basic template if offline
-                                    syncedTrivia = """
-                                        ---
-                                        focus_topics: "$topKeywords"
-                                        featured_cast: "$topCast"
-                                        agent_synthesis_date: "${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}"
-                                        ---
-                                        
-                                        ### Why this belongs on your Watchlist:
-                                        - Cultural Impact: This movie explores themes of $topKeywords.
-                                        - Talent Profile: Features notable performances by $topCast.
-                                        - Smart Sourcing: Cross-referenced with history summary: $historySummary.
-                                    """.trimIndent()
-                                    Log.d(TAG, "AI engines offline. Using basic template synthesis for \"${item.title}\"")
-                                }
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Synthesis Agent failed for \"${item.title}\": ${e.message}")
+                            if (newlyAvailableOn.isNotEmpty()) {
+                                val firstProv = accessibleProviders.find { it.id == newlyAvailableOn.first() }
+                                com.example.ui.NotificationHelper.showAvailabilityNotification(
+                                    applicationContext,
+                                    item.title,
+                                    firstProv?.name ?: newlyAvailableOn.first()
+                                )
+                                Log.d(TAG, "Triggered availability notification for: \"${item.title}\" on ${firstProv?.name} (Free/Active check)")
                             }
+                        }
+
+                        // Extract genres from search result
+                        syncedGenres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
+
+                        // 3. Synthesis Agent Research: Fetch Keywords, Cast, and Genres
+                        try {
+                            val keywordsResponse = com.example.data.remote.TmdbClient.tmdbApiService.getKeywords(movieId, apiKey)
+                            val creditsResponse = com.example.data.remote.TmdbClient.tmdbApiService.getCredits(movieId, apiKey)
+                            
+                            val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
+                            val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
+
+                            // Synthesis 2.0: Use local Ollama (Gemma) for personalized research if host is reachable
+                            val localSynthesis = if (isOllamaAvailable) {
+                                val synth = generatePersonalizedSynthesis(
+                                    host = ollamaHost,
+                                    movieTitle = item.title,
+                                    overview = syncedOverview,
+                                    keywords = topKeywords,
+                                    cast = topCast,
+                                    history = historySummary
+                                )
+                                if (synth == null) {
+                                    // Mark unavailable for subsequent items in this run if it failed
+                                    isOllamaAvailable = false
+                                }
+                                synth
+                            } else {
+                                null
+                            }
+
+                            if (localSynthesis != null) {
+                                syncedTrivia = localSynthesis
+                                Log.d(TAG, "Local LLM Synthesis successful for \"${item.title}\"")
+                            } else {
+                                // Fallback to structured template if Ollama is offline
+                                syncedTrivia = """
+                                    ---
+                                    focus_topics: "$topKeywords"
+                                    featured_cast: "$topCast"
+                                    agent_synthesis_date: "${java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())}"
+                                    ---
+                                    
+                                    ### Why this belongs on your Watchlist:
+                                    - Cultural Impact: This movie explores themes of $topKeywords.
+                                    - Talent Profile: Features notable performances by $topCast.
+                                    - Smart Sourcing: Cross-referenced with history summary: $historySummary.
+                                """.trimIndent()
+                                Log.d(TAG, "Ollama offline or synthesis skipped. Using template synthesis for \"${item.title}\"")
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Synthesis Agent failed for \"${item.title}\": ${e.message}")
                         }
                     }
                 } catch (e: Exception) {
@@ -363,27 +254,11 @@ class AvailabilitySyncWorker(
                     tmdbId = syncedTmdbId,
                     trivia = syncedTrivia,
                     genres = syncedGenres,
-                    runtimeMinutes = syncedRuntimeMinutes,
-                    releaseYear = syncedReleaseYear,
-                    totalSeasons = syncedSeasons,
-                    totalEpisodes = syncedEpisodes,
-                    nextAirDate = syncedNextAirDate,
-                    nextEpisodeTitle = syncedNextEpisodeTitle,
-                    releaseStatus = syncedReleaseStatus,
-                    digitalReleaseDate = syncedDigitalReleaseDate,
                     updatedAt = System.currentTimeMillis()
                 )
 
                 repository.updateMediaItem(updatedItem)
-                Log.d(TAG, "Successfully synced availability for \"${item.title}\": $syncedProviders, ReleaseStatus: $syncedReleaseStatus")
-
-                if (!syncedNextAirDate.isNullOrBlank() && (userPrefs?.notifyNewAvailability ?: true)) {
-                    com.example.ui.NotificationHelper.showReleaseRadarNotification(
-                        context = applicationContext,
-                        title = item.title,
-                        returnInfo = "${syncedNextEpisodeTitle ?: "New Episode"} arrives on $syncedNextAirDate!"
-                    )
-                }
+                Log.d(TAG, "Successfully synced availability for \"${item.title}\": $syncedProviders")
             }
 
             return Result.success()
@@ -391,36 +266,6 @@ class AvailabilitySyncWorker(
         } catch (e: Exception) {
             Log.e(TAG, "Error in streaming availability sync: ${e.message}", e)
             return Result.retry()
-        }
-    }
-
-    private suspend fun checkAndNotifyAvailability(
-        item: MediaItem,
-        syncedProviders: String,
-        repository: com.example.data.repository.MediaRepository
-    ) {
-        try {
-            val allProvidersList = repository.allStreamingProviders.first()
-            val accessibleProviders = allProvidersList.filter { it.isActive || it.costPerMonth == 0.0 }
-            val oldProviders = item.providersList.toSet()
-            val newProviders = syncedProviders.split(",").map { it.trim() }.toSet()
-            
-            val newlyAvailableOn = newProviders.filter { pId ->
-                !oldProviders.contains(pId) && accessibleProviders.any { it.id == pId }
-            }
-
-            if (newlyAvailableOn.isNotEmpty()) {
-                val firstProv = accessibleProviders.find { it.id == newlyAvailableOn.first() }
-                com.example.ui.NotificationHelper.showAvailabilityNotification(
-                    applicationContext,
-                    item.title,
-                    firstProv?.name ?: newlyAvailableOn.first(),
-                    isTvShow = item.isTvShow
-                )
-                Log.d(TAG, "Triggered availability notification for: \"${item.title}\" on ${firstProv?.name}")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed checking availability notification: ${e.message}")
         }
     }
 
@@ -465,7 +310,7 @@ class AvailabilitySyncWorker(
             val response = api.chat(request)
             response.message.content
         } catch (e: Exception) {
-            Log.e(TAG, "Ollama synthesis failed: ${e.message}")
+            Log.w(TAG, "Ollama synthesis call failed: ${e.message}. Falling back to template synthesis.")
             null
         }
     }
@@ -484,14 +329,7 @@ class AvailabilitySyncWorker(
                 name.contains("max") || name.contains("hbo") -> localIds.add("max")
                 name.contains("disney") -> localIds.add("disney")
                 name.contains("amazon") || name.contains("prime video") -> localIds.add("prime")
-                name.contains("apple tv") || name.contains("apple") -> localIds.add("apple")
-                name.contains("criterion") -> localIds.add("criterion")
-                name.contains("peacock") -> localIds.add("peacock")
-                name.contains("paramount") -> localIds.add("paramount")
-                name.contains("mubi") -> localIds.add("mubi")
-                name.contains("shudder") -> localIds.add("shudder")
-                name.contains("starz") -> localIds.add("starz")
-                name.contains("britbox") -> localIds.add("britbox")
+                name.contains("apple tv") -> localIds.add("apple")
                 name.contains("tubi") -> localIds.add("tubi")
                 name.contains("freevee") -> localIds.add("freevee")
                 name.contains("pluto") -> localIds.add("pluto")
@@ -511,14 +349,7 @@ class AvailabilitySyncWorker(
                 name.contains("max") || name.contains("hbo") -> localIds.add("max")
                 name.contains("disney") -> localIds.add("disney")
                 name.contains("amazon") || name.contains("prime video") -> localIds.add("prime")
-                name.contains("apple tv") || name.contains("apple") -> localIds.add("apple")
-                name.contains("criterion") -> localIds.add("criterion")
-                name.contains("peacock") -> localIds.add("peacock")
-                name.contains("paramount") -> localIds.add("paramount")
-                name.contains("mubi") -> localIds.add("mubi")
-                name.contains("shudder") -> localIds.add("shudder")
-                name.contains("starz") -> localIds.add("starz")
-                name.contains("britbox") -> localIds.add("britbox")
+                name.contains("apple tv") -> localIds.add("apple")
                 name.contains("tubi") -> localIds.add("tubi")
                 name.contains("freevee") -> localIds.add("freevee")
                 name.contains("pluto") -> localIds.add("pluto")

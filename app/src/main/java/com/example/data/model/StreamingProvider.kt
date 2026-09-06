@@ -9,9 +9,6 @@ data class StreamingProvider(
     val name: String,
     val logoUrl: String? = null,
     val costPerMonth: Double = 0.0,
-    val userCostPerMonth: Double? = null,
-    val subscriptionStartDate: Long? = null,
-    val trialEndDate: Long? = null,
     val isActive: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis()
 )

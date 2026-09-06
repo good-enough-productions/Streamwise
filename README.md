@@ -50,34 +50,31 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 ---
 
 ## 🎬 Master the Interface
- 
+
 ### The 4 Main Tabs
-1. **Watchlist (Queue):** Your unified queue across movies, TV series, and podcast recommendations. Features **Decluttered Top App Bar** with overflow menu (User Guide, Letterboxd Import/Export), **Unified Horizontal Quick Filter Ribbon** (`All`, `✓ My Services`, `Free w/ Ads`, `🎬 Movies`, `📺 TV`, `🎙️ Podcasts`, `🗓️ Radar`, `< 90m`, `< 120m`, `Surprise Me`, `Letterboxd`), **Expandable Filter Drawer** for granular provider and genre filtering via the Tune button, **First-Run Onboarding Wizard** (interactive 3-step setup), **Persistent "Free to Me" default**, **Instant Undo**, and responsive cards with expandable synopses.
-2. **Watched (The Vault):** Your personal viewing diary. Tap any title to log a **0.5–5.0 star rating**, mark rewatches, and track **TV show progress with Season/Episode counters**. Full two-way compatibility with **Letterboxd Import & Export** (`Downloads/letterboxd_import.csv`).
-3. **My Services (Subscriptions & Churn Optimizer):**
-   - **🎯 Watchlist Match Mode:** Ranks every streaming service by how many movies on your Watchlist are currently streaming on them. Features **"Best Opportunity to Subscribe"** and **"Safe to Pause"** opportunity banners, cost-per-movie metrics, and expandable movie title preview chips.
-   - **⚡ Renewal Radar & 1-Click Cancellation:** Displays proactive countdown badges (e.g. *Renews in 3 days*) before billing cycles, with single-tap direct deep-links into official cancellation management portals (Netflix, Max, Disney+, Hulu, Paramount+, Criterion, Apple TV+, Prime, Peacock).
-   - **📊 Spend & Usage Mode:** Real-time monthly burn rate calculations, hours watched, cost-per-hour efficiency, and underutilized subscription cancel candidate alerts.
-   - **Quick Subscriptions Ribbon & Edit Sheet:** 1-tap active/paused toggle, price presets (`$0 Free`, `$5.99`, `$7.99`, `$9.99`, `$13.99`, `$15.49`, `$19.99`, `$22.99`), auto-expiring free trial countdowns, and a `+ Add Service` modal.
-4. **Olivia AI (Concierge & Chat):** Powered by **Google Gemini 2.0 Flash** with `Icons.Default.AutoAwesome` sparkle icon for sub-second cloud-native recommendations and streaming synthesis (~$0.015/user/mo unit economics), with optional toggle to private local Ollama in Settings. Features 1-tap quick action prompt chips (*"What to watch tonight?"*, *"Which subscription to cancel?"*, *"When does Severance return?"*) for instant conversational guidance. Speak directly with Olivia for recommendations, trivia, or feature planning.
+1. **Watchlist:** Your upcoming queue. Tap **Refresh (↺)** to sync latest metadata and Agent research.
+2. **Watched:** Your historical library. Long-press to see Olivia's insights on why you loved it.
+3. **ROI Stats:** Track how much value you're getting from Netflix, Hulu, etc., based on watch time.
+4. **Agent (Chat):** Speak directly with Olivia. You can ask for recommendations or even **request new app features** (which she will submit to GitHub as real issues!).
 
-### ⭐ Streamwise Pro & Commercial Tiers
-- **Free Tier:** Supports up to 2 active streaming services, manual title addition, watched history logging, and basic queue filtering.
-- **Streamwise Pro ($3.99/mo or $39.99/yr):** Unlimited streaming services, 1-tap Letterboxd sync, Renewal Radar cancellation shortcuts, full TV show season/episode tracking, curated film podcast recommendations, and background availability alerts.
-- **New Availability Push Alerts:** Periodic background sync detects when a title on your watchlist becomes streamable on one of your active subscriptions and fires a direct tap-to-watch notification.
+---
 
-### 📺 Native TV Companion, Auto-Discovery & "Watch Now" Hub
-- **Zero-Latency Fire TV Companion (`TvCompanionService`):** Runs an embedded HTTP receiver on port 8998 on your Fire TV or Android TV. When you tap **"Play on Fire TV"** from the phone, it wakes the TV via screen wake-lock and natively launches the installed streaming app (Netflix, Disney+, Hulu, Prime Video, Tubi, Pluto TV, YouTube) with a search query for the movie, while automatically starting your watch timer.
-- **Subnet Port Sweep Auto-Discovery:** Bypasses home router multicast filters by concurrently scanning local subnet IP ports (5555, 8008, 8009, 8998) to discover *Danny's Fire TV* (192.168.86.202) and Google Cast devices in < 200ms.
-- **TV Connect Dialog:** Features live spinning discovery indicators, progress feedback, and 1-tap manual IP entry.
-- **Universal Cast & App Chooser:** Added "Cast or Open with App…" to route playback to Google Cast / Chromecast devices or installed streaming video players via Android's native system picker.
-- **Watch Session Tracking & Check-In:** Internal timer tracks TV viewing and prompts for check-in upon returning to the app to log your rating and compute subscription ROI.
+## 🛠 Troubleshooting
 
-### ☁️ $0/mo Master Google Sheet Cloud Ledger
-- Integrated Google Apps Script serverless webhook deployed and baked into app settings. Two-way cloud sync with Google Sheets for watchlist, history, and automated podcast recommendation ingestion (`scrape_podcast_recs.py`).
+### "Sync Pending" or No Images?
+- Ensure your **TMDB API Key** is set in the Settings tab.
+- Tap the **Refresh (↺)** icon in the Watchlist.
+- If you just cleared app data, it may take 1-2 minutes for Olivia to re-process the list.
 
-### 🐞 "Do It Now" Autonomous Feedback FAB
-- Floating action button on every screen captures Compose screenshots, gathers device diagnostics, and creates GitHub issues labeled `jules-triage` for autonomous AI maintenance.
+### Agent Connection Blocked?
+- We have enabled **Cleartext Traffic** for local IPs. Ensure your phone and laptop are on the **same Wi-Fi network**.
+- Verify that Ollama is actually running in your laptop's system tray.
+- If response times are slow, we've extended the timeout to **5 minutes** to support complex local model reasoning.
+
+---
+
+## 🏗 Architectural Architecture
+For deep-dive documentation on the "Self-Evolution" loop, GitHub integration, and Room database schemas, see [**GEMINI.md**](./GEMINI.md).
 
 
 ## Recommended Enhancements (from Scraped Articles)
