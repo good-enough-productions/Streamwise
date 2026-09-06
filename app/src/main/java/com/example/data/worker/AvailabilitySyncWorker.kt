@@ -35,14 +35,17 @@ class AvailabilitySyncWorker(
         val repository = app?.container?.mediaRepository ?: return Result.failure()
 
         try {
-            // Zero-Touch Automation: Identify any watchlist items missing key research metadata or availability info
-            val items = repository.allMediaItems.first()
-            val pendingOrActiveItems = items.filter { 
-                it.status == MediaStatus.PENDING_METADATA.name || 
-                it.status == MediaStatus.WATCHLIST.name ||
-                it.trivia.isNullOrEmpty() ||
-                it.genres.isNullOrEmpty() ||
-                it.imageUrl.isNullOrEmpty()
+            // Zero-Touch Automation: Identify watchlist items missing key research metadata or availability info
+            val allItems = repository.allMediaItems.first()
+            val watchlistItems = allItems.filter { 
+                it.status == MediaStatus.PENDING_METADATA.name || it.status == MediaStatus.WATCHLIST.name 
+            }
+            val pendingOrActiveItems = if (watchlistItems.isNotEmpty()) {
+                // Prioritize watchlist items that are missing providers or metadata (capped to 20 to respect WorkManager execution window)
+                watchlistItems.sortedBy { if (it.providerIds.isNullOrEmpty() || it.trivia.isNullOrEmpty()) 0 else 1 }.take(20)
+            } else {
+                // If watchlist is up-to-date, backfill any items missing essential metadata
+                allItems.filter { it.imageUrl.isNullOrEmpty() || it.genres.isNullOrEmpty() }.take(20)
             }
 
             if (pendingOrActiveItems.isEmpty()) {
@@ -81,7 +84,14 @@ class AvailabilitySyncWorker(
                 "No history yet"
             }
 
-            val ollamaHost = userPrefs?.ollamaHost ?: "192.168.1.100"
+            val ollamaHost = userPrefs?.ollamaHost ?: "192.168.86.217"
+            // Fast reachability check to prevent 60-second socket timeouts when laptop is sleeping/off-network
+            var isOllamaAvailable = OllamaClient.isHostReachable(ollamaHost, timeoutMs = 2000)
+            if (!isOllamaAvailable) {
+                Log.i(TAG, "Local Ollama host ($ollamaHost) is currently unreachable. Using offline template synthesis for this sync run.")
+            } else {
+                Log.i(TAG, "Local Ollama host ($ollamaHost) is reachable.")
+            }
 
             val watchmodeKey = userPrefs?.watchmodeApiKey ?: ""
             val isWatchmodeConfigured = watchmodeKey.isNotEmpty()
@@ -187,21 +197,30 @@ class AvailabilitySyncWorker(
                             val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
                             val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
 
-                            // Synthesis 2.0: Use local Ollama (Gemma) for personalized research
-                            val localSynthesis = generatePersonalizedSynthesis(
-                                host = ollamaHost,
-                                movieTitle = item.title,
-                                overview = syncedOverview,
-                                keywords = topKeywords,
-                                cast = topCast,
-                                history = historySummary
-                            )
+                            // Synthesis 2.0: Use local Ollama (Gemma) for personalized research if host is reachable
+                            val localSynthesis = if (isOllamaAvailable) {
+                                val synth = generatePersonalizedSynthesis(
+                                    host = ollamaHost,
+                                    movieTitle = item.title,
+                                    overview = syncedOverview,
+                                    keywords = topKeywords,
+                                    cast = topCast,
+                                    history = historySummary
+                                )
+                                if (synth == null) {
+                                    // Mark unavailable for subsequent items in this run if it failed
+                                    isOllamaAvailable = false
+                                }
+                                synth
+                            } else {
+                                null
+                            }
 
                             if (localSynthesis != null) {
                                 syncedTrivia = localSynthesis
                                 Log.d(TAG, "Local LLM Synthesis successful for \"${item.title}\"")
                             } else {
-                                // Fallback to basic template if Ollama is offline
+                                // Fallback to structured template if Ollama is offline
                                 syncedTrivia = """
                                     ---
                                     focus_topics: "$topKeywords"
@@ -214,7 +233,7 @@ class AvailabilitySyncWorker(
                                     - Talent Profile: Features notable performances by $topCast.
                                     - Smart Sourcing: Cross-referenced with history summary: $historySummary.
                                 """.trimIndent()
-                                Log.d(TAG, "Ollama offline. Using basic template synthesis for \"${item.title}\"")
+                                Log.d(TAG, "Ollama offline or synthesis skipped. Using template synthesis for \"${item.title}\"")
                             }
                         } catch (e: Exception) {
                             Log.e(TAG, "Synthesis Agent failed for \"${item.title}\": ${e.message}")
@@ -291,7 +310,7 @@ class AvailabilitySyncWorker(
             val response = api.chat(request)
             response.message.content
         } catch (e: Exception) {
-            Log.e(TAG, "Ollama synthesis failed: ${e.message}")
+            Log.w(TAG, "Ollama synthesis call failed: ${e.message}. Falling back to template synthesis.")
             null
         }
     }

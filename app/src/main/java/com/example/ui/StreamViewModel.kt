@@ -177,7 +177,12 @@ class StreamViewModel(
                 currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", replyContent))
                 _chatMessages.value = currentChat
             } catch (e: Exception) {
-                currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", "Error connecting to local Ollama instance: ${e.message}"))
+                val errorMsg = if (e is java.net.ConnectException || e is java.net.SocketTimeoutException || e is java.net.UnknownHostException) {
+                    "Unable to connect to local Ollama instance at ${ollamaHost.value}:11434. Please ensure your laptop is running Ollama (`OLLAMA_HOST=0.0.0.0 ollama serve`) on the local network, or update the Ollama Host IP in Settings."
+                } else {
+                    "Error connecting to local Ollama instance: ${e.message}"
+                }
+                currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", errorMsg))
                 _chatMessages.value = currentChat
             } finally {
                 _isChatLoading.value = false
@@ -506,7 +511,11 @@ class StreamViewModel(
         val request = OneTimeWorkRequestBuilder<AvailabilitySyncWorker>()
             .setConstraints(constraints)
             .build()
-        WorkManager.getInstance(getApplication()).enqueue(request)
+        WorkManager.getInstance(getApplication()).enqueueUniqueWork(
+            AvailabilitySyncWorker.WORK_NAME,
+            androidx.work.ExistingWorkPolicy.KEEP,
+            request
+        )
         if (showMessage) {
             _statusMessage.value = "Fetching streaming availability from TMDB\u2026"
         }

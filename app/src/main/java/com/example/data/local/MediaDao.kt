@@ -38,6 +38,18 @@ interface MediaDao {
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMediaItemById(id: Long)
 
+    @Query("SELECT COUNT(*) FROM media_items")
+    suspend fun getMediaItemCount(): Int
+
+    @Query("SELECT COUNT(*) FROM media_items WHERE status = 'WATCHED'")
+    suspend fun getWatchedCount(): Int
+
+    @Query("SELECT COUNT(*) FROM media_items WHERE status = 'WATCHLIST'")
+    suspend fun getWatchlistCount(): Int
+
+    @Query("SELECT title FROM media_items")
+    suspend fun getAllTitles(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWatchSessions(sessions: List<WatchSession>)
 

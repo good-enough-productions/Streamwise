@@ -73,7 +73,8 @@ object CastingManager {
                     socket.receive(receivePacket)
                     
                     val response = String(receivePacket.data, 0, receivePacket.length)
-                    val device = parseSsdpResponse(response, receivePacket.address.hostAddress)
+                    val hostAddress = receivePacket.address?.hostAddress ?: ""
+                    val device = parseSsdpResponse(response, hostAddress)
                     
                     if (device != null && devices.none { it.ip == device.ip }) {
                         devices.add(device)

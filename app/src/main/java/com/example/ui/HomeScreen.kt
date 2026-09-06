@@ -14,10 +14,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -142,36 +145,36 @@ fun HomeScreen(
                 .padding(innerPadding)
         ) {
             // Main navigation tabs for modular layout
-            ScrollableTabRow(
+            TabRow(
                 selectedTabIndex = selectedTab,
                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-                edgePadding = 0.dp
+                contentColor = MaterialTheme.colorScheme.primary
             ) {
                 Tab(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    text = { Text("Watchlist", fontSize = 11.sp) },
-                    icon = { Icon(Icons.Default.List, contentDescription = "Watchlist tab") },
+                    text = { Text("Watchlist", fontSize = 11.sp, fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist tab") },
                     modifier = Modifier.testTag("tab_watchlist")
                 )
                 Tab(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    text = { Text("Watched", fontSize = 11.sp) },
+                    text = { Text("Watched", fontSize = 11.sp, fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
                     icon = { Icon(Icons.Default.Check, contentDescription = "Watched history tab") },
                     modifier = Modifier.testTag("tab_watched")
                 )
                 Tab(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    text = { Text("ROI Stats", fontSize = 11.sp) },
+                    text = { Text("ROI Stats", fontSize = 11.sp, fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
                     icon = { Icon(Icons.Default.Star, contentDescription = "ROI stats tab") },
                     modifier = Modifier.testTag("tab_budget")
                 )
                 Tab(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
-                    text = { Text("Agent", fontSize = 11.sp) },
+                    text = { Text("Agent", fontSize = 11.sp, fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
                     icon = { Icon(Icons.Default.Person, contentDescription = "AI Agent tab") },
                     modifier = Modifier.testTag("tab_agent")
                 )
@@ -300,6 +303,136 @@ fun HomeScreen(
 }
 
 // ==========================================
+// COMPOSABLE: Spotlight Discovery Card
+// ==========================================
+@Composable
+fun SpotlightCard(
+    item: MediaItem,
+    allProviders: List<StreamingProvider>,
+    onWatchClick: () -> Unit,
+    onMovieClick: () -> Unit
+) {
+    val activeProvider = remember(item, allProviders) {
+        item.providersList.mapNotNull { pId -> allProviders.find { it.id == pId } }
+            .firstOrNull { it.isActive || it.costPerMonth == 0.0 }
+    }
+
+    Card(
+        modifier = Modifier
+            .width(135.dp)
+            .clickable { onMovieClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        ),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            // Inset-bordered artwork with concentric radius: 16 - 8 = 8.dp
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            ) {
+                if (!item.imageUrl.isNullOrEmpty()) {
+                    coil.compose.AsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = "Spotlight poster",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                }
+
+                // Top floating rating badge with tabular numerals
+                if (item.rating != null && item.rating > 0.0) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.75f),
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .align(Alignment.TopEnd)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(10.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = String.format(Locale.US, "%.1f", item.rating),
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Streaming provider tag
+            if (activeProvider != null) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(vertical = 3.dp)
+                ) {
+                    Text(
+                        text = activeProvider.name,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.height(18.dp))
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Quick watch intent button with optically-centered play arrow
+            Button(
+                onClick = onWatchClick,
+                shape = RoundedCornerShape(6.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(30.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(14.dp)
+                            .offset(x = 1.dp) // Optical centroid alignment
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Watch", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
 // COMPOSABLE: Watchlist Screen
 // ==========================================
 @Composable
@@ -326,6 +459,7 @@ fun WatchlistTabContent(
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("added") } // "added", "alpha", "rating"
     var showFreeOnly by remember { mutableStateOf(false) }
+    var showTopRatedOnly by remember { mutableStateOf(false) }
     var selectedGenre by remember { mutableStateOf<String?>(null) }
 
     val allGenres = remember(watchlistItems) {
@@ -335,8 +469,16 @@ fun WatchlistTabContent(
             .sorted()
     }
 
+    // Curated Spotlight items available on active or free platforms
+    val spotlightItems = remember(watchlistItems, activeProviderIds, freeProviderIds) {
+        watchlistItems.filter { item ->
+            item.status != MediaStatus.WATCHED.name &&
+            item.providersList.any { activeProviderIds.contains(it) || freeProviderIds.contains(it) }
+        }.sortedByDescending { it.rating ?: 0.0 }.take(8)
+    }
+
     // Filter items according to state
-    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, selectedGenre) {
+    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, showTopRatedOnly, selectedGenre) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
@@ -352,6 +494,10 @@ fun WatchlistTabContent(
             if (showFreeOnly) {
                 val provs = item.providersList
                 if (provs.none { freeProviderIds.contains(it) }) return@filter false
+            }
+
+            if (showTopRatedOnly) {
+                if ((item.rating ?: 0.0) < 7.5) return@filter false
             }
 
             if (filterOnlyMyServices) {
@@ -376,25 +522,203 @@ fun WatchlistTabContent(
         }
     }
 
+    val filterProviders = remember(allProviders) { allProviders.filter { it.isActive || it.costPerMonth == 0.0 } }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // ... (TMDB Key Warning Box)
-
-        // Search & Sorting controls
+        // Bento Grid Header (Above-the-fold Information Density)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Bento Card 1: Vault Pulse & Spending Ticker
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(96.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "VAULT PULSE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp
+                        )
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "${watchlistItems.size}",
+                            style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "archived",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
+                    Text(
+                        text = "${allProviders.count { it.isActive }} services • $${String.format(Locale.US, "%.2f", allProviders.filter { it.isActive }.sumOf { it.costPerMonth })}/mo",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            // Bento Card 2: Olivia Concierge Intelligence
+            Card(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(96.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "OLIVIA AGENT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp
+                        )
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981))
+                        )
+                    }
+                    Text(
+                        text = "Gemma 4 Brain",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                    Text(
+                        text = "Privacy-First • Local AI",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+
+        // Horizontal Curated Discovery Lane: Spotlight Ready to Stream
+        if (searchQuery.isBlank() && spotlightItems.isNotEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "Spotlight: Ready to Stream",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                        ) {
+                            Text(
+                                "${spotlightItems.size}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    spotlightItems.forEach { item ->
+                        SpotlightCard(
+                            item = item,
+                            allProviders = allProviders,
+                            onWatchClick = { onWatchClick(item) },
+                            onMovieClick = { onMovieClick(item) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Directed Search & Sort Controls
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                label = { Text("Search watchlist...") },
+                placeholder = { Text("Search watchlist...") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
@@ -406,19 +730,19 @@ fun WatchlistTabContent(
                 },
                 modifier = Modifier
                     .weight(1.5f)
-                    .height(52.dp),
+                    .height(50.dp),
                 textStyle = MaterialTheme.typography.bodyMedium,
                 shape = RoundedCornerShape(12.dp)
             )
 
             // Sort Selector Button
             var sortExpanded by remember { mutableStateOf(false) }
-            Box(modifier = Modifier.weight(1.2f)) {
+            Box(modifier = Modifier.weight(1.1f)) {
                 OutlinedButton(
                     onClick = { sortExpanded = true },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(50.dp),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
@@ -427,7 +751,7 @@ fun WatchlistTabContent(
                         "rating" -> "Rating"
                         else -> "Recent"
                     }
-                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(sortLabel, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -460,92 +784,23 @@ fun WatchlistTabContent(
             }
         }
 
-        // Hot-Platform Horizontal Ribbon Filter
-        val filterProviders = remember(allProviders) { allProviders.filter { it.isActive || it.costPerMonth == 0.0 } }
-        if (filterProviders.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Services:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-
-                FilterChip(
-                    selected = selectedPlatformId == null,
-                    onClick = { selectedPlatformId = null },
-                    label = { Text("All Platforms", fontSize = 11.sp) }
-                )
-
-                filterProviders.forEach { provider ->
-                    FilterChip(
-                        selected = selectedPlatformId == provider.id,
-                        onClick = {
-                            selectedPlatformId = if (selectedPlatformId == provider.id) null else provider.id
-                        },
-                        label = { Text(provider.name, fontSize = 11.sp) }
-                    )
-                }
-            }
-        }
-
-        // Genre Horizontal Ribbon Filter
-        if (allGenres.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "Genres:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(end = 4.dp)
-                )
-
-                FilterChip(
-                    selected = selectedGenre == null,
-                    onClick = { selectedGenre = null },
-                    label = { Text("All Genres", fontSize = 11.sp) }
-                )
-
-                allGenres.forEach { genre ->
-                    FilterChip(
-                        selected = selectedGenre == genre,
-                        onClick = {
-                            selectedGenre = if (selectedGenre == genre) null else genre
-                        },
-                        label = { Text(genre, fontSize = 11.sp) }
-                    )
-                }
-            }
-        }
-
-        // Filter Selection Pills + Sync button
+        // Single Streamlined Faceted Filter Ribbon
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(bottom = 10.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             FilterChip(
-                selected = !filterOnlyMyServices && !showFreeOnly,
-                onClick = { 
+                selected = !filterOnlyMyServices && !showFreeOnly && !showTopRatedOnly && selectedPlatformId == null && selectedGenre == null,
+                onClick = {
                     onFilterToggle(false)
                     showFreeOnly = false
+                    showTopRatedOnly = false
+                    selectedPlatformId = null
+                    selectedGenre = null
                 },
                 label = { Text("All", fontSize = 11.sp) },
                 modifier = Modifier.testTag("filter_all_chip")
@@ -553,7 +808,7 @@ fun WatchlistTabContent(
 
             FilterChip(
                 selected = filterOnlyMyServices,
-                onClick = { 
+                onClick = {
                     onFilterToggle(!filterOnlyMyServices)
                     if (!filterOnlyMyServices) showFreeOnly = false
                 },
@@ -564,7 +819,7 @@ fun WatchlistTabContent(
 
             FilterChip(
                 selected = showFreeOnly,
-                onClick = { 
+                onClick = {
                     showFreeOnly = !showFreeOnly
                     if (showFreeOnly) onFilterToggle(false)
                 },
@@ -573,7 +828,34 @@ fun WatchlistTabContent(
                 modifier = Modifier.testTag("filter_free_chip")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FilterChip(
+                selected = showTopRatedOnly,
+                onClick = { showTopRatedOnly = !showTopRatedOnly },
+                label = { Text("★ 7.5+", fontSize = 11.sp) },
+                leadingIcon = { Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp)) }
+            )
+
+            // Platform Filter Chips
+            filterProviders.forEach { provider ->
+                FilterChip(
+                    selected = selectedPlatformId == provider.id,
+                    onClick = {
+                        selectedPlatformId = if (selectedPlatformId == provider.id) null else provider.id
+                    },
+                    label = { Text(provider.name, fontSize = 11.sp) }
+                )
+            }
+
+            // Genre Filter Chips
+            allGenres.take(6).forEach { genre ->
+                FilterChip(
+                    selected = selectedGenre == genre,
+                    onClick = {
+                        selectedGenre = if (selectedGenre == genre) null else genre
+                    },
+                    label = { Text(genre, fontSize = 11.sp) }
+                )
+            }
 
             IconButton(
                 onClick = onSyncClick,
@@ -602,21 +884,21 @@ fun WatchlistTabContent(
                     modifier = Modifier.padding(24.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.List,
+                        imageVector = Icons.AutoMirrored.Filled.List,
                         contentDescription = "Empty list",
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        "No titles in this category.",
+                        "No titles found",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        if (filterOnlyMyServices) "Try activating more subscriptions in 'My Services' or share links directly into Stream Manager."
-                        else "Tap the FAB or share titles from utilities to start indexing of movies/shows.",
+                        if (filterOnlyMyServices) "Try enabling more subscriptions or clear filters to view catalog."
+                        else "Use the Add button or share titles to populate your vault.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
                         textAlign = TextAlign.Center
@@ -662,9 +944,10 @@ fun MediaItemCard(
             .clickable { onMovieClick() }
             .testTag("media_item_${item.id}"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
@@ -673,15 +956,16 @@ fun MediaItemCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
-                // TMDB Poster image display
+                // TMDB Poster artwork with inset border to prevent perimeter bleeding
                 if (!item.imageUrl.isNullOrEmpty()) {
                     coil.compose.AsyncImage(
                         model = item.imageUrl,
                         contentDescription = "Poster artwork",
                         modifier = Modifier
-                            .size(width = 65.dp, height = 95.dp)
+                            .size(width = 68.dp, height = 98.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -697,6 +981,7 @@ fun MediaItemCard(
                             text = item.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -712,7 +997,7 @@ fun MediaItemCard(
                         }
                     }
 
-                    // TMDB Rating Display if available
+                    // TMDB Rating Display with Tabular Figures
                     if (item.rating != null && item.rating > 0.0) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -726,12 +1011,12 @@ fun MediaItemCard(
                             )
                             Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = String.format("%.1f", item.rating),
-                                style = MaterialTheme.typography.labelSmall,
+                                text = String.format(Locale.US, "%.1f", item.rating),
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontWeight = FontWeight.SemiBold
                             )
-                            
+
                             if (!item.genres.isNullOrEmpty()) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
@@ -783,7 +1068,6 @@ fun MediaItemCard(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Extract relevance score from YAML trivia if present
                         val relevanceScore = remember(item.trivia) {
                             item.trivia?.lines()
                                 ?.find { it.contains("personal_relevance_score:") }
@@ -797,7 +1081,7 @@ fun MediaItemCard(
 
                         if (!relevanceScore.isNullOrEmpty()) {
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(vertical = 2.dp)
                             ) {
@@ -807,14 +1091,20 @@ fun MediaItemCard(
                                 ) {
                                     Icon(Icons.Default.Favorite, null, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.primary)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Match: $relevanceScore/10", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    Text(
+                                        "Match: $relevanceScore/10",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
                                 }
                             }
                         }
 
                         if (!item.importSource.isNullOrEmpty()) {
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
                                 modifier = Modifier.padding(vertical = 2.dp)
                             ) {
@@ -872,13 +1162,13 @@ fun MediaItemCard(
                             )
                         }
                     } else {
-                        // Limit display of providers to 3 to avoid overflow/wrapping bugs
+                        // Limit display of providers to 3 to avoid overflow
                         providers.take(3).forEach { pId ->
                             val fullProvider = allProviders.find { it.id == pId }
                             val isSubscribed = activeSubscribedIds.contains(pId)
 
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = if (isSubscribed) {
                                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
                                 } else {
@@ -898,7 +1188,9 @@ fun MediaItemCard(
                                     Icon(
                                         imageVector = if (isSubscribed) Icons.Default.CheckCircle else Icons.Default.PlayArrow,
                                         contentDescription = null,
-                                        modifier = Modifier.size(10.dp),
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .then(if (!isSubscribed) Modifier.offset(x = 1.dp) else Modifier),
                                         tint = if (isSubscribed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -907,9 +1199,9 @@ fun MediaItemCard(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (isSubscribed) {
                                             MaterialTheme.colorScheme.onPrimaryContainer
-                                         } else {
+                                        } else {
                                             MaterialTheme.colorScheme.outline
-                                         },
+                                        },
                                         fontWeight = if (isSubscribed) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
@@ -918,7 +1210,7 @@ fun MediaItemCard(
                         if (providers.size > 3) {
                             Text(
                                 text = "+${providers.size - 3} more",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                                 color = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.padding(start = 4.dp)
                             )
@@ -926,10 +1218,10 @@ fun MediaItemCard(
                     }
                 }
 
-                // INTENT TRIGGER: Watch now button
+                // INTENT TRIGGER: Watch now button with concentric radius (20 - 12 = 8dp) and optical centroid alignment
                 Button(
                     onClick = onWatchClick,
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     ),
@@ -940,7 +1232,9 @@ fun MediaItemCard(
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier
+                                .size(16.dp)
+                                .offset(x = 1.dp) // Optical centroid alignment
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Watch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1123,33 +1417,36 @@ fun MonthlyRoiContent(
             // Summary Budget card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                )
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "Monthly Streaming Burn Rate",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        "MONTHLY STREAMING BURN RATE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "$${String.format("%.2f", totalCost)}",
-                        style = MaterialTheme.typography.headlineLarge,
+                        "$${String.format(Locale.US, "%.2f", totalCost)}",
+                        style = MaterialTheme.typography.headlineLarge.copy(fontFeatureSettings = "tnum"),
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "You must watch at least 3 hours per service per month to justify these costs. Services are ranked below from least optimized to highest value.",
+                        "Tracked across ${activeSubscribed.size} active services. Threshold: ≥3h/mo per subscription for positive value.",
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
                 }
             }
@@ -1159,7 +1456,8 @@ fun MonthlyRoiContent(
             Text(
                 "Subscription Value Analytics (This Month)",
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
             )
         }
 
@@ -1167,10 +1465,12 @@ fun MonthlyRoiContent(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                 ) {
                     Text(
-                        "To analyze ROI, please configure your active streaming services in the 'My Services' tab.",
+                        "To analyze ROI, please configure your active streaming services in Settings.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(24.dp),
                         textAlign = TextAlign.Center,
@@ -1181,19 +1481,21 @@ fun MonthlyRoiContent(
         } else {
             items(worstValueProviders, key = { it.providerId }) { stats ->
                 val isPrimeCancelCandidate = stats.totalHours < 3.0
-                
+
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isPrimeCancelCandidate) {
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
                         } else {
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                         }
                     ),
-                    border = if (isPrimeCancelCandidate) {
-                        BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.3f))
-                    } else null,
+                    border = BorderStroke(
+                        1.dp,
+                        if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
+                        else Color.White.copy(alpha = 0.08f)
+                    ),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Row(
@@ -1208,7 +1510,8 @@ fun MonthlyRoiContent(
                                 Text(
                                     stats.providerName,
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 if (isPrimeCancelCandidate) {
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -1226,13 +1529,13 @@ fun MonthlyRoiContent(
                                 horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 Text(
-                                    "Watched: ${String.format("%.1f", stats.totalHours)}h",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    "Watched: ${String.format(Locale.US, "%.1f", stats.totalHours)}h",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
                                     color = MaterialTheme.colorScheme.outline
                                 )
                                 Text(
-                                    "Cost: $${stats.costPerMonth}/mo",
-                                    style = MaterialTheme.typography.bodySmall,
+                                    "Cost: $${String.format(Locale.US, "%.2f", stats.costPerMonth)}/mo",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             }
@@ -1240,8 +1543,8 @@ fun MonthlyRoiContent(
 
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                "$${String.format("%.2f", stats.costPerHour)}",
-                                style = MaterialTheme.typography.titleMedium,
+                                "$${String.format(Locale.US, "%.2f", stats.costPerHour)}",
+                                style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
                                 fontWeight = FontWeight.Black,
                                 color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                             )
@@ -2605,7 +2908,7 @@ fun AgentChatTabContent(
                 shape = CircleShape,
                 elevation = FloatingActionButtonDefaults.elevation(0.dp)
             ) {
-                Icon(Icons.Default.Send, contentDescription = "Send message")
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send message")
             }
         }
     }
