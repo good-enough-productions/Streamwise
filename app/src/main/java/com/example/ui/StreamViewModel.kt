@@ -43,6 +43,8 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class StreamViewModel(
     application: Application,
@@ -387,111 +389,123 @@ class StreamViewModel(
         }
     }
 
+    private val podcastSyncMutex = Mutex()
+
+    suspend fun syncPodcastRecommendationsInternal(): Int = podcastSyncMutex.withLock {
+        val webhookUrl = userPreferences.googleSheetWebhookUrl
+        var currentUrl = if (webhookUrl.contains("?")) "$webhookUrl&action=getPodcastRecs" else "$webhookUrl?action=getPodcastRecs"
+
+        var conn: HttpURLConnection? = null
+        var redirects = 0
+        var code = 0
+
+        while (redirects < 5) {
+            val url = URL(currentUrl)
+            conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 15000
+                readTimeout = 25000
+                instanceFollowRedirects = false
+                setRequestProperty("Accept", "application/json")
+            }
+            code = conn.responseCode
+            if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == 307 || code == 308) {
+                val newLocation = conn.getHeaderField("Location")
+                if (!newLocation.isNullOrBlank()) {
+                    currentUrl = newLocation
+                    redirects++
+                    conn.disconnect()
+                    continue
+                }
+            }
+            break
+        }
+
+        if (code in 200..299 && conn != null) {
+            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+            val json = JSONObject(responseText)
+            if (json.optBoolean("success", false)) {
+                val recs = json.optJSONArray("recommendations") ?: JSONArray()
+                val allItems = repository.mediaDao.getAllMediaItemsList()
+                val existingMap = allItems.associateBy { it.title.lowercase().trim() }.toMutableMap()
+
+                var addedCount = 0
+                var updatedCount = 0
+
+                for (i in 0 until recs.length()) {
+                    val obj = recs.getJSONObject(i)
+                    val title = obj.optString("title").trim()
+                    if (title.isBlank()) continue
+
+                    val podcast = obj.optString("podcast")
+                    val episode = obj.optString("episode")
+                    val airDate = obj.optString("airDate")
+                    val by = obj.optString("recommendedBy")
+                    val verdict = obj.optString("verdict")
+                    val context = obj.optString("context")
+
+                    val sourceTag = if (podcast.isNotBlank()) "Podcast: $podcast" else "Podcast Rec"
+                    val tagNotes = buildString {
+                        if (podcast.isNotBlank()) append("Podcast: $podcast\n")
+                        if (episode.isNotBlank()) append("Episode: $episode\n")
+                        if (airDate.isNotBlank()) append("Air Date: $airDate\n")
+                        if (by.isNotBlank()) append("Discussed By: $by\n")
+                        if (verdict.isNotBlank()) append("Verdict: $verdict\n")
+                        if (context.isNotBlank()) append("Discussion Context: $context")
+                    }.trim()
+
+                    val normKey = title.lowercase().trim()
+                    val existing = existingMap[normKey]
+                    if (existing != null) {
+                        val currentNotes = existing.userNotes ?: ""
+                        if (!currentNotes.contains(podcast) && podcast.isNotBlank()) {
+                            val newNotes = if (currentNotes.isBlank()) tagNotes else "$currentNotes\n\n$tagNotes"
+                            val updated = existing.copy(
+                                importSource = existing.importSource ?: sourceTag,
+                                userNotes = newNotes,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            repository.updateMediaItem(updated)
+                            existingMap[normKey] = updated
+                            updatedCount++
+                        }
+                    } else {
+                        // Any new title from Gemini Spark tracker gets added directly to Watchlist
+                        val newItem = MediaItem(
+                            title = title,
+                            status = MediaStatus.WATCHLIST.name,
+                            importSource = sourceTag,
+                            userNotes = tagNotes,
+                            addedAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                        val newId = repository.insertMediaItem(newItem)
+                        existingMap[normKey] = newItem.copy(id = newId)
+                        addedCount++
+                    }
+                }
+
+                _statusMessage.value = "✓ Synced ${recs.length()} podcast recs: +$addedCount Watchlist, ~$updatedCount Vault updated!"
+                return@withLock addedCount
+            } else {
+                _statusMessage.value = "Podcast sync error: ${json.optString("error", "Unknown error")}"
+            }
+        } else {
+            _statusMessage.value = "Podcast sync returned HTTP $code"
+        }
+        return@withLock 0
+    }
+
     fun syncPodcastRecommendations() {
         if (_isSyncingPodcasts.value) return
         viewModelScope.launch(Dispatchers.IO) {
             _isSyncingPodcasts.value = true
             try {
                 _statusMessage.value = "Fetching Gemini Spark podcast recommendations..."
-                val webhookUrl = userPreferences.googleSheetWebhookUrl
-                var currentUrl = if (webhookUrl.contains("?")) "$webhookUrl&action=getPodcastRecs" else "$webhookUrl?action=getPodcastRecs"
-
-                var conn: HttpURLConnection? = null
-                var redirects = 0
-                var code = 0
-
-                while (redirects < 5) {
-                    val url = URL(currentUrl)
-                    conn = (url.openConnection() as HttpURLConnection).apply {
-                        requestMethod = "GET"
-                        connectTimeout = 15000
-                        readTimeout = 25000
-                        instanceFollowRedirects = false
-                        setRequestProperty("Accept", "application/json")
-                    }
-                    code = conn.responseCode
-                    if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == 307 || code == 308) {
-                        val newLocation = conn.getHeaderField("Location")
-                        if (!newLocation.isNullOrBlank()) {
-                            currentUrl = newLocation
-                            redirects++
-                            conn.disconnect()
-                            continue
-                        }
-                    }
-                    break
-                }
-
-                if (code in 200..299 && conn != null) {
-                    val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = JSONObject(responseText)
-                    if (json.optBoolean("success", false)) {
-                        val recs = json.optJSONArray("recommendations") ?: JSONArray()
-                        val allItems = repository.allMediaItems.first()
-                        val existingMap = allItems.associateBy { it.title.lowercase().trim() }
-
-                        var addedCount = 0
-                        var updatedCount = 0
-
-                        for (i in 0 until recs.length()) {
-                            val obj = recs.getJSONObject(i)
-                            val title = obj.optString("title").trim()
-                            if (title.isBlank()) continue
-
-                            val podcast = obj.optString("podcast")
-                            val episode = obj.optString("episode")
-                            val airDate = obj.optString("airDate")
-                            val by = obj.optString("recommendedBy")
-                            val isRec = obj.optBoolean("isRecommendation", true)
-                            val verdict = obj.optString("verdict")
-                            val context = obj.optString("context")
-
-                            val sourceTag = if (podcast.isNotBlank()) "Podcast: $podcast" else "Podcast Rec"
-                            val tagNotes = buildString {
-                                if (podcast.isNotBlank()) append("Podcast: $podcast\n")
-                                if (episode.isNotBlank()) append("Episode: $episode\n")
-                                if (airDate.isNotBlank()) append("Air Date: $airDate\n")
-                                if (by.isNotBlank()) append("Discussed By: $by\n")
-                                if (verdict.isNotBlank()) append("Verdict: $verdict\n")
-                                if (context.isNotBlank()) append("Discussion Context: $context")
-                            }.trim()
-
-                            val existing = existingMap[title.lowercase()]
-                            if (existing != null) {
-                                val currentNotes = existing.userNotes ?: ""
-                                if (!currentNotes.contains(podcast) && podcast.isNotBlank()) {
-                                    val newNotes = if (currentNotes.isBlank()) tagNotes else "$currentNotes\n\n$tagNotes"
-                                    val updated = existing.copy(
-                                        importSource = existing.importSource ?: sourceTag,
-                                        userNotes = newNotes,
-                                        updatedAt = System.currentTimeMillis()
-                                    )
-                                    repository.updateMediaItem(updated)
-                                    updatedCount++
-                                }
-                            } else if (isRec) {
-                                val newItem = MediaItem(
-                                    title = title,
-                                    status = MediaStatus.PENDING_METADATA.name,
-                                    importSource = sourceTag,
-                                    userNotes = tagNotes,
-                                    addedAt = System.currentTimeMillis(),
-                                    updatedAt = System.currentTimeMillis()
-                                )
-                                repository.insertMediaItem(newItem)
-                                addedCount++
-                            }
-                        }
-
-                        _statusMessage.value = "✓ Synced ${recs.length()} podcast recs: +$addedCount Watchlist, ~$updatedCount Vault updated!"
-                        if (addedCount > 0) {
-                            syncWatchlistMetadata(forceAll = false)
-                        }
-                    } else {
-                        _statusMessage.value = "Podcast sync error: ${json.optString("error", "Unknown error")}"
-                    }
-                } else {
-                    _statusMessage.value = "Podcast sync returned HTTP $code"
+                val added = syncPodcastRecommendationsInternal()
+                if (added > 0) {
+                    repository.deduplicateMediaItems()
+                    syncWatchlistMetadata(forceAll = false)
                 }
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Podcast recommendations sync failed", e)
@@ -509,10 +523,17 @@ class StreamViewModel(
             if (removed > 0) {
                 android.util.Log.d(TAG, "Deduplicated $removed duplicate media items on startup.")
             }
-        }
-        // Auto-sync TMDB metadata on launch if items are unpopulated
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(800)
+            // Auto-sync Gemini Spark podcast recommendations on startup
+            try {
+                val added = syncPodcastRecommendationsInternal()
+                if (added > 0) {
+                    repository.deduplicateMediaItems()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Startup podcast sync failed: ${e.message}")
+            }
+            // Auto-sync TMDB metadata on launch if items are unpopulated
+            kotlinx.coroutines.delay(500)
             syncWatchlistMetadata(forceAll = false)
         }
     }
@@ -1353,6 +1374,14 @@ class StreamViewModel(
                                     )
                                     repository.updateMediaItem(updated)
                                     updatedCount++
+                                } else {
+                                    // Not found in TV or movies; set status to WATCHLIST with providerIds "none"
+                                    val fallback = item.copy(
+                                        status = MediaStatus.WATCHLIST.name,
+                                        providerIds = item.providerIds ?: "none",
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                    repository.updateMediaItem(fallback)
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.w(TAG, "TV search failed for ${item.title}: ${e.message}")
@@ -1375,6 +1404,7 @@ class StreamViewModel(
     }
 
     fun triggerImmediateSync() {
+        syncPodcastRecommendations()
         syncWatchlistMetadata(forceAll = false)
         enqueueTmdbSync(showMessage = false)
     }
