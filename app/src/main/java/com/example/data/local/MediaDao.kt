@@ -2,6 +2,7 @@ package com.example.data.local
 
 import androidx.room.*
 import com.example.data.model.MediaItem
+import com.example.data.model.MediaStatus
 import com.example.data.model.StreamingProvider
 import com.example.data.model.WatchSession
 import kotlinx.coroutines.flow.Flow
@@ -62,12 +63,13 @@ interface MediaDao {
     @Transaction
     suspend fun deduplicateMediaItems(): Int {
         val all = getAllMediaItemsList()
-        val duplicates = all.groupBy { it.title.trim().lowercase() to it.status }
+        val duplicates = all.groupBy { it.title.trim().lowercase() }
         val idsToDelete = mutableListOf<Long>()
         for ((_, group) in duplicates) {
             if (group.size > 1) {
                 val sorted = group.sortedWith(
-                    compareByDescending<MediaItem> { !it.imageUrl.isNullOrBlank() }
+                    compareByDescending<MediaItem> { it.status == MediaStatus.WATCHED.name }
+                        .thenByDescending { !it.imageUrl.isNullOrBlank() }
                         .thenByDescending { !it.tmdbId.isNullOrBlank() }
                         .thenByDescending { !it.providerIds.isNullOrBlank() }
                         .thenBy { it.id }
