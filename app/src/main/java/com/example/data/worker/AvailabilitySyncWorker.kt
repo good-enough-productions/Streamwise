@@ -25,6 +25,7 @@ class AvailabilitySyncWorker(
     companion object {
         private const val TAG = "AvailabilitySyncWorker"
         const val WORK_NAME = "com.example.data.worker.AvailabilitySyncWorker"
+        const val ONE_TIME_WORK_NAME = "com.example.data.worker.AvailabilitySyncWorker.ONETIME"
     }
 
     override suspend fun doWork(): Result {
@@ -329,7 +330,14 @@ class AvailabilitySyncWorker(
                 name.contains("max") || name.contains("hbo") -> localIds.add("max")
                 name.contains("disney") -> localIds.add("disney")
                 name.contains("amazon") || name.contains("prime video") -> localIds.add("prime")
-                name.contains("apple tv") -> localIds.add("apple")
+                name.contains("apple tv") || name.contains("apple") -> localIds.add("apple")
+                name.contains("criterion") -> localIds.add("criterion")
+                name.contains("peacock") -> localIds.add("peacock")
+                name.contains("paramount") -> localIds.add("paramount")
+                name.contains("mubi") -> localIds.add("mubi")
+                name.contains("shudder") -> localIds.add("shudder")
+                name.contains("starz") -> localIds.add("starz")
+                name.contains("britbox") -> localIds.add("britbox")
                 name.contains("tubi") -> localIds.add("tubi")
                 name.contains("freevee") -> localIds.add("freevee")
                 name.contains("pluto") -> localIds.add("pluto")
@@ -349,7 +357,14 @@ class AvailabilitySyncWorker(
                 name.contains("max") || name.contains("hbo") -> localIds.add("max")
                 name.contains("disney") -> localIds.add("disney")
                 name.contains("amazon") || name.contains("prime video") -> localIds.add("prime")
-                name.contains("apple tv") -> localIds.add("apple")
+                name.contains("apple tv") || name.contains("apple") -> localIds.add("apple")
+                name.contains("criterion") -> localIds.add("criterion")
+                name.contains("peacock") -> localIds.add("peacock")
+                name.contains("paramount") -> localIds.add("paramount")
+                name.contains("mubi") -> localIds.add("mubi")
+                name.contains("shudder") -> localIds.add("shudder")
+                name.contains("starz") -> localIds.add("starz")
+                name.contains("britbox") -> localIds.add("britbox")
                 name.contains("tubi") -> localIds.add("tubi")
                 name.contains("freevee") -> localIds.add("freevee")
                 name.contains("pluto") -> localIds.add("pluto")
