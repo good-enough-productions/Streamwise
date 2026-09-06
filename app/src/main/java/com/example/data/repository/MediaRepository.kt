@@ -7,6 +7,7 @@ import com.example.data.model.MediaStatus
 import com.example.data.model.StreamingProvider
 import com.example.data.model.WatchSession
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.util.Calendar
 
 /**
@@ -25,7 +26,18 @@ class MediaRepository(private val mediaDao: MediaDao) {
 
     // --- Media (Watchlist) Management ---
 
-    val allMediaItems: Flow<List<MediaItem>> = mediaDao.getAllMediaItems()
+    val allMediaItems: Flow<List<MediaItem>> = mediaDao.getAllMediaItems().map { list ->
+        list.sortedWith(
+            compareByDescending<MediaItem> { !it.imageUrl.isNullOrBlank() }
+                .thenByDescending { !it.tmdbId.isNullOrBlank() }
+                .thenByDescending { !it.providerIds.isNullOrBlank() }
+                .thenBy { it.id }
+        ).distinctBy { it.title.trim().lowercase() to it.status }
+    }
+
+    suspend fun deduplicateMediaItems(): Int {
+        return mediaDao.deduplicateMediaItems()
+    }
 
     fun getMediaByStatus(status: MediaStatus): Flow<List<MediaItem>> {
         return mediaDao.getMediaItemsByStatus(status.name)

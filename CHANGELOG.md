@@ -2,6 +2,15 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.2.2] - 2026-09-06
+
+### Fixed
+- **Feedback Webhook 404 Resolution**: Updated the Jules feedback proxy URL in `FeedbackDialog.kt` to the live Cloud Run endpoint (`https://feedback-proxy-rljydlcchq-uc.a.run.app`), restoring $0/month tokenless feedback submissions with attached screenshots directly into GitHub Issues.
+- **Duplicate Titles Elimination**:
+  - Fixed concurrent database seeding between `onCreate` and `onOpen` in `AppDatabase.kt` using atomic synchronization and normalized title caching.
+  - Implemented automatic database deduplication in `MediaDao.kt` (`deduplicateMediaItems`) that preserves the richest record (with TMDB poster, metadata, and provider links) and purges twin entries.
+  - Added Flow-level deduplication in `MediaRepository.kt` and UI-level guardrails across Spotlight, Watchlist, and Watched Vault in `HomeScreen.kt`.
+
 ## [1.2.1] - 2026-09-06
 
 ### Restored

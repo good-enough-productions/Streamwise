@@ -77,6 +77,8 @@ abstract class AppDatabase : RoomDatabase() {
         private val context: Context,
         private val scope: CoroutineScope
     ) : RoomDatabase.Callback() {
+        private val isSeeding = java.util.concurrent.atomic.AtomicBoolean(false)
+
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
             INSTANCE?.let { database ->
@@ -104,82 +106,107 @@ abstract class AppDatabase : RoomDatabase() {
                         Log.d("AppDatabase", "Detected only $watchedCount watched items, supplementing from full Letterboxd archive...")
                         populateInitialProvidersAndLetterboxdData(database.mediaDao())
                     }
+                    val removed = database.mediaDao().deduplicateMediaItems()
+                    if (removed > 0) {
+                        Log.d("AppDatabase", "Cleaned up $removed duplicate media items on database open.")
+                    }
                 }
             }
         }
 
         private suspend fun populateInitialProvidersAndLetterboxdData(dao: MediaDao) {
-            val providers = listOf(
-                StreamingProvider("netflix", "Netflix", costPerMonth = 15.49, isActive = true),
-                StreamingProvider("hulu", "Hulu", costPerMonth = 14.99, isActive = true),
-                StreamingProvider("max", "Max (HBO)", costPerMonth = 15.99, isActive = true),
-                StreamingProvider("disney", "Disney+", costPerMonth = 13.99, isActive = true),
-                StreamingProvider("prime", "Prime Video", costPerMonth = 8.99, isActive = false),
-                StreamingProvider("apple", "Apple TV+", costPerMonth = 9.99, isActive = false),
-                StreamingProvider("tubi", "Tubi", costPerMonth = 0.0, isActive = true),
-                StreamingProvider("freevee", "Freevee", costPerMonth = 0.0, isActive = true),
-                StreamingProvider("pluto", "Pluto TV", costPerMonth = 0.0, isActive = true)
-            )
-            dao.insertStreamingProviders(providers)
+            if (!isSeeding.compareAndSet(false, true)) {
+                Log.d("AppDatabase", "Database seeding already in progress. Skipping redundant concurrent execution.")
+                return
+            }
+            try {
+                val providers = listOf(
+                    StreamingProvider("netflix", "Netflix", costPerMonth = 15.49, isActive = true),
+                    StreamingProvider("hulu", "Hulu", costPerMonth = 14.99, isActive = true),
+                    StreamingProvider("max", "Max (HBO)", costPerMonth = 15.99, isActive = true),
+                    StreamingProvider("disney", "Disney+", costPerMonth = 13.99, isActive = true),
+                    StreamingProvider("prime", "Prime Video", costPerMonth = 8.99, isActive = false),
+                    StreamingProvider("apple", "Apple TV+", costPerMonth = 9.99, isActive = false),
+                    StreamingProvider("tubi", "Tubi", costPerMonth = 0.0, isActive = true),
+                    StreamingProvider("freevee", "Freevee", costPerMonth = 0.0, isActive = true),
+                    StreamingProvider("pluto", "Pluto TV", costPerMonth = 0.0, isActive = true)
+                )
+                dao.insertStreamingProviders(providers)
 
-            val existingTitles = dao.getAllTitles().toSet()
+                val existingTitles = dao.getAllTitles().map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toMutableSet()
 
-            Log.d("AppDatabase", "Seeding initial Letterboxd watch list entries from CSV...")
-            val watchlistRows = parseCsv(context, "watchlist.csv")
-            val watchlistItems = watchlistRows
-                .filter { it.name !in existingTitles }
-                .map { row ->
+                Log.d("AppDatabase", "Seeding initial Letterboxd watch list entries from CSV...")
+                val watchlistRows = parseCsv(context, "watchlist.csv")
+                val watchlistItems = watchlistRows
+                    .filter { row ->
+                        val key = row.name.trim().lowercase()
+                        if (key.isNotEmpty() && !existingTitles.contains(key)) {
+                            existingTitles.add(key)
+                            true
+                        } else false
+                    }
+                    .map { row ->
+                        MediaItem(
+                            title = row.name,
+                            sharedUrl = row.uri,
+                            status = com.example.data.model.MediaStatus.WATCHLIST.name,
+                            addedAt = parseDateToTimestamp(row.date),
+                            providerIds = null,
+                            userNotes = row.notes,
+                            importSource = row.source,
+                            overview = "Imported watchlist item \"${row.name}\" from Letterboxd account watchlist record."
+                        )
+                    }
+                if (watchlistItems.isNotEmpty()) {
+                    dao.insertMediaItems(watchlistItems)
+                    Log.d("AppDatabase", "Seeded ${watchlistItems.size} new watchlist items from CSV successfully.")
+                }
+
+                Log.d("AppDatabase", "Seeding Letterboxd watched history entries and monthly watch sessions from CSV...")
+                val historyRows = parseCsv(context, "watched_history.csv")
+                val newHistoryRows = historyRows.filter { row ->
+                    val key = row.name.trim().lowercase()
+                    if (key.isNotEmpty() && !existingTitles.contains(key)) {
+                        existingTitles.add(key)
+                        true
+                    } else false
+                }
+                val historyItems = newHistoryRows.map { row ->
+                    val watchTimestamp = parseDateToTimestamp(row.date)
                     MediaItem(
                         title = row.name,
                         sharedUrl = row.uri,
-                        status = com.example.data.model.MediaStatus.WATCHLIST.name,
-                        addedAt = parseDateToTimestamp(row.date),
+                        status = com.example.data.model.MediaStatus.WATCHED.name,
+                        addedAt = watchTimestamp,
+                        watchedAt = watchTimestamp,
                         providerIds = null,
                         userNotes = row.notes,
                         importSource = row.source,
-                        overview = "Imported watchlist item \"${row.name}\" from Letterboxd account watchlist record."
+                        overview = "Imported movie logged as watched on ${row.date} from Letterboxd archive."
                     )
                 }
-            if (watchlistItems.isNotEmpty()) {
-                dao.insertMediaItems(watchlistItems)
-                Log.d("AppDatabase", "Seeded ${watchlistItems.size} new watchlist items from CSV successfully.")
-            }
+                if (historyItems.isNotEmpty()) {
+                    val historyIds = dao.insertMediaItems(historyItems)
+                    Log.d("AppDatabase", "Inserted ${historyItems.size} watched movies from CSV successfully.")
 
-            Log.d("AppDatabase", "Seeding Letterboxd watched history entries and monthly watch sessions from CSV...")
-            val historyRows = parseCsv(context, "watched_history.csv")
-            val newHistoryRows = historyRows.filter { it.name !in existingTitles }
-            val historyItems = newHistoryRows.map { row ->
-                val watchTimestamp = parseDateToTimestamp(row.date)
-                MediaItem(
-                    title = row.name,
-                    sharedUrl = row.uri,
-                    status = com.example.data.model.MediaStatus.WATCHED.name,
-                    addedAt = watchTimestamp,
-                    watchedAt = watchTimestamp,
-                    providerIds = null,
-                    userNotes = row.notes,
-                    importSource = row.source,
-                    overview = "Imported movie logged as watched on ${row.date} from Letterboxd archive."
-                )
-            }
-            if (historyItems.isNotEmpty()) {
-                val historyIds = dao.insertMediaItems(historyItems)
-                Log.d("AppDatabase", "Inserted ${historyItems.size} watched movies from CSV successfully.")
-
-                val watchSessions = newHistoryRows.mapIndexed { index, row ->
-                    val mediaItemId = historyIds.getOrElse(index) { 0L }
-                    val providerId = providers[index % providers.size].id
-                    WatchSession(
-                        mediaItemId = mediaItemId,
-                        mediaItemTitle = row.name,
-                        providerId = providerId,
-                        watchedAt = parseDateToTimestamp(row.date),
-                        durationMinutes = 120,
-                        notes = "Seeded watch session log from Letterboxd movie archive. ${row.notes ?: ""}"
-                    )
+                    val watchSessions = newHistoryRows.mapIndexed { index, row ->
+                        val mediaItemId = historyIds.getOrElse(index) { 0L }
+                        val providerId = providers[index % providers.size].id
+                        WatchSession(
+                            mediaItemId = mediaItemId,
+                            mediaItemTitle = row.name,
+                            providerId = providerId,
+                            watchedAt = parseDateToTimestamp(row.date),
+                            durationMinutes = 120,
+                            notes = "Seeded watch session log from Letterboxd movie archive. ${row.notes ?: ""}"
+                        )
+                    }
+                    dao.insertWatchSessions(watchSessions)
+                    Log.d("AppDatabase", "Seeded ${watchSessions.size} historical watch sessions from CSV successfully.")
                 }
-                dao.insertWatchSessions(watchSessions)
-                Log.d("AppDatabase", "Seeded ${watchSessions.size} historical watch sessions from CSV successfully.")
+                dao.deduplicateMediaItems()
+            } finally {
+                isSeeding.set(false)
             }
         }
 

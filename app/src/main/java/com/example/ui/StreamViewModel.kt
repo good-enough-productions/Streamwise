@@ -99,6 +99,13 @@ class StreamViewModel(
     val enableBetaFeedback: StateFlow<Boolean> = _enableBetaFeedback.asStateFlow()
 
     init {
+        // Run database deduplication on startup to eliminate any duplicate entries
+        viewModelScope.launch(Dispatchers.IO) {
+            val removed = repository.deduplicateMediaItems()
+            if (removed > 0) {
+                android.util.Log.d(TAG, "Deduplicated $removed duplicate media items on startup.")
+            }
+        }
         // Auto-sync TMDB metadata on launch if items are unpopulated
         viewModelScope.launch {
             kotlinx.coroutines.delay(800)

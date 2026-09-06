@@ -20,6 +20,15 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.2.2</span> <span class="date">September 2026</span></h2>
+        <h3>Fixed & Hardened</h3>
+        <ul>
+            <li><strong>Feedback Webhook 404 Fix:</strong> Pointed the feedback proxy client to the active Cloud Run webhook endpoint (<code>https://feedback-proxy-rljydlcchq-uc.a.run.app</code>), enabling seamless, zero-token feedback issue generation on GitHub with attached device screenshots.</li>
+            <li><strong>Title Deduplication:</strong> Eliminated duplicate titles in Watchlist and Spotlight by synchronizing database seeding, deduplicating Room database entries, and filtering duplicates in repository flows and UI components.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.2.1</span> <span class="date">September 2026</span></h2>
         <h3>Restored & Connected</h3>
         <ul>
