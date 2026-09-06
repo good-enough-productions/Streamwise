@@ -2,6 +2,18 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.3.1] - 2026-09-06
+
+### Improved
+- **Natural Scrolling Spotlight & Sticky Search Bar**:
+  - Spotlight "Ready to Stream" now scrolls naturally with the feed instead of requiring manual collapse interaction.
+  - When scrolling down, Spotlight scrolls cleanly offscreen while the Search & Filter bar sticks firmly to the top (`stickyHeader`).
+  - Scrolling back to the top smoothly brings the Spotlight carousel back into view.
+- **Multi-Select Filter Widening (OR Logic)**:
+  - Advanced Filters modal now supports selecting multiple chips within any category (Streaming Platforms, Genres, Release Eras) to broaden/widen searches using OR logic.
+  - Active filters display as individual 1-tap dismissible pills in the sticky filter ribbon.
+  - Dynamic "Show N Titles" badge reflects the cumulative match count in real time.
+
 ## [1.3.0] - 2026-09-06
 
 ### Added

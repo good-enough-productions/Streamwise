@@ -2,6 +2,7 @@ package com.example.ui
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -532,7 +533,7 @@ fun SpotlightCard(
 // ==========================================
 // COMPOSABLE: Watchlist Screen
 // ==========================================
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun WatchlistTabContent(
     watchlistItems: List<MediaItem>,
@@ -555,14 +556,16 @@ fun WatchlistTabContent(
         allProviders.filter { it.costPerMonth == 0.0 }.map { it.id }.toSet()
     }
 
-    var selectedPlatformId by remember { mutableStateOf<String?>(null) }
+    // Multi-select filter states to widen search (OR logic)
+    var selectedPlatforms by remember { mutableStateOf(emptySet<String>()) }
+    var selectedGenres by remember { mutableStateOf(emptySet<String>()) }
+    var selectedEras by remember { mutableStateOf(emptySet<String>()) }
+    var minRating by remember { mutableStateOf(0.0) }
+
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("added") } // "added", "alpha", "rating"
     var showFreeOnly by remember { mutableStateOf(false) }
     var showTopRatedOnly by remember { mutableStateOf(false) }
-    var selectedGenre by remember { mutableStateOf<String?>(null) }
-    var minRating by remember { mutableStateOf(0.0) }
-    var selectedDecade by remember { mutableStateOf<String?>(null) }
     var showAdvancedFiltersSheet by remember { mutableStateOf(false) }
 
     val allGenres = remember(watchlistItems) {
@@ -580,23 +583,36 @@ fun WatchlistTabContent(
         }.distinctBy { it.title.trim().lowercase() }.sortedByDescending { it.rating ?: 0.0 }.take(8)
     }
 
-    val activeAdvancedCount = (if (selectedPlatformId != null) 1 else 0) +
-        (if (selectedGenre != null) 1 else 0) +
-        (if (minRating > 0.0) 1 else 0) +
-        (if (selectedDecade != null) 1 else 0)
+    val activeAdvancedCount = selectedPlatforms.size + selectedGenres.size + selectedEras.size + (if (minRating > 0.0) 1 else 0)
 
-    // Filter items according to state
-    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, showTopRatedOnly, selectedGenre, minRating, selectedDecade) {
+    // Filter items according to state with OR widening logic for multi-selected chips
+    val filteredItems = remember(
+        watchlistItems,
+        filterOnlyMyServices,
+        activeProviderIds,
+        freeProviderIds,
+        selectedPlatforms,
+        showFreeOnly,
+        showTopRatedOnly,
+        selectedGenres,
+        minRating,
+        selectedEras
+    ) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
 
-            if (selectedPlatformId != null) {
-                if (item.providersList.contains(selectedPlatformId) != true) return@filter false
+            // Multi-select Platforms (OR logic: widens search to any selected platform)
+            if (selectedPlatforms.isNotEmpty()) {
+                val hasPlatform = item.providersList.any { selectedPlatforms.contains(it) }
+                if (!hasPlatform) return@filter false
             }
 
-            if (selectedGenre != null) {
-                if (item.genres?.contains(selectedGenre!!, ignoreCase = true) != true) return@filter false
+            // Multi-select Genres (OR logic: widens search to any selected genre)
+            if (selectedGenres.isNotEmpty()) {
+                val itemGenres = item.genres?.split(",")?.map { it.trim().lowercase() } ?: emptyList()
+                val hasGenre = selectedGenres.any { sg -> itemGenres.contains(sg.lowercase()) }
+                if (!hasGenre) return@filter false
             }
 
             if (showFreeOnly) {
@@ -609,27 +625,29 @@ fun WatchlistTabContent(
                 if ((item.rating ?: 0.0) < threshold) return@filter false
             }
 
-            if (selectedDecade != null) {
+            // Multi-select Release Eras (OR logic: widens search to any selected era)
+            if (selectedEras.isNotEmpty()) {
                 val yearMatch = Regex("""\b(19\d\d|20\d\d)\b""").find(item.overview ?: "")?.value?.toIntOrNull()
                     ?: Regex("""\b(19\d\d|20\d\d)\b""").find(item.title)?.value?.toIntOrNull()
                 if (yearMatch != null) {
-                    val matchesDecade = when (selectedDecade) {
-                        "2020s" -> yearMatch >= 2020
-                        "2010s" -> yearMatch in 2010..2019
-                        "2000s" -> yearMatch in 2000..2009
-                        "90s" -> yearMatch in 1990..1999
-                        "Classic" -> yearMatch < 1990
-                        else -> true
+                    val matchesAnyEra = selectedEras.any { era ->
+                        when (era) {
+                            "2020s" -> yearMatch >= 2020
+                            "2010s" -> yearMatch in 2010..2019
+                            "2000s" -> yearMatch in 2000..2009
+                            "90s" -> yearMatch in 1990..1999
+                            "Classic" -> yearMatch < 1990
+                            else -> true
+                        }
                     }
-                    if (!matchesDecade) return@filter false
+                    if (!matchesAnyEra) return@filter false
                 }
             }
 
             if (filterOnlyMyServices) {
-                // Return items having at least one of their available platforms as locally active/subscribed or free
                 val provs = item.providersList
                 if (item.tmdbId == null) {
-                    true // Keep newly added/unmatched items visible until sync resolves
+                    true
                 } else {
                     provs.any { activeProviderIds.contains(it) || freeProviderIds.contains(it) }
                 }
@@ -651,355 +669,366 @@ fun WatchlistTabContent(
         }
     }
 
-    val filterProviders = remember(allProviders) { allProviders.filter { it.isActive || it.costPerMonth == 0.0 } }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        // Horizontal Curated Discovery Lane: Collapsible Spotlight Ready to Stream (Issue #7)
-        if (searchQuery.isBlank() && spotlightItems.isNotEmpty()) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp)
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                    Row(
+    Box(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(top = 4.dp, bottom = 88.dp)
+        ) {
+            // 1. Natural Scrolling Spotlight Lane (scrolls off when scrolling down, reappears when scrolling to top)
+            if (searchQuery.isBlank() && spotlightItems.isNotEmpty()) {
+                item(key = "spotlight_carousel_section") {
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onToggleSpotlightCollapsed() },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                "Spotlight: Ready to Stream",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                            ) {
-                                Text(
-                                    "${spotlightItems.size}",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
+                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            "Spotlight: Ready to Stream",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                        ) {
+                                            Text(
+                                                "${spotlightItems.size}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp)
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    spotlightItems.forEach { item ->
+                                        SpotlightCard(
+                                            item = item,
+                                            allProviders = allProviders,
+                                            onWatchClick = { onWatchClick(item) },
+                                            onMovieClick = { onMovieClick(item) }
+                                        )
+                                    }
+                                }
                             }
                         }
-
-                        IconButton(
-                            onClick = onToggleSpotlightCollapsed,
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isSpotlightCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
-                                contentDescription = if (isSpotlightCollapsed) "Expand Spotlight" else "Collapse Spotlight",
-                                tint = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
                     }
+                }
+            }
 
-                    AnimatedVisibility(
-                        visible = !isSpotlightCollapsed,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
+            // 2. Sticky Header: Search & Sort Bar + Filter Ribbon (Pins to top on scroll)
+            stickyHeader(key = "sticky_search_filter_bar") {
+                Surface(
+                    color = MaterialTheme.colorScheme.background,
+                    tonalElevation = 2.dp,
+                    shadowElevation = 3.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
+                        // Search Row
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 8.dp)
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                .padding(bottom = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            spotlightItems.forEach { item ->
-                                SpotlightCard(
-                                    item = item,
-                                    allProviders = allProviders,
-                                    onWatchClick = { onWatchClick(item) },
-                                    onMovieClick = { onMovieClick(item) }
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = { Text("Search watchlist...") },
+                                singleLine = true,
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1.5f)
+                                    .height(50.dp),
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            // Sort Selector Button
+                            var sortExpanded by remember { mutableStateOf(false) }
+                            Box(modifier = Modifier.weight(1.1f)) {
+                                OutlinedButton(
+                                    onClick = { sortExpanded = true },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(50.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp)
+                                ) {
+                                    val sortLabel = when (sortBy) {
+                                        "alpha" -> "A-Z"
+                                        "rating" -> "Rating"
+                                        else -> "Recent"
+                                    }
+                                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(sortLabel, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                DropdownMenu(
+                                    expanded = sortExpanded,
+                                    onDismissRequest = { sortExpanded = false }
+                                ) {
+                                    DropdownMenuItem(
+                                        text = { Text("Recently Added") },
+                                        onClick = {
+                                            sortBy = "added"
+                                            sortExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Alphabetical A-Z") },
+                                        onClick = {
+                                            sortBy = "alpha"
+                                            sortExpanded = false
+                                        }
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text("Highest Rated") },
+                                        onClick = {
+                                            sortBy = "rating"
+                                            sortExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Filter Ribbon with multi-selected dismiss chips
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilterChip(
+                                selected = filterOnlyMyServices,
+                                onClick = {
+                                    onFilterToggle(!filterOnlyMyServices)
+                                    if (!filterOnlyMyServices) showFreeOnly = false
+                                },
+                                label = { Text("My Services", fontSize = 11.sp) },
+                                leadingIcon = { if (filterOnlyMyServices) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
+                                modifier = Modifier.testTag("filter_subscribed_chip")
+                            )
+
+                            FilterChip(
+                                selected = showFreeOnly,
+                                onClick = {
+                                    showFreeOnly = !showFreeOnly
+                                    if (showFreeOnly) onFilterToggle(false)
+                                },
+                                label = { Text("Free w/ Ads", fontSize = 11.sp) },
+                                leadingIcon = { if (showFreeOnly) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
+                                modifier = Modifier.testTag("filter_free_chip")
+                            )
+
+                            // Active Multi-Select Platform Pills (1-tap dismiss)
+                            selectedPlatforms.forEach { pId ->
+                                val provName = allProviders.find { it.id == pId }?.name ?: pId
+                                InputChip(
+                                    selected = true,
+                                    onClick = { selectedPlatforms = selectedPlatforms - pId },
+                                    label = { Text(provName, fontSize = 11.sp) },
+                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                                )
+                            }
+
+                            // Active Multi-Select Genre Pills
+                            selectedGenres.forEach { genre ->
+                                InputChip(
+                                    selected = true,
+                                    onClick = { selectedGenres = selectedGenres - genre },
+                                    label = { Text(genre, fontSize = 11.sp) },
+                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                                )
+                            }
+
+                            // Active Multi-Select Era Pills
+                            selectedEras.forEach { era ->
+                                val eraLabel = if (era == "Classic") "Pre-1990" else era
+                                InputChip(
+                                    selected = true,
+                                    onClick = { selectedEras = selectedEras - era },
+                                    label = { Text(eraLabel, fontSize = 11.sp) },
+                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                                )
+                            }
+
+                            if (minRating > 0.0) {
+                                InputChip(
+                                    selected = true,
+                                    onClick = { minRating = 0.0 },
+                                    label = { Text("★ ${minRating}+", fontSize = 11.sp) },
+                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                                )
+                            }
+
+                            // Advanced Filters Entry Button
+                            ElevatedFilterChip(
+                                selected = activeAdvancedCount > 0,
+                                onClick = { showAdvancedFiltersSheet = true },
+                                label = {
+                                    Text(
+                                        if (activeAdvancedCount > 0) "Filters ($activeAdvancedCount)" else "Filters",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (activeAdvancedCount > 0) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = "Advanced Filters",
+                                        modifier = Modifier.size(14.dp),
+                                        tint = if (activeAdvancedCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            )
+
+                            IconButton(
+                                onClick = onSyncClick,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("sync_providers_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Sync streaming availability from TMDB",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                     }
                 }
             }
-        }
 
-        // Directed Search & Sort Controls
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Search watchlist...") },
-                singleLine = true,
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(16.dp))
+            // 3. Media Items List (or Empty State)
+            if (processedItems.isEmpty()) {
+                item(key = "watchlist_empty_state") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.List,
+                                contentDescription = "Empty list",
+                                modifier = Modifier.size(56.dp),
+                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                "No titles found",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                if (filterOnlyMyServices) "Try switching to 'All' or widening your filters."
+                                else "Use the Add button or share titles to populate your vault.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
-                },
-                modifier = Modifier
-                    .weight(1.5f)
-                    .height(50.dp),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                shape = RoundedCornerShape(12.dp)
-            )
-
-            // Sort Selector Button
-            var sortExpanded by remember { mutableStateOf(false) }
-            Box(modifier = Modifier.weight(1.1f)) {
-                OutlinedButton(
-                    onClick = { sortExpanded = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp)
-                ) {
-                    val sortLabel = when (sortBy) {
-                        "alpha" -> "A-Z"
-                        "rating" -> "Rating"
-                        else -> "Recent"
-                    }
-                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(sortLabel, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                DropdownMenu(
-                    expanded = sortExpanded,
-                    onDismissRequest = { sortExpanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Recently Added") },
-                        onClick = {
-                            sortBy = "added"
-                            sortExpanded = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Alphabetical A-Z") },
-                        onClick = {
-                            sortBy = "alpha"
-                            sortExpanded = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Highest Rated") },
-                        onClick = {
-                            sortBy = "rating"
-                            sortExpanded = false
-                        }
-                    )
-                }
-            }
-        }
-
-        // Minimal Streamlined Filter Ribbon with Advanced Filter Sheet Entry (Issue #8)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp)
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            FilterChip(
-                selected = filterOnlyMyServices,
-                onClick = {
-                    onFilterToggle(!filterOnlyMyServices)
-                    if (!filterOnlyMyServices) showFreeOnly = false
-                },
-                label = { Text("My Services", fontSize = 11.sp) },
-                leadingIcon = { if (filterOnlyMyServices) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
-                modifier = Modifier.testTag("filter_subscribed_chip")
-            )
-
-            FilterChip(
-                selected = showFreeOnly,
-                onClick = {
-                    showFreeOnly = !showFreeOnly
-                    if (showFreeOnly) onFilterToggle(false)
-                },
-                label = { Text("Free w/ Ads", fontSize = 11.sp) },
-                leadingIcon = { if (showFreeOnly) Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
-                modifier = Modifier.testTag("filter_free_chip")
-            )
-
-            // Active Advanced Filter Pills (1-tap dismiss)
-            if (selectedPlatformId != null) {
-                val provName = allProviders.find { it.id == selectedPlatformId }?.name ?: selectedPlatformId!!
-                InputChip(
-                    selected = true,
-                    onClick = { selectedPlatformId = null },
-                    label = { Text(provName, fontSize = 11.sp) },
-                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                )
-            }
-
-            if (selectedGenre != null) {
-                InputChip(
-                    selected = true,
-                    onClick = { selectedGenre = null },
-                    label = { Text(selectedGenre!!, fontSize = 11.sp) },
-                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                )
-            }
-
-            if (minRating > 0.0) {
-                InputChip(
-                    selected = true,
-                    onClick = { minRating = 0.0 },
-                    label = { Text("★ ${minRating}+", fontSize = 11.sp) },
-                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                )
-            }
-
-            if (selectedDecade != null) {
-                InputChip(
-                    selected = true,
-                    onClick = { selectedDecade = null },
-                    label = { Text(selectedDecade!!, fontSize = 11.sp) },
-                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                )
-            }
-
-            // Advanced Filters Button
-            ElevatedFilterChip(
-                selected = activeAdvancedCount > 0,
-                onClick = { showAdvancedFiltersSheet = true },
-                label = {
-                    Text(
-                        if (activeAdvancedCount > 0) "Filters ($activeAdvancedCount)" else "Filters",
-                        fontSize = 11.sp,
-                        fontWeight = if (activeAdvancedCount > 0) FontWeight.Bold else FontWeight.Normal
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "Advanced Filters",
-                        modifier = Modifier.size(14.dp),
-                        tint = if (activeAdvancedCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                    )
-                }
-            )
-
-            IconButton(
-                onClick = onSyncClick,
-                modifier = Modifier
-                    .size(36.dp)
-                    .testTag("sync_providers_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Sync streaming availability from TMDB",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-
-        if (processedItems.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.List,
-                        contentDescription = "Empty list",
-                        modifier = Modifier.size(56.dp),
-                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        "No titles found",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        if (filterOnlyMyServices) "Try switching to 'All' or activating services in the My Services tab."
-                        else "Use the Add button or share titles to populate your vault.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            } else {
                 items(processedItems, key = { it.id }) { item ->
-                    MediaItemCard(
-                        item = item,
-                        allProviders = allProviders,
-                        onWatchClick = { onWatchClick(item) },
-                        onDeleteClick = { onDeleteClick(item) },
-                        onMovieClick = { onMovieClick(item) }
-                    )
+                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
+                        MediaItemCard(
+                            item = item,
+                            allProviders = allProviders,
+                            onWatchClick = { onWatchClick(item) },
+                            onDeleteClick = { onDeleteClick(item) },
+                            onMovieClick = { onMovieClick(item) }
+                        )
+                    }
                 }
             }
         }
 
-        // Advanced Filter Sheet (Issue #8)
+        // Advanced Filter Sheet (Multi-Select Enabled to Widen Search)
         if (showAdvancedFiltersSheet) {
             AdvancedFilterBottomSheet(
                 allProviders = allProviders,
                 allGenres = allGenres,
-                selectedPlatformId = selectedPlatformId,
-                onSelectPlatform = { selectedPlatformId = it },
-                selectedGenre = selectedGenre,
-                onSelectGenre = { selectedGenre = it },
+                selectedPlatforms = selectedPlatforms,
+                onTogglePlatform = { pId ->
+                    selectedPlatforms = if (selectedPlatforms.contains(pId)) selectedPlatforms - pId else selectedPlatforms + pId
+                },
+                onClearPlatforms = { selectedPlatforms = emptySet() },
+                selectedGenres = selectedGenres,
+                onToggleGenre = { genre ->
+                    selectedGenres = if (selectedGenres.contains(genre)) selectedGenres - genre else selectedGenres + genre
+                },
+                onClearGenres = { selectedGenres = emptySet() },
                 minRating = minRating,
                 onSelectMinRating = { minRating = it },
-                selectedDecade = selectedDecade,
-                onSelectDecade = { selectedDecade = it },
+                selectedEras = selectedEras,
+                onToggleEra = { era ->
+                    selectedEras = if (selectedEras.contains(era)) selectedEras - era else selectedEras + era
+                },
+                onClearEras = { selectedEras = emptySet() },
                 sortBy = sortBy,
                 onSelectSortBy = { sortBy = it },
                 matchingCount = processedItems.size,
                 onResetAll = {
-                    selectedPlatformId = null
-                    selectedGenre = null
+                    selectedPlatforms = emptySet()
+                    selectedGenres = emptySet()
+                    selectedEras = emptySet()
                     minRating = 0.0
-                    selectedDecade = null
                     showFreeOnly = false
                     onFilterToggle(true)
                 },
@@ -1010,21 +1039,24 @@ fun WatchlistTabContent(
 }
 
 // ==========================================
-// COMPOSABLE: Advanced Filter Bottom Sheet (Issue #8)
+// COMPOSABLE: Advanced Filter Bottom Sheet (Multi-Select Enabled)
 // ==========================================
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AdvancedFilterBottomSheet(
     allProviders: List<StreamingProvider>,
     allGenres: List<String>,
-    selectedPlatformId: String?,
-    onSelectPlatform: (String?) -> Unit,
-    selectedGenre: String?,
-    onSelectGenre: (String?) -> Unit,
+    selectedPlatforms: Set<String>,
+    onTogglePlatform: (String) -> Unit,
+    onClearPlatforms: () -> Unit,
+    selectedGenres: Set<String>,
+    onToggleGenre: (String) -> Unit,
+    onClearGenres: () -> Unit,
     minRating: Double,
     onSelectMinRating: (Double) -> Unit,
-    selectedDecade: String?,
-    onSelectDecade: (String?) -> Unit,
+    selectedEras: Set<String>,
+    onToggleEra: (String) -> Unit,
+    onClearEras: () -> Unit,
     sortBy: String,
     onSelectSortBy: (String) -> Unit,
     matchingCount: Int,
@@ -1061,9 +1093,16 @@ fun AdvancedFilterBottomSheet(
                 }
             }
 
+            Text(
+                "Multi-select chips in any category to widen your search",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Section 1: Streaming Platforms
+            // Section 1: Streaming Platforms (Multi-Select)
             Text(
                 "Streaming Platform",
                 style = MaterialTheme.typography.labelLarge,
@@ -1077,15 +1116,18 @@ fun AdvancedFilterBottomSheet(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 FilterChip(
-                    selected = selectedPlatformId == null,
-                    onClick = { onSelectPlatform(null) },
-                    label = { Text("Any Platform", fontSize = 11.sp) }
+                    selected = selectedPlatforms.isEmpty(),
+                    onClick = onClearPlatforms,
+                    label = { Text("Any Platform", fontSize = 11.sp) },
+                    leadingIcon = { if (selectedPlatforms.isEmpty()) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
                 )
                 allProviders.filter { it.isActive || it.costPerMonth == 0.0 }.forEach { provider ->
+                    val isSelected = selectedPlatforms.contains(provider.id)
                     FilterChip(
-                        selected = selectedPlatformId == provider.id,
-                        onClick = { onSelectPlatform(if (selectedPlatformId == provider.id) null else provider.id) },
-                        label = { Text(provider.name, fontSize = 11.sp) }
+                        selected = isSelected,
+                        onClick = { onTogglePlatform(provider.id) },
+                        label = { Text(provider.name, fontSize = 11.sp) },
+                        leadingIcon = { if (isSelected) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
                     )
                 }
             }
@@ -1107,17 +1149,19 @@ fun AdvancedFilterBottomSheet(
                     .horizontalScroll(rememberScrollState())
             ) {
                 listOf(0.0 to "Any", 6.0 to "★ 6.0+", 7.0 to "★ 7.0+", 7.5 to "★ 7.5+", 8.0 to "★ 8.0+", 8.5 to "★ 8.5+").forEach { (rating, label) ->
+                    val isSelected = minRating == rating
                     FilterChip(
-                        selected = minRating == rating,
-                        onClick = { onSelectMinRating(rating) },
-                        label = { Text(label, fontSize = 11.sp) }
+                        selected = isSelected,
+                        onClick = { onSelectMinRating(if (minRating == rating) 0.0 else rating) },
+                        label = { Text(label, fontSize = 11.sp) },
+                        leadingIcon = { if (isSelected && rating > 0.0) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Section 3: Release Era / Decade
+            // Section 3: Release Era / Decade (Multi-Select)
             Text(
                 "Release Era",
                 style = MaterialTheme.typography.labelLarge,
@@ -1131,18 +1175,26 @@ fun AdvancedFilterBottomSheet(
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
             ) {
-                listOf(null to "All Eras", "2020s" to "2020s", "2010s" to "2010s", "2000s" to "2000s", "90s" to "90s", "Classic" to "Pre-1990").forEach { (decade, label) ->
+                FilterChip(
+                    selected = selectedEras.isEmpty(),
+                    onClick = onClearEras,
+                    label = { Text("All Eras", fontSize = 11.sp) },
+                    leadingIcon = { if (selectedEras.isEmpty()) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
+                )
+                listOf("2020s" to "2020s", "2010s" to "2010s", "2000s" to "2000s", "90s" to "90s", "Classic" to "Pre-1990").forEach { (eraKey, eraLabel) ->
+                    val isSelected = selectedEras.contains(eraKey)
                     FilterChip(
-                        selected = selectedDecade == decade,
-                        onClick = { onSelectDecade(if (selectedDecade == decade) null else decade) },
-                        label = { Text(label, fontSize = 11.sp) }
+                        selected = isSelected,
+                        onClick = { onToggleEra(eraKey) },
+                        label = { Text(eraLabel, fontSize = 11.sp) },
+                        leadingIcon = { if (isSelected) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Section 4: Genres
+            // Section 4: Genres (Multi-Select)
             if (allGenres.isNotEmpty()) {
                 Text(
                     "Genre",
@@ -1157,15 +1209,18 @@ fun AdvancedFilterBottomSheet(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     FilterChip(
-                        selected = selectedGenre == null,
-                        onClick = { onSelectGenre(null) },
-                        label = { Text("All Genres", fontSize = 11.sp) }
+                        selected = selectedGenres.isEmpty(),
+                        onClick = onClearGenres,
+                        label = { Text("All Genres", fontSize = 11.sp) },
+                        leadingIcon = { if (selectedGenres.isEmpty()) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
                     )
                     allGenres.forEach { genre ->
+                        val isSelected = selectedGenres.contains(genre)
                         FilterChip(
-                            selected = selectedGenre == genre,
-                            onClick = { onSelectGenre(if (selectedGenre == genre) null else genre) },
-                            label = { Text(genre, fontSize = 11.sp) }
+                            selected = isSelected,
+                            onClick = { onToggleGenre(genre) },
+                            label = { Text(genre, fontSize = 11.sp) },
+                            leadingIcon = { if (isSelected) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
                         )
                     }
                 }
