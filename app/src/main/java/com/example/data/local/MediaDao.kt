@@ -47,6 +47,12 @@ interface MediaDao {
     @Query("SELECT * FROM media_items WHERE syncedToSheet = 0")
     suspend fun getUnsyncedMediaItems(): List<MediaItem>
 
+    @Query("SELECT COUNT(*) FROM media_items WHERE status = 'WATCHED'")
+    suspend fun getWatchedCount(): Int
+
+    @Query("SELECT title FROM media_items")
+    suspend fun getAllTitles(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWatchSessions(sessions: List<WatchSession>)
 

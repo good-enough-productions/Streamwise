@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.ui.HomeScreen
 import com.example.ui.StreamViewModel
@@ -35,7 +37,8 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            MyApplicationTheme {
+            val isDark by viewModel.isDarkMode.collectAsState()
+            MyApplicationTheme(darkTheme = isDark) {
                 HomeScreen(
                     viewModel = viewModel,
                     modifier = Modifier.fillMaxSize(),
