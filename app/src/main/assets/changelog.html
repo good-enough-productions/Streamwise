@@ -20,7 +20,28 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
-        <h2><span class="version-badge">v1.4.0</span> <span class="date">September 2026</span></h2>
+        <h2><span class="version-badge">v1.5.0</span> <span class="date">September 2026</span></h2>
+        <h3>Explore UI/UX Redesign & Comprehensive Letterboxd Pipeline</h3>
+        <ul>
+            <li><strong>Modular 4-Subtab Explore Hub:</strong> Rebuilt the Explore tab to eliminate excessive scrolling. Content is now partitioned into 4 focused sub-views:
+                <ul>
+                    <li><code>✨ AI & Taste</code>: Dynamic Cinephile Taste Matrix, Gemini Pro Cinephile Synthesis with core themes and auteur ties, tailored picks with 1-tap <code>+ Watchlist</code>, and quick prompts.</li>
+                    <li><code>💬 Olivia AI</code>: Dedicated fullscreen conversational cinema assistant with persistent badge counter.</li>
+                    <li><code>🎙️ Podcasts Hub</code>: Dedicated show filter chips (<em>What Went Wrong</em>, <em>The Rewatchables</em>, <em>The Big Picture</em>, <em>Blank Check</em>, <em>How Did This Get Made?</em>), episode counts, instant audio listening links, and <code>💬 Ask Olivia</code> integration.</li>
+                    <li><code>📰 Film News Hub</code>: Categorized industry dispatches (<em>Box Office</em>, <em>Festivals</em>, <em>Auteurs</em>, <em>Streaming</em>) with 1-tap <code>💬 Discuss with Olivia</code>.</li>
+                </ul>
+            </li>
+            <li><strong>Letterboxd Comprehensive Sync & Dual-Way Pipeline:</strong>
+                <ul>
+                    <li>Default username set to <code>scriptedmind</code>.</li>
+                    <li><strong>Native CSV & ZIP File Import:</strong> Ingest <code>watchlist.csv</code>, <code>watched.csv</code>, <code>diary.csv</code>, <code>ratings.csv</code>, or full Letterboxd data export ZIPs (<code>letterboxd-*-data.zip</code>) with smart deduplication against local Room database.</li>
+                    <li><strong>Two-Way Export for Letterboxd:</strong> Export watched movies logged in Streamwise directly into Letterboxd's standard import format (<code>Title,Year,Rating10,WatchedDate</code>) via Android share sheet for 1-tap upload to <code>letterboxd.com/import/</code>.</li>
+                    <li><strong>Direct Web Actions:</strong> 1-tap web action buttons in Settings to download Watchlist CSV, export account data, or open Letterboxd importer.</li>
+                    <li><strong>Google Apps Script Portal:</strong> <code>StreamwiseLetterboxdSync.gs</code> serverless web app archiving backups in Google Drive (<code>Active Builds / Streamwise / Backups & Exports</code>) and updating Google Sheets ledger.</li>
+                </ul>
+            </li>
+        </ul>
+    </div>
         <h3>Added & Unified Hub</h3>
         <ul>
             <li><strong>Watchlist Title Count Clarity:</strong> Live title counts prominently displayed across the Top App Bar (<code>Watchlist • 12 Titles</code>), Bottom Navigation badges (<code>Badge { 12 }</code>), and Sticky Header summary (<code>Showing 12 of 12 titles</code>).</li>

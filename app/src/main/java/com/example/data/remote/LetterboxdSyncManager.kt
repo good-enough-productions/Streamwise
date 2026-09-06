@@ -1,4 +1,4 @@
-﻿package com.example.data.remote
+package com.example.data.remote
 
 import android.util.Log
 import android.util.Xml
@@ -26,9 +26,17 @@ data class LetterboxdSyncResult(
 
 class LetterboxdSyncManager(private val mediaDao: MediaDao) {
 
+    val csvParser = LetterboxdCsvParser(mediaDao)
+
     companion object {
         private const val TAG = "LetterboxdSync"
     }
+
+    suspend fun importFileStream(inputStream: InputStream, filename: String): LetterboxdFileImportResult =
+        csvParser.parseAndImportStream(inputStream, filename)
+
+    fun generateLetterboxdExportCsv(watchedItems: List<MediaItem>): String =
+        csvParser.generateLetterboxdExportCsv(watchedItems)
 
     suspend fun syncUserDiary(username: String): LetterboxdSyncResult = withContext(Dispatchers.IO) {
         val cleanUser = username.trim().lowercase()

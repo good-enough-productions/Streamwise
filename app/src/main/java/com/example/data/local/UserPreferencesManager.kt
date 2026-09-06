@@ -47,12 +47,16 @@ class UserPreferencesManager(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_SPOTLIGHT_COLLAPSED, value).apply()
 
     var letterboxdUsername: String
-        get() = prefs.getString(KEY_LETTERBOXD_USERNAME, "dschm") ?: "dschm"
+        get() = prefs.getString(KEY_LETTERBOXD_USERNAME, "scriptedmind") ?: "scriptedmind"
         set(value) = prefs.edit().putString(KEY_LETTERBOXD_USERNAME, value.trim()).apply()
 
     var userName: String
         get() = prefs.getString(KEY_USER_NAME, "Cinephile") ?: "Cinephile"
         set(value) = prefs.edit().putString(KEY_USER_NAME, value.trim()).apply()
+
+    var lastLetterboxdSyncTime: Long
+        get() = prefs.getLong(KEY_LAST_LETTERBOXD_SYNC_TIME, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_LETTERBOXD_SYNC_TIME, value).apply()
 
     companion object {
         private const val PREFS_NAME = "user_preferences"
@@ -67,5 +71,6 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_SPOTLIGHT_COLLAPSED = "spotlight_collapsed"
         private const val KEY_LETTERBOXD_USERNAME = "letterboxd_username"
         private const val KEY_USER_NAME = "user_name"
+        private const val KEY_LAST_LETTERBOXD_SYNC_TIME = "last_letterboxd_sync_time"
     }
 }

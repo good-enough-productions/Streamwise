@@ -12,6 +12,9 @@ import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import android.content.ContentResolver
+import android.provider.OpenableColumns
+import android.util.Log
 import com.example.BuildConfig
 import com.example.data.local.UserPreferencesManager
 import com.example.data.local.ProviderUsageStats
@@ -30,9 +33,11 @@ import com.example.data.remote.GitHubUpdateManager
 import com.example.data.remote.UpdateStatus
 import com.example.data.remote.LetterboxdSyncManager
 import com.example.data.remote.LetterboxdSyncResult
+import com.example.data.remote.LetterboxdFileImportResult
 import com.example.data.repository.MediaRepository
 import com.example.data.worker.AvailabilitySyncWorker
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.io.File
@@ -180,6 +185,60 @@ class StreamViewModel(
                 _statusMessage.value = "Letterboxd sync: ${result.errorMessage}"
             }
         }
+    }
+
+    // Letterboxd File (CSV/ZIP) Import
+    private val _letterboxdFileImportResult = MutableStateFlow<LetterboxdFileImportResult?>(null)
+    val letterboxdFileImportResult: StateFlow<LetterboxdFileImportResult?> = _letterboxdFileImportResult.asStateFlow()
+
+    fun clearLetterboxdFileImportResult() {
+        _letterboxdFileImportResult.value = null
+    }
+
+    fun importLetterboxdFile(uri: Uri, contentResolver: ContentResolver) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSyncingLetterboxd.value = true
+            _statusMessage.value = "Importing Letterboxd file..."
+            try {
+                var filename = "letterboxd_data.csv"
+                contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0 && cursor.moveToFirst()) {
+                        filename = cursor.getString(nameIndex) ?: filename
+                    }
+                }
+
+                contentResolver.openInputStream(uri)?.use { stream ->
+                    val syncManager = LetterboxdSyncManager(repository.mediaDao)
+                    val result = syncManager.importFileStream(stream, filename)
+                    _letterboxdFileImportResult.value = result
+                    if (result.isSuccess) {
+                        val totalImported = result.watchlistImported + result.watchedImported
+                        _statusMessage.value = "✓ Imported $totalImported titles from $filename (${result.watchlistImported} watchlist, ${result.watchedImported} watched)"
+                        userPreferences.lastLetterboxdSyncTime = System.currentTimeMillis()
+                    } else {
+                        _statusMessage.value = "Import error: ${result.errorMessage ?: "Unknown error"}"
+                    }
+                } ?: run {
+                    _statusMessage.value = "Could not open selected file."
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error importing Letterboxd file: ${e.message}", e)
+                _statusMessage.value = "Error: ${e.localizedMessage ?: "Failed to read file"}"
+            } finally {
+                _isSyncingLetterboxd.value = false
+            }
+        }
+    }
+
+    /**
+     * Generates a Letterboxd-compatible CSV string (Title,Year,Rating10,WatchedDate)
+     * for all watched items logged in Streamwise.
+     */
+    suspend fun exportLetterboxdCsv(): String = withContext(Dispatchers.IO) {
+        val watched = repository.allMediaItems.first().filter { it.status == MediaStatus.WATCHED.name }
+        val syncManager = LetterboxdSyncManager(repository.mediaDao)
+        syncManager.generateLetterboxdExportCsv(watched)
     }
 
     // Update Streaming Provider (cost, plan name, active status, tenure)

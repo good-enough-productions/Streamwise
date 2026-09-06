@@ -90,4 +90,21 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 - **Updater Architecture**: `GitHubUpdateManager.kt` checks GitHub Releases API via OkHttp coroutines, parses release tags (`v1.4.0`), downloads APKs to internal cache with live progress callback, and invokes the Android `PackageInstaller` via `FileProvider` (`com.aistudio.streammanager.qpwoei.fileprovider`).
 - **In-App Web Asset Viewers**: `HtmlAssetViewerDialog` embeds Android `WebView` to render local assets (`user_guide.html` and `changelog.html`) offline with dark-theme CSS formatting.
 
+## 12. Letterboxd Two-Way Synchronization Pipeline (v1.5.0)
+
+- **LetterboxdCsvParser**: High-performance parser for standalone CSV exports (`watchlist.csv`, `watched.csv`, `diary.csv`, `ratings.csv`) and full account ZIP archives (`letterboxd-*-data.zip`). Extracts titles, release years, 5-star or 10-point ratings, and watch dates.
+- **Deduplication Engine**: Compares imported titles against local Room database (`MediaDao.getAllMediaItemsList()`) using normalized title and release year matching. Skips duplicates while populating missing watch dates and ratings.
+- **Two-Way Export**: Generates standard Letterboxd import CSV (`Title,Year,Rating10,WatchedDate`) for movies logged in Streamwise and shares via Android `Intent.ACTION_SEND` (`text/csv`) for 1-tap upload to `https://letterboxd.com/import/`.
+- **Google Apps Script Webhook**: `scripts/webhook/StreamwiseLetterboxdSync.gs` accepts file uploads, archives timestamped backups into `Active Builds / Streamwise / Backups & Exports` on Google Drive, and syncs a structured `Streamwise — Letterboxd Sync Database` Google Sheet ($0/mo).
+
+## 13. Modular Explore Tab Architecture (v1.5.0)
+
+- **ExploreTabContent**: Redesigned from a monolithic vertical feed into 4 dedicated, state-preserved sub-tabs with independent scroll states:
+  - SubTab 0: `✨ AI & Taste` (`Cinephile Taste Matrix`, `Gemini Pro Intelligence`, tailored picks with `+ Watchlist` action, quick conversation starters).
+  - SubTab 1: `💬 Olivia AI` (`AgentChatTabContent` with fullscreen conversational interface and message badge counter).
+  - SubTab 2: `🎙️ Podcasts Hub` (`PodcastsExploreView` with show selector chips and `▶️ Listen` / `💬 Ask Olivia` actions).
+  - SubTab 3: `📰 Film News Hub` (`NewsExploreView` with category selector chips and `💬 Discuss with Olivia` integration).
+- **Navigation Hoisting**: The active sub-tab is hoisted to `HomeScreen` as `exploreSubTab`, allowing bottom sheets and external triggers (such as `onDiscussInExplore` from `MovieDetailsBottomSheet`) to transition directly into Olivia chat.
+
+
 
