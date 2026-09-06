@@ -234,10 +234,12 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
 
             if (existing != null) {
                 // If existing was watchlist but we are now importing as watched, upgrade it
-                if (!isWatchlist && existing.status != MediaStatus.WATCHED.name) {
+                val needsStatusUpgrade = !isWatchlist && existing.status != MediaStatus.WATCHED.name
+                val hasNewerWatch = !isWatchlist && parsedTime > (existing.watchedAt ?: 0L)
+                if (needsStatusUpgrade || hasNewerWatch) {
                     val updated = existing.copy(
-                        status = MediaStatus.WATCHED.name,
-                        watchedAt = parsedTime
+                        status = if (!isWatchlist) MediaStatus.WATCHED.name else existing.status,
+                        watchedAt = if (!isWatchlist && (hasNewerWatch || existing.watchedAt == null)) parsedTime else existing.watchedAt
                     )
                     mediaDao.updateMediaItem(updated)
                     existingMap[normKey] = updated
@@ -327,10 +329,14 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
             }
 
             if (existing != null) {
-                if (existing.status != MediaStatus.WATCHED.name || existing.rating == null) {
+                val hasNewerWatch = watchedTimestamp > (existing.watchedAt ?: 0L)
+                val hasNewRating = ratingTen != null && existing.rating == null
+                val needsStatusUpgrade = existing.status != MediaStatus.WATCHED.name
+
+                if (needsStatusUpgrade || hasNewerWatch || hasNewRating) {
                     val updated = existing.copy(
                         status = MediaStatus.WATCHED.name,
-                        watchedAt = watchedTimestamp,
+                        watchedAt = if (hasNewerWatch || existing.watchedAt == null) watchedTimestamp else existing.watchedAt,
                         rating = ratingTen ?: existing.rating
                     )
                     mediaDao.updateMediaItem(updated)
