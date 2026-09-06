@@ -67,3 +67,27 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 - **Poster Wall Grid**: View mode toggle between structured timeline diary list and compact visual poster grid (`WatchedGridPosterCard`).
 - **1-Tap Letterboxd Google Sheet Sync**: Dispatches watched history and watchlist titles as structured JSON to a Google Apps Script webhook, following HTTP 302 redirects to mirror data into Google Drive / Google Sheets at $0/mo.
 
+## 8. Live Watchlist Title Counts & Sticky Queue Clarity (v1.4.0)
+
+- **Dynamic Count Propagation**: Top App Bar title dynamically renders current list size (`Watchlist • X Titles`, `Watched Vault • Y Movies`, `My Services • Z Active`).
+- **Bottom Navigation Badging**: Employs Material 3 `BadgedBox` on navigation items reflecting real-time SQLite counts (`Badge { 33 }` on Watchlist, `Badge { 1104 }` on Watched).
+- **Sticky Summary Header**: Sticky subheader displays filtered match counts (`Showing X of Y titles • Z hidden by filters`), cleanly differentiating between available content and user filter constraints.
+
+## 9. Cinema Podcasts Integration (`PodcastEpisodeCatalog`)
+
+- **Domain Model**: `PodcastEpisodeCatalog.kt` maps popular film podcasts (*What Went Wrong*, *The Rewatchables*, *The Big Picture*, *Blank Check*, *How Did This Get Made?*) against normalized lowercase titles and subject types (`isMainSubject: Boolean`).
+- **Sub-Filter Logic**: When a podcast is selected in `AdvancedFilterBottomSheet`, users can toggle between "Main Film / Featured Topic" (strict match) and "Any Mention (Inclusive)" (broad match).
+- **Extensibility**: Catalog is designed for zero-API offline querying, ready for dynamic RSS episode ingestion.
+
+## 10. Service Detail Management & Deal Finder (`ServiceDetailBottomSheet`)
+
+- **Provider Schema v7**: Room `MIGRATION_6_7` extends `StreamingProvider` with `subscribedSince: Long?`, `planName: String?`, `renewalDayOfMonth: Int?`, and `notes: String?`.
+- **Tenure Computation**: Dynamically calculates months and days active from the stored timestamp, supporting quick-set tenure chips (*This Month*, *3 Mos*, *6 Mos*, *1 Year*, *2+ Years*).
+- **Deal Finder Aggregation**: Direct intent launchers targeting verified deal communities (*The Streamable Deals*, *Slickdeals*, *Doctor of Credit*, and *Google Deals*) formatted with safe URL query encoding.
+
+## 11. GitHub OTA Auto-Updater & Documentation Sync
+
+- **Updater Architecture**: `GitHubUpdateManager.kt` checks GitHub Releases API via OkHttp coroutines, parses release tags (`v1.4.0`), downloads APKs to internal cache with live progress callback, and invokes the Android `PackageInstaller` via `FileProvider` (`com.aistudio.streammanager.qpwoei.fileprovider`).
+- **In-App Web Asset Viewers**: `HtmlAssetViewerDialog` embeds Android `WebView` to render local assets (`user_guide.html` and `changelog.html`) offline with dark-theme CSS formatting.
+
+

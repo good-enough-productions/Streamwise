@@ -22,7 +22,7 @@ import java.util.Calendar
  * 3. Multi-User/Social: Entities like WatchSession and MediaItem can reference owner `userId` or shared `groupIds` 
  *    for social watchlist comparisons and split-budget features.
  */
-class MediaRepository(private val mediaDao: MediaDao) {
+class MediaRepository(val mediaDao: MediaDao) {
 
     // --- Media (Watchlist) Management ---
 

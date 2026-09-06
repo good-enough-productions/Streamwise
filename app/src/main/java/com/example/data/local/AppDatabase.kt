@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -69,6 +69,32 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_5_6 = object : androidx.room.migration.Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE media_items ADD COLUMN watchedAt INTEGER")
+            }
+        }
+
+        private val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE streaming_providers ADD COLUMN subscribedSince INTEGER")
+                db.execSQL("ALTER TABLE streaming_providers ADD COLUMN planName TEXT")
+                db.execSQL("ALTER TABLE streaming_providers ADD COLUMN renewalDayOfMonth INTEGER")
+                db.execSQL("ALTER TABLE streaming_providers ADD COLUMN notes TEXT")
+
+                val now = System.currentTimeMillis()
+                val expanded = listOf(
+                    Triple("paramount", "Paramount+", 5.99),
+                    Triple("peacock", "Peacock", 5.99),
+                    Triple("criterion", "Criterion Channel", 10.99),
+                    Triple("mubi", "MUBI", 14.99),
+                    Triple("shudder", "Shudder", 6.99),
+                    Triple("starz", "Starz", 9.99),
+                    Triple("britbox", "BritBox", 8.99),
+                    Triple("amc", "AMC+", 8.99),
+                    Triple("kanopy", "Kanopy", 0.0),
+                    Triple("hoopla", "Hoopla", 0.0)
+                )
+                for ((id, name, cost) in expanded) {
+                    db.execSQL("INSERT OR IGNORE INTO streaming_providers (id, name, costPerMonth, isActive, updatedAt) VALUES ('$id', '$name', $cost, 0, $now)")
+                }
             }
         }
     }
@@ -106,6 +132,13 @@ abstract class AppDatabase : RoomDatabase() {
                         Log.d("AppDatabase", "Detected only $watchedCount watched items, supplementing from full Letterboxd archive...")
                         populateInitialProvidersAndLetterboxdData(database.mediaDao())
                     }
+                    // Ensure all 19 streaming providers exist in database
+                    val existing = database.mediaDao().getAllStreamingProviders().map { it.id }.toSet()
+                    val missing = DEFAULT_STREAMING_PROVIDERS.filter { !existing.contains(it.id) }
+                    if (missing.isNotEmpty()) {
+                        database.mediaDao().insertStreamingProviders(missing)
+                        Log.d("AppDatabase", "Seeded ${missing.size} missing streaming providers on database open.")
+                    }
                     val removed = database.mediaDao().deduplicateMediaItems()
                     if (removed > 0) {
                         Log.d("AppDatabase", "Cleaned up $removed duplicate media items on database open.")
@@ -114,24 +147,35 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val DEFAULT_STREAMING_PROVIDERS = listOf(
+            StreamingProvider("netflix", "Netflix", costPerMonth = 15.49, isActive = true),
+            StreamingProvider("hulu", "Hulu", costPerMonth = 14.99, isActive = true),
+            StreamingProvider("max", "Max (HBO)", costPerMonth = 15.99, isActive = true),
+            StreamingProvider("disney", "Disney+", costPerMonth = 13.99, isActive = true),
+            StreamingProvider("prime", "Prime Video", costPerMonth = 8.99, isActive = false),
+            StreamingProvider("apple", "Apple TV+", costPerMonth = 9.99, isActive = false),
+            StreamingProvider("paramount", "Paramount+", costPerMonth = 5.99, isActive = false),
+            StreamingProvider("peacock", "Peacock", costPerMonth = 5.99, isActive = false),
+            StreamingProvider("criterion", "Criterion Channel", costPerMonth = 10.99, isActive = false),
+            StreamingProvider("mubi", "MUBI", costPerMonth = 14.99, isActive = false),
+            StreamingProvider("shudder", "Shudder", costPerMonth = 6.99, isActive = false),
+            StreamingProvider("starz", "Starz", costPerMonth = 9.99, isActive = false),
+            StreamingProvider("britbox", "BritBox", costPerMonth = 8.99, isActive = false),
+            StreamingProvider("amc", "AMC+", costPerMonth = 8.99, isActive = false),
+            StreamingProvider("tubi", "Tubi", costPerMonth = 0.0, isActive = true),
+            StreamingProvider("freevee", "Freevee", costPerMonth = 0.0, isActive = true),
+            StreamingProvider("pluto", "Pluto TV", costPerMonth = 0.0, isActive = true),
+            StreamingProvider("kanopy", "Kanopy", costPerMonth = 0.0, isActive = true),
+            StreamingProvider("hoopla", "Hoopla", costPerMonth = 0.0, isActive = true)
+        )
+
         private suspend fun populateInitialProvidersAndLetterboxdData(dao: MediaDao) {
             if (!isSeeding.compareAndSet(false, true)) {
                 Log.d("AppDatabase", "Database seeding already in progress. Skipping redundant concurrent execution.")
                 return
             }
             try {
-                val providers = listOf(
-                    StreamingProvider("netflix", "Netflix", costPerMonth = 15.49, isActive = true),
-                    StreamingProvider("hulu", "Hulu", costPerMonth = 14.99, isActive = true),
-                    StreamingProvider("max", "Max (HBO)", costPerMonth = 15.99, isActive = true),
-                    StreamingProvider("disney", "Disney+", costPerMonth = 13.99, isActive = true),
-                    StreamingProvider("prime", "Prime Video", costPerMonth = 8.99, isActive = false),
-                    StreamingProvider("apple", "Apple TV+", costPerMonth = 9.99, isActive = false),
-                    StreamingProvider("tubi", "Tubi", costPerMonth = 0.0, isActive = true),
-                    StreamingProvider("freevee", "Freevee", costPerMonth = 0.0, isActive = true),
-                    StreamingProvider("pluto", "Pluto TV", costPerMonth = 0.0, isActive = true)
-                )
-                dao.insertStreamingProviders(providers)
+                dao.insertStreamingProviders(DEFAULT_STREAMING_PROVIDERS)
 
                 val existingTitles = dao.getAllTitles().map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toMutableSet()
 
@@ -191,7 +235,7 @@ abstract class AppDatabase : RoomDatabase() {
 
                     val watchSessions = newHistoryRows.mapIndexed { index, row ->
                         val mediaItemId = historyIds.getOrElse(index) { 0L }
-                        val providerId = providers[index % providers.size].id
+                        val providerId = DEFAULT_STREAMING_PROVIDERS[index % DEFAULT_STREAMING_PROVIDERS.size].id
                         WatchSession(
                             mediaItemId = mediaItemId,
                             mediaItemTitle = row.name,

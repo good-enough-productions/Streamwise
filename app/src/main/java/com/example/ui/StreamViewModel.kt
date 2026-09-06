@@ -26,6 +26,10 @@ import com.example.data.remote.GeminiGenerateRequest
 import com.example.data.remote.GeminiContent
 import com.example.data.remote.GeminiPart
 import com.example.data.remote.GeminiGenerationConfig
+import com.example.data.remote.GitHubUpdateManager
+import com.example.data.remote.UpdateStatus
+import com.example.data.remote.LetterboxdSyncManager
+import com.example.data.remote.LetterboxdSyncResult
 import com.example.data.repository.MediaRepository
 import com.example.data.worker.AvailabilitySyncWorker
 import kotlinx.coroutines.Dispatchers
@@ -123,6 +127,89 @@ class StreamViewModel(
     // Google Sheet Sync in Progress State
     private val _isSyncingToSheet = MutableStateFlow(false)
     val isSyncingToSheet: StateFlow<Boolean> = _isSyncingToSheet.asStateFlow()
+
+    // Letterboxd Profile Settings
+    private val _letterboxdUsername = MutableStateFlow(userPreferences.letterboxdUsername)
+    val letterboxdUsername: StateFlow<String> = _letterboxdUsername.asStateFlow()
+
+    fun saveLetterboxdUsername(username: String) {
+        val clean = username.trim()
+        userPreferences.letterboxdUsername = clean
+        _letterboxdUsername.value = clean
+        _statusMessage.value = "Letterboxd username updated."
+    }
+
+    // User Profile Display Name
+    private val _userName = MutableStateFlow(userPreferences.userName)
+    val userName: StateFlow<String> = _userName.asStateFlow()
+
+    fun saveUserName(name: String) {
+        val clean = name.trim()
+        userPreferences.userName = clean
+        _userName.value = clean
+        _statusMessage.value = "User name updated."
+    }
+
+    // Live Letterboxd RSS Sync
+    private val _isSyncingLetterboxd = MutableStateFlow(false)
+    val isSyncingLetterboxd: StateFlow<Boolean> = _isSyncingLetterboxd.asStateFlow()
+
+    private val _letterboxdSyncResult = MutableStateFlow<LetterboxdSyncResult?>(null)
+    val letterboxdSyncResult: StateFlow<LetterboxdSyncResult?> = _letterboxdSyncResult.asStateFlow()
+
+    fun clearLetterboxdSyncResult() {
+        _letterboxdSyncResult.value = null
+    }
+
+    fun syncLetterboxdLive(username: String? = null) {
+        val targetUser = (username ?: userPreferences.letterboxdUsername).trim()
+        if (targetUser.isBlank()) {
+            _statusMessage.value = "Please enter a Letterboxd username."
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSyncingLetterboxd.value = true
+            _statusMessage.value = "Syncing diary from Letterboxd for @$targetUser..."
+            val syncManager = LetterboxdSyncManager(repository.mediaDao)
+            val result = syncManager.syncUserDiary(targetUser)
+            _letterboxdSyncResult.value = result
+            _isSyncingLetterboxd.value = false
+            if (result.isSuccess) {
+                _statusMessage.value = "Letterboxd sync complete: ${result.newlyImportedCount} new titles imported!"
+            } else {
+                _statusMessage.value = "Letterboxd sync: ${result.errorMessage}"
+            }
+        }
+    }
+
+    // Update Streaming Provider (cost, plan name, active status, tenure)
+    fun updateStreamingProvider(provider: StreamingProvider) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateStreamingProvider(provider)
+            _statusMessage.value = "${provider.name} updated."
+        }
+    }
+
+    // GitHub OTA Auto-Updater
+    val gitHubUpdateManager = GitHubUpdateManager(getApplication())
+    val updateStatus: StateFlow<UpdateStatus> = gitHubUpdateManager.updateStatus
+
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            gitHubUpdateManager.checkForUpdates(BuildConfig.VERSION_NAME)
+        }
+    }
+
+    fun downloadAndInstallUpdate(downloadUrl: String) {
+        viewModelScope.launch {
+            gitHubUpdateManager.downloadAndInstallApk(downloadUrl)
+        }
+    }
+
+    fun resetUpdateStatus() {
+        gitHubUpdateManager.resetStatus()
+    }
+
 
     /**
      * 1-Tap Letterboxd Sync: Sends Watched Vault and Watchlist data directly to the Google Sheet backend.
@@ -952,10 +1039,13 @@ class StreamViewModel(
                 name.contains("mubi") -> localIds.add("mubi")
                 name.contains("shudder") -> localIds.add("shudder")
                 name.contains("starz") -> localIds.add("starz")
+                name.contains("amc") -> localIds.add("amc_plus")
                 name.contains("britbox") -> localIds.add("britbox")
                 name.contains("tubi") -> localIds.add("tubi")
                 name.contains("freevee") -> localIds.add("freevee")
                 name.contains("pluto") -> localIds.add("pluto")
+                name.contains("kanopy") -> localIds.add("kanopy")
+                name.contains("hoopla") -> localIds.add("hoopla")
             }
         }
         val result = localIds.distinct().joinToString(",")

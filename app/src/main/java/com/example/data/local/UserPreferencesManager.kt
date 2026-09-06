@@ -46,6 +46,14 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getBoolean(KEY_SPOTLIGHT_COLLAPSED, false)
         set(value) = prefs.edit().putBoolean(KEY_SPOTLIGHT_COLLAPSED, value).apply()
 
+    var letterboxdUsername: String
+        get() = prefs.getString(KEY_LETTERBOXD_USERNAME, "dschm") ?: "dschm"
+        set(value) = prefs.edit().putString(KEY_LETTERBOXD_USERNAME, value.trim()).apply()
+
+    var userName: String
+        get() = prefs.getString(KEY_USER_NAME, "Cinephile") ?: "Cinephile"
+        set(value) = prefs.edit().putString(KEY_USER_NAME, value.trim()).apply()
+
     companion object {
         private const val PREFS_NAME = "user_preferences"
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
@@ -57,5 +65,7 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_ENABLE_BETA_FEEDBACK = "enable_beta_feedback"
         private const val KEY_GOOGLE_SHEET_WEBHOOK_URL = "google_sheet_webhook_url"
         private const val KEY_SPOTLIGHT_COLLAPSED = "spotlight_collapsed"
+        private const val KEY_LETTERBOXD_USERNAME = "letterboxd_username"
+        private const val KEY_USER_NAME = "user_name"
     }
 }
