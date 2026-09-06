@@ -1,0 +1,50 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Streamwise - User Guide</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0d1117; color: #c9d1d9; line-height: 1.6; padding: 20px; }
+        h1, h2, h3 { color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 5px; }
+        code { background-color: #161b22; padding: 2px 5px; border-radius: 4px; color: #ff7b72; font-family: 'JetBrains Mono', monospace; }
+        .section { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 15px; margin-bottom: 20px; }
+        .badge { background: #238636; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; }
+        .highlight { color: #f0883e; font-weight: bold; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 8px; }
+    </style>
+</head>
+<body>
+
+    <h1>Streamwise User Guide</h1>
+    <p>Welcome to <strong>Streamwise</strong>, your personal cinematic command center and streaming companion.</p>
+
+    <div class="section">
+        <h2>1. Watchlist & Discovery</h2>
+        <ul>
+            <li><strong>Spotlight Carousel:</strong> Featured titles at the top of your watchlist with high-resolution TMDB posters, ratings, and genre tags.</li>
+            <li><strong>Default View ("My Services"):</strong> By default, Streamwise filters your queue to only display movies and TV shows currently available on your subscribed streaming platforms and free-with-ads channels (Tubi, Pluto TV, Freevee).</li>
+            <li><strong>Filter Chips:</strong> Tap "All" to view your complete wishlist regardless of availability, or select individual service chips (Netflix, Max, Hulu, Disney+, Prime Video, Criterion) to filter by a specific catalog.</li>
+            <li><strong>Immediate Refresh:</strong> Tap the orange refresh icon (<span class="highlight">↺</span>) in the top bar anytime to trigger an immediate live sync with TMDB.</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>2. Service Management & ROI Analytics</h2>
+        <ul>
+            <li><strong>Active Subscriptions:</strong> Configure which services you pay for in Settings to ensure "My Services" reflects your real-world household subscriptions.</li>
+            <li><strong>Cost Efficiency:</strong> The <em>ROI Stats</em> tab tracks your historical watch hours and calculates your effective hourly value per streaming subscription.</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>3. Metadata & Offline Resilience</h2>
+        <ul>
+            <li><strong>Local SQLite / Room Vault:</strong> All titles, ratings, and notes are cached locally on your device for instant launch and offline access.</li>
+            <li><strong>Background Updates:</strong> WorkManager checks provider availability every 4 hours in the background so your queue stays accurate.</li>
+        </ul>
+    </div>
+
+</body>
+</html>
