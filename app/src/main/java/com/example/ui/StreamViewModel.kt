@@ -97,6 +97,15 @@ class StreamViewModel(
     private val _aiEngine = MutableStateFlow(userPreferences.aiEngine)
     val aiEngine: StateFlow<String> = _aiEngine.asStateFlow()
 
+    // Persisted Dark Mode State
+    private val _isDarkMode = MutableStateFlow(userPreferences.isDarkMode)
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    fun setDarkMode(enabled: Boolean) {
+        userPreferences.isDarkMode = enabled
+        _isDarkMode.value = enabled
+    }
+
     // Letterboxd Sync State
     private val _isLetterboxdSyncing = MutableStateFlow(false)
     val isLetterboxdSyncing: StateFlow<Boolean> = _isLetterboxdSyncing.asStateFlow()

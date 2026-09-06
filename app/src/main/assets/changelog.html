@@ -61,6 +61,18 @@
 <body>
     <h1>Streamwise Changelog</h1>
 
+    <!-- v10.4 -->
+    <div class="release">
+        <h2>v10.4: Database Self-Healing, Non-Blocking Reachability & Cinematic Dark Mode</h2>
+        <span class="date">September 2026</span>
+        <ul>
+            <li><span class="badge feature">Feature</span><strong>Database Self-Healing on Open:</strong> Added automated health check in Room database; if watch history is below 1,000 entries, it seamlessly supplements from the full 1,107-item Letterboxd archive with deduplication.</li>
+            <li><span class="badge perf">Perf</span><strong>Fast Non-Blocking Ollama Reachability:</strong> Integrated a 2-second non-blocking socket test to verify the local Ollama daemon before executing queries, eliminating thread blocking when machines are asleep.</li>
+            <li><span class="badge ui">UI/UX</span><strong>Cinematic Dark Mode & Tabular Typography:</strong> Implemented deep OLED theater dark theme (`#0B0E14` / `#121622`) with Amber Gold & Electric Cyan accents, tabular numbers typography, and runtime toggle in Settings.</li>
+            <li><span class="badge perf">Perf</span><strong>AvailabilitySyncWorker Batch Prioritization:</strong> Optimized background worker queue to prioritize watchlist titles missing metadata and capped execution to 20 items per cycle.</li>
+        </ul>
+    </div>
+
     <!-- v10.3 -->
     <div class="release">
         <h2>v10.3: Modernized Tab Navigation & AI Identity Polish</h2>

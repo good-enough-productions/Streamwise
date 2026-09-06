@@ -66,6 +66,10 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getBoolean(KEY_ENABLE_BETA_FEEDBACK, true)
         set(value) { prefs.edit().putBoolean(KEY_ENABLE_BETA_FEEDBACK, value).apply() }
 
+    var isDarkMode: Boolean
+        get() = prefs.getBoolean(KEY_DARK_MODE, true)
+        set(value) { prefs.edit().putBoolean(KEY_DARK_MODE, value).apply() }
+
     companion object {
         private const val PREFS_NAME = "user_preferences"
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
@@ -82,6 +86,7 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_FILTER_ONLY_MY_SERVICES_DEFAULT = "filter_only_my_services_default"
         private const val KEY_NOTIFY_NEW_AVAILABILITY = "notify_new_availability"
         private const val KEY_ENABLE_BETA_FEEDBACK = "enable_beta_feedback"
+        private const val KEY_DARK_MODE = "dark_mode"
 
         const val AI_ENGINE_GEMINI = "GEMINI"
         const val AI_ENGINE_OLLAMA = "OLLAMA"

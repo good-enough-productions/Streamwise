@@ -112,6 +112,7 @@ fun HomeScreen(
     }
 
     val enableBetaFeedback by viewModel.enableBetaFeedback.collectAsState()
+    val isDarkMode by viewModel.isDarkMode.collectAsState()
     val showcaseState = remember { ShowcaseState() }
 
     CompositionLocalProvider(LocalShowcaseState provides showcaseState) {
@@ -481,6 +482,8 @@ fun HomeScreen(
                 },
                 enableBetaFeedback = enableBetaFeedback,
                 onToggleBetaFeedback = { viewModel.setEnableBetaFeedback(it) },
+                isDarkMode = isDarkMode,
+                onToggleDarkMode = { viewModel.setDarkMode(it) },
                 onDismiss = { showSettingsDialog = false }
             )
         }
@@ -3491,6 +3494,8 @@ fun SettingsDialog(
     onResetOnboarding: () -> Unit = {},
     enableBetaFeedback: Boolean = true,
     onToggleBetaFeedback: (Boolean) -> Unit = {},
+    isDarkMode: Boolean = true,
+    onToggleDarkMode: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var activeSubTab by remember { mutableStateOf(0) } // 0: Subs, 1: Cloud/Sheet, 2: Fire TV, 3: APIs, 4: AI/Local, 5: Dev
@@ -4181,6 +4186,30 @@ fun SettingsDialog(
                                     checked = enableBetaFeedback,
                                     onCheckedChange = onToggleBetaFeedback,
                                     modifier = Modifier.testTag("enable_feedback_switch")
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                    Text(
+                                        "Cinematic Dark Mode",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "OLED theater dark theme optimized for streaming cinephiles.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                                Switch(
+                                    checked = isDarkMode,
+                                    onCheckedChange = onToggleDarkMode,
+                                    modifier = Modifier.testTag("dark_mode_switch")
                                 )
                             }
 

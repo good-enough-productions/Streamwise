@@ -136,6 +136,19 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        override fun onOpen(db: SupportSQLiteDatabase) {
+            super.onOpen(db)
+            INSTANCE?.let { database ->
+                scope.launch(Dispatchers.IO) {
+                    val watchedCount = database.mediaDao().getWatchedCount()
+                    if (watchedCount < 1000) {
+                        Log.d("AppDatabase", "Detected only $watchedCount watched items, supplementing from full Letterboxd archive...")
+                        populateInitialProvidersAndLetterboxdData(database.mediaDao())
+                    }
+                }
+            }
+        }
+
         private suspend fun populateInitialProvidersAndLetterboxdData(dao: MediaDao) {
             val providers = listOf(
                 StreamingProvider("netflix", "Netflix", costPerMonth = 15.49, isActive = true),
@@ -150,9 +163,13 @@ abstract class AppDatabase : RoomDatabase() {
             )
             dao.insertStreamingProviders(providers)
 
+            val existingTitles = dao.getAllTitles().toSet()
+
             Log.d("AppDatabase", "Seeding initial Letterboxd watch list entries from CSV...")
             val watchlistRows = parseCsv(context, "watchlist.csv")
-            val watchlistItems = watchlistRows.map { row ->
+            val watchlistItems = watchlistRows
+                .filter { it.name !in existingTitles }
+                .map { row ->
                 MediaItem(
                     title = row.name,
                     sharedUrl = row.uri,
@@ -173,7 +190,8 @@ abstract class AppDatabase : RoomDatabase() {
 
             Log.d("AppDatabase", "Seeding initial Letterboxd watched history entries and monthly watch sessions from CSV...")
             val historyRows = parseCsv(context, "watched_history.csv")
-            val historyItems = historyRows.map { row ->
+            val newHistoryRows = historyRows.filter { it.name !in existingTitles }
+            val historyItems = newHistoryRows.map { row ->
                 val watchTimestamp = parseDateToTimestamp(row.date)
                 MediaItem(
                     title = row.name,
@@ -194,7 +212,7 @@ abstract class AppDatabase : RoomDatabase() {
                 Log.d("AppDatabase", "Inserted ${historyItems.size} watched movies from CSV successfully.")
 
                 // Now insert corresponding Watch Sessions to populate budget ROI analytics
-                val watchSessions = historyRows.mapIndexed { index, row ->
+                val watchSessions = newHistoryRows.mapIndexed { index, row ->
                     val mediaItemId = historyIds.getOrElse(index) { 0L }
                     val providerId = providers[index % providers.size].id
                     WatchSession(
