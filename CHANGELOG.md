@@ -2,6 +2,13 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.2.1] - 2026-09-06
+
+### Restored
+- **Global Beta Feedback FAB & Jules Triage Pipeline**: Restored the floating action button (`FloatingFeedbackButton`) across all screens and the in-app `FeedbackDialog` modal that was lost during the AI Studio alignment commit `6a57283`.
+- **Automatic Screen Capture & Diagnostics**: Feedback dialog captures the current screen bitmap, system diagnostics (OS version, device model, watchlist & vault counts), and dispatches issues directly to GitHub labeled `jules` and `jules-triage` via the shared Cloud Function feedback proxy.
+- **Settings Beta Toggle**: Added "Enable Beta Feedback FAB" toggle under Settings -> AI/Local tab backed by `UserPreferencesManager`.
+
 ## [1.2.0] - 2026-09-06
 
 ### Fixed & Modernized

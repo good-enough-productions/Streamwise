@@ -94,12 +94,22 @@ class StreamViewModel(
     private val _githubToken = MutableStateFlow(userPreferences.githubToken)
     val githubToken: StateFlow<String> = _githubToken.asStateFlow()
 
+    // Beta Feedback FAB Setting
+    private val _enableBetaFeedback = MutableStateFlow(userPreferences.enableBetaFeedback)
+    val enableBetaFeedback: StateFlow<Boolean> = _enableBetaFeedback.asStateFlow()
+
     init {
         // Auto-sync TMDB metadata on launch if items are unpopulated
         viewModelScope.launch {
             kotlinx.coroutines.delay(800)
             syncWatchlistMetadata(forceAll = false)
         }
+    }
+
+    fun setEnableBetaFeedback(enabled: Boolean) {
+        userPreferences.enableBetaFeedback = enabled
+        _enableBetaFeedback.value = enabled
+        _statusMessage.value = if (enabled) "Beta feedback button enabled" else "Beta feedback button hidden"
     }
 
     fun saveGeminiApiKey(key: String) {
