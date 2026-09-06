@@ -46,10 +46,18 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import com.example.data.local.ProviderUsageStats
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
+import com.example.data.model.PodcastEpisodeCatalog
 import com.example.data.model.StreamingProvider
+import com.example.data.remote.LetterboxdSyncResult
+import com.example.data.remote.UpdateStatus
+import java.text.SimpleDateFormat
+import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,12 +66,19 @@ fun HomeScreen(
     modifier: Modifier = Modifier,
     simulateForegroundReturn: () -> Unit = {}
 ) {
-    val watchlistItems by viewModel.allMediaItems.collectAsState()
+    val allItems by viewModel.allMediaItems.collectAsState()
+    val watchlistItems = remember(allItems) { allItems.filter { it.status != MediaStatus.WATCHED.name } }
+    val watchedItems = remember(allItems) { allItems.filter { it.status == MediaStatus.WATCHED.name } }
     val allProviders by viewModel.allProviders.collectAsState()
     val monthlyStats by viewModel.monthlyROIStats.collectAsState()
     val checkInItem by viewModel.activeCheckInItem.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val tmdbApiKey by viewModel.tmdbApiKey.collectAsState()
+    val letterboxdUsername by viewModel.letterboxdUsername.collectAsState()
+    val userName by viewModel.userName.collectAsState()
+    val updateStatus by viewModel.updateStatus.collectAsState()
+    val isSyncingLetterboxd by viewModel.isSyncingLetterboxd.collectAsState()
+    val letterboxdSyncResult by viewModel.letterboxdSyncResult.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -73,6 +88,11 @@ fun HomeScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showFeedbackDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
+    var showServiceDetailProvider by remember { mutableStateOf<StreamingProvider?>(null) }
+    var showLetterboxdSyncDialog by remember { mutableStateOf(false) }
+    var showUserGuideDialog by remember { mutableStateOf(false) }
+    var showChangelogDialog by remember { mutableStateOf(false) }
+
     val isDark by viewModel.isDarkMode.collectAsState()
     val enableBetaFeedback by viewModel.enableBetaFeedback.collectAsState()
     val isSpotlightCollapsed by viewModel.isSpotlightCollapsed.collectAsState()
@@ -102,9 +122,9 @@ fun HomeScreen(
                         )
                         Text(
                             when (selectedTab) {
-                                0 -> "Watchlist"
-                                1 -> "Watched History"
-                                2 -> "My Services"
+                                0 -> if (watchlistItems.isNotEmpty()) "Watchlist • ${watchlistItems.size} Titles" else "Watchlist"
+                                1 -> if (watchedItems.isNotEmpty()) "Watched Vault • ${watchedItems.size} Movies" else "Watched History"
+                                2 -> "My Services • ${allProviders.count { it.isActive }} Active"
                                 3 -> "Explore & Cinema AI"
                                 else -> ""
                             },
@@ -144,16 +164,6 @@ fun HomeScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    IconButton(
-                        onClick = { viewModel.triggerImmediateSync() },
-                        modifier = Modifier.testTag("refresh_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh streaming availability from TMDB",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
@@ -168,14 +178,40 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist") },
+                    icon = {
+                        BadgedBox(badge = {
+                            if (watchlistItems.isNotEmpty()) {
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                ) {
+                                    Text("${watchlistItems.size}")
+                                }
+                            }
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist")
+                        }
+                    },
                     label = { Text("Watchlist") },
                     modifier = Modifier.testTag("tab_watchlist")
                 )
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
-                    icon = { Icon(Icons.Default.Check, contentDescription = "Watched") },
+                    icon = {
+                        BadgedBox(badge = {
+                            if (watchedItems.isNotEmpty()) {
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.secondary,
+                                    contentColor = MaterialTheme.colorScheme.onSecondary
+                                ) {
+                                    Text("${watchedItems.size}")
+                                }
+                            }
+                        }) {
+                            Icon(Icons.Default.Check, contentDescription = "Watched")
+                        }
+                    },
                     label = { Text("Watched") },
                     modifier = Modifier.testTag("tab_watched")
                 )
@@ -259,12 +295,17 @@ fun HomeScreen(
                             onSyncClick = { viewModel.triggerImmediateSync() },
                             isSyncingToSheet = isSyncingToSheet,
                             onSyncLetterboxdToSheet = { viewModel.syncLetterboxdToGoogleSheet() },
+                            onSyncLetterboxdLive = {
+                                viewModel.syncLetterboxdLive()
+                                showLetterboxdSyncDialog = true
+                            },
                             onRewatchIntent = { viewModel.startIntendingToWatch(it) }
                         )
                     }
                     2 -> MonthlyRoiContent(
                         monthlyStats = monthlyStats,
-                        allProviders = allProviders
+                        allProviders = allProviders,
+                        onProviderClick = { showServiceDetailProvider = it }
                     )
                     3 -> {
                         val chatMessages by viewModel.chatMessages.collectAsState()
@@ -331,6 +372,20 @@ fun HomeScreen(
             SettingsDialog(
                 allProviders = allProviders,
                 onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
+                letterboxdUsername = letterboxdUsername,
+                onSaveLetterboxdUsername = { viewModel.saveLetterboxdUsername(it) },
+                userName = userName,
+                onSaveUserName = { viewModel.saveUserName(it) },
+                onSyncLetterboxdLive = {
+                    viewModel.syncLetterboxdLive()
+                    showLetterboxdSyncDialog = true
+                },
+                onOpenUserGuide = { showUserGuideDialog = true },
+                onOpenChangelog = { showChangelogDialog = true },
+                updateStatus = updateStatus,
+                onCheckForUpdates = { viewModel.checkForUpdates() },
+                onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
+                onResetUpdateStatus = { viewModel.resetUpdateStatus() },
                 tmdbApiKey = tmdbApiKey,
                 onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
                 geminiApiKey = geminiApiKey,
@@ -343,9 +398,55 @@ fun HomeScreen(
                 onSaveGithubToken = { viewModel.saveGithubToken(it) },
                 googleSheetWebhookUrl = googleSheetWebhookUrl,
                 onSaveGoogleSheetWebhookUrl = { viewModel.saveGoogleSheetWebhookUrl(it) },
+                isSyncingToSheet = isSyncingToSheet,
+                onSyncLetterboxdToSheet = { viewModel.syncLetterboxdToGoogleSheet() },
                 enableBetaFeedback = enableBetaFeedback,
                 onToggleBetaFeedback = { viewModel.setEnableBetaFeedback(it) },
                 onDismiss = { showSettingsDialog = false }
+            )
+        }
+
+        // Service Detail Bottom Sheet (View/Edit service, tenure, deal finder)
+        if (showServiceDetailProvider != null) {
+            val providerStats = monthlyStats.find { it.providerId == showServiceDetailProvider!!.id }
+            ServiceDetailBottomSheet(
+                provider = showServiceDetailProvider!!,
+                stats = providerStats,
+                onUpdateProvider = { updated ->
+                    viewModel.updateStreamingProvider(updated)
+                    showServiceDetailProvider = null
+                },
+                onDismiss = { showServiceDetailProvider = null }
+            )
+        }
+
+        // Live Letterboxd RSS Sync Dialog
+        if (showLetterboxdSyncDialog || isSyncingLetterboxd) {
+            LetterboxdSyncDialog(
+                isSyncing = isSyncingLetterboxd,
+                result = letterboxdSyncResult,
+                onDismiss = {
+                    showLetterboxdSyncDialog = false
+                    viewModel.clearLetterboxdSyncResult()
+                }
+            )
+        }
+
+        // In-App User Guide Dialog
+        if (showUserGuideDialog) {
+            HtmlAssetViewerDialog(
+                title = "Streamwise User Guide",
+                assetFileName = "user_guide.html",
+                onDismiss = { showUserGuideDialog = false }
+            )
+        }
+
+        // In-App Changelog Dialog
+        if (showChangelogDialog) {
+            HtmlAssetViewerDialog(
+                title = "Streamwise Changelog",
+                assetFileName = "changelog.html",
+                onDismiss = { showChangelogDialog = false }
             )
         }
 
@@ -561,6 +662,8 @@ fun WatchlistTabContent(
     var selectedGenres by remember { mutableStateOf(emptySet<String>()) }
     var selectedEras by remember { mutableStateOf(emptySet<String>()) }
     var minRating by remember { mutableStateOf(0.0) }
+    var selectedPodcastId by remember { mutableStateOf<String?>(null) }
+    var podcastMainSubjectOnly by remember { mutableStateOf(false) }
 
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("added") } // "added", "alpha", "rating"
@@ -583,7 +686,7 @@ fun WatchlistTabContent(
         }.distinctBy { it.title.trim().lowercase() }.sortedByDescending { it.rating ?: 0.0 }.take(8)
     }
 
-    val activeAdvancedCount = selectedPlatforms.size + selectedGenres.size + selectedEras.size + (if (minRating > 0.0) 1 else 0)
+    val activeAdvancedCount = selectedPlatforms.size + selectedGenres.size + selectedEras.size + (if (minRating > 0.0) 1 else 0) + (if (selectedPodcastId != null) 1 else 0)
 
     // Filter items according to state with OR widening logic for multi-selected chips
     val filteredItems = remember(
@@ -596,7 +699,9 @@ fun WatchlistTabContent(
         showTopRatedOnly,
         selectedGenres,
         minRating,
-        selectedEras
+        selectedEras,
+        selectedPodcastId,
+        podcastMainSubjectOnly
     ) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
@@ -642,6 +747,16 @@ fun WatchlistTabContent(
                     }
                     if (!matchesAnyEra) return@filter false
                 }
+            }
+
+            // Podcast Coverage Filter
+            if (selectedPodcastId != null) {
+                val matchesPodcast = com.example.data.model.PodcastEpisodeCatalog.isCoveredOnPodcast(
+                    movieTitle = item.title,
+                    podcastId = selectedPodcastId,
+                    mainSubjectOnly = podcastMainSubjectOnly
+                )
+                if (!matchesPodcast) return@filter false
             }
 
             if (filterOnlyMyServices) {
@@ -909,6 +1024,17 @@ fun WatchlistTabContent(
                                 )
                             }
 
+                            if (selectedPodcastId != null) {
+                                val pod = com.example.data.model.PodcastEpisodeCatalog.AVAILABLE_PODCASTS.find { it.id == selectedPodcastId }
+                                val podLabel = "${pod?.emoji ?: "🎙️"} ${pod?.name ?: "Podcast"}${if (podcastMainSubjectOnly) " (Main)" else ""}"
+                                InputChip(
+                                    selected = true,
+                                    onClick = { selectedPodcastId = null },
+                                    label = { Text(podLabel, fontSize = 11.sp) },
+                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                                )
+                            }
+
                             // Advanced Filters Entry Button
                             ElevatedFilterChip(
                                 selected = activeAdvancedCount > 0,
@@ -941,6 +1067,31 @@ fun WatchlistTabContent(
                                     contentDescription = "Sync streaming availability from TMDB",
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Watchlist title count clarity summary bar
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Showing ${processedItems.size} of ${watchlistItems.count { it.status != MediaStatus.WATCHED.name }} titles",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (processedItems.size < watchlistItems.count { it.status != MediaStatus.WATCHED.name }) {
+                                Text(
+                                    text = "${watchlistItems.count { it.status != MediaStatus.WATCHED.name } - processedItems.size} hidden by filters",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium
                                 )
                             }
                         }
@@ -1021,6 +1172,10 @@ fun WatchlistTabContent(
                     selectedEras = if (selectedEras.contains(era)) selectedEras - era else selectedEras + era
                 },
                 onClearEras = { selectedEras = emptySet() },
+                selectedPodcastId = selectedPodcastId,
+                onSelectPodcast = { selectedPodcastId = it },
+                podcastMainSubjectOnly = podcastMainSubjectOnly,
+                onTogglePodcastMainSubjectOnly = { podcastMainSubjectOnly = it },
                 sortBy = sortBy,
                 onSelectSortBy = { sortBy = it },
                 matchingCount = processedItems.size,
@@ -1029,6 +1184,8 @@ fun WatchlistTabContent(
                     selectedGenres = emptySet()
                     selectedEras = emptySet()
                     minRating = 0.0
+                    selectedPodcastId = null
+                    podcastMainSubjectOnly = false
                     showFreeOnly = false
                     onFilterToggle(true)
                 },
@@ -1057,6 +1214,10 @@ fun AdvancedFilterBottomSheet(
     selectedEras: Set<String>,
     onToggleEra: (String) -> Unit,
     onClearEras: () -> Unit,
+    selectedPodcastId: String?,
+    onSelectPodcast: (String?) -> Unit,
+    podcastMainSubjectOnly: Boolean,
+    onTogglePodcastMainSubjectOnly: (Boolean) -> Unit,
     sortBy: String,
     onSelectSortBy: (String) -> Unit,
     matchingCount: Int,
@@ -1228,7 +1389,66 @@ fun AdvancedFilterBottomSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Section 5: Sort Order
+            // Section 5: Podcasts & Media Mentions
+            Text(
+                "Podcasts & Media Mentions",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                "Filter movies discussed on popular cinema podcasts",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                FilterChip(
+                    selected = selectedPodcastId == null,
+                    onClick = { onSelectPodcast(null) },
+                    label = { Text("Any / All", fontSize = 11.sp) },
+                    leadingIcon = { if (selectedPodcastId == null) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
+                )
+                com.example.data.model.PodcastEpisodeCatalog.AVAILABLE_PODCASTS.forEach { pod ->
+                    val isSelected = selectedPodcastId == pod.id
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSelectPodcast(if (isSelected) null else pod.id) },
+                        label = { Text("${pod.emoji} ${pod.name}", fontSize = 11.sp) },
+                        leadingIcon = { if (isSelected) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
+                    )
+                }
+            }
+
+            if (selectedPodcastId != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = podcastMainSubjectOnly,
+                        onClick = { onTogglePodcastMainSubjectOnly(true) },
+                        label = { Text("Main Film / Featured Topic", fontSize = 10.sp) },
+                        leadingIcon = { if (podcastMainSubjectOnly) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
+                    )
+                    FilterChip(
+                        selected = !podcastMainSubjectOnly,
+                        onClick = { onTogglePodcastMainSubjectOnly(false) },
+                        label = { Text("Any Mention (Inclusive)", fontSize = 10.sp) },
+                        leadingIcon = { if (!podcastMainSubjectOnly) Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp)) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Section 6: Sort Order
             Text(
                 "Sort Order",
                 style = MaterialTheme.typography.labelLarge,
@@ -1597,6 +1817,7 @@ fun WatchedTabContent(
     onSyncClick: () -> Unit,
     isSyncingToSheet: Boolean = false,
     onSyncLetterboxdToSheet: () -> Unit = {},
+    onSyncLetterboxdLive: () -> Unit = {},
     onRewatchIntent: (MediaItem) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -1786,34 +2007,53 @@ fun WatchedTabContent(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 1-Tap Letterboxd Google Sheet Sync Action Button (Issue #10)
-                Button(
-                    onClick = onSyncLetterboxdToSheet,
-                    enabled = !isSyncingToSheet,
+                // 1-Tap Dual Sync Buttons: Live Letterboxd RSS + Google Sheet
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    ),
-                    contentPadding = PaddingValues(vertical = 8.dp, horizontal = 14.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (isSyncingToSheet) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Syncing with Google Sheet backend...", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    } else {
+                    Button(
+                        onClick = onSyncLetterboxdLive,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        contentPadding = PaddingValues(vertical = 8.dp, horizontal = 8.dp)
+                    ) {
                         Icon(
-                            imageVector = Icons.Default.CloudUpload,
-                            contentDescription = "Sync Letterboxd to Google Sheet",
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = "Sync Diary from Letterboxd",
                             modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Sync Letterboxd to Google Sheet", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Sync Diary (RSS)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = onSyncLetterboxdToSheet,
+                        enabled = !isSyncingToSheet,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(vertical = 8.dp, horizontal = 8.dp)
+                    ) {
+                        if (isSyncingToSheet) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Syncing...", fontSize = 11.sp)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = "Sync to Sheet",
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Sync to Sheet", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
@@ -2254,21 +2494,34 @@ fun WatchedGridPosterCard(
 @Composable
 fun MonthlyRoiContent(
     monthlyStats: List<ProviderUsageStats>,
-    allProviders: List<StreamingProvider>
+    allProviders: List<StreamingProvider>,
+    onProviderClick: (StreamingProvider) -> Unit = {}
 ) {
     val activeSubscribed = remember(allProviders) { allProviders.filter { it.isActive } }
+    val inactiveProviders = remember(allProviders) { allProviders.filter { !it.isActive } }
     val totalCost = remember(activeSubscribed) { activeSubscribed.sumOf { it.costPerMonth } }
     
     // Sort active channels by costPerHour descending (worst value!) to bubble up prime pausing candidates.
-    val worstValueProviders = remember(monthlyStats) {
-        monthlyStats.sortedByDescending { it.costPerHour }
+    val activeWithStats = remember(activeSubscribed, monthlyStats) {
+        activeSubscribed.map { provider ->
+            val st = monthlyStats.find { it.providerId == provider.id }
+            val totalHrs = st?.totalHours ?: 0.0
+            val usage = st ?: ProviderUsageStats(
+                providerId = provider.id,
+                providerName = provider.name,
+                costPerMonth = provider.costPerMonth,
+                isActive = provider.isActive,
+                totalMinutes = 0L
+            )
+            provider to usage
+        }.sortedByDescending { it.second.costPerHour }
     }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
             // Summary Budget card
@@ -2305,6 +2558,13 @@ fun MonthlyRoiContent(
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "💡 Tap any service to edit price/plan, view tenure, or search live deals",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
             }
         }
@@ -2318,7 +2578,7 @@ fun MonthlyRoiContent(
             )
         }
 
-        if (worstValueProviders.isEmpty()) {
+        if (activeWithStats.isEmpty()) {
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -2327,7 +2587,7 @@ fun MonthlyRoiContent(
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                 ) {
                     Text(
-                        "To manage and analyze services, please configure your active streaming subscriptions in Settings.",
+                        "No active services yet. Tap any service below or configure in Settings.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(24.dp),
                         textAlign = TextAlign.Center,
@@ -2336,11 +2596,13 @@ fun MonthlyRoiContent(
                 }
             }
         } else {
-            items(worstValueProviders, key = { it.providerId }) { stats ->
-                val isPrimeCancelCandidate = stats.totalHours < 3.0
+            items(activeWithStats, key = { it.first.id }) { (provider, stats) ->
+                val isPrimeCancelCandidate = stats.totalHours < 3.0 && provider.costPerMonth > 0.0
 
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onProviderClick(provider) },
                     colors = CardDefaults.cardColors(
                         containerColor = if (isPrimeCancelCandidate) {
                             MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
@@ -2365,18 +2627,33 @@ fun MonthlyRoiContent(
                         Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    stats.providerName,
+                                    provider.name,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
+                                provider.planName?.let { pName ->
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                    ) {
+                                        Text(
+                                            pName,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
                                 if (isPrimeCancelCandidate) {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Badge(
                                         containerColor = MaterialTheme.colorScheme.error,
                                         contentColor = MaterialTheme.colorScheme.onError
                                     ) {
-                                        Text("UNJUSTIFIED", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+                                        Text("LOW VALUE", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
                                     }
                                 }
                             }
@@ -2391,25 +2668,82 @@ fun MonthlyRoiContent(
                                     color = MaterialTheme.colorScheme.outline
                                 )
                                 Text(
-                                    "Cost: $${String.format(Locale.US, "%.2f", stats.costPerMonth)}/mo",
+                                    "Cost: $${String.format(Locale.US, "%.2f", provider.costPerMonth)}/mo",
                                     style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             }
                         }
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                "$${String.format(Locale.US, "%.2f", stats.costPerHour)}",
-                                style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
-                                fontWeight = FontWeight.Black,
-                                color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    "$${String.format(Locale.US, "%.2f", stats.costPerHour)}",
+                                    style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+                                    fontWeight = FontWeight.Black,
+                                    color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "per hour",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                contentDescription = "Edit Service & Find Deals",
+                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                                modifier = Modifier.size(16.dp)
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Inactive / Other Available Services Section
+        if (inactiveProviders.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Other Streaming Services (Tap to Activate or View Deals)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+
+            items(inactiveProviders, key = { it.id }) { provider ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onProviderClick(provider) },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(provider.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                             Text(
-                                "per hour",
-                                style = MaterialTheme.typography.labelSmall,
+                                if (provider.costPerMonth > 0) "$${provider.costPerMonth}/mo • Inactive" else "Free Platform",
+                                fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.outline
                             )
+                        }
+                        OutlinedButton(
+                            onClick = { onProviderClick(provider) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text("Details / Deals ↗", fontSize = 10.sp)
                         }
                     }
                 }
@@ -2981,12 +3315,538 @@ fun ProviderSelector(
 }
 
 // ==========================================
-// COMPOSABLE: Settings Dialog
+// COMPOSABLE: Service Detail & Deal Finder BottomSheet
+// ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ServiceDetailBottomSheet(
+    provider: StreamingProvider,
+    stats: ProviderUsageStats?,
+    onUpdateProvider: (StreamingProvider) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val uriHandler = LocalUriHandler.current
+    var costInput by remember(provider) { mutableStateOf(provider.costPerMonth.toString()) }
+    var planNameInput by remember(provider) { mutableStateOf(provider.planName ?: "") }
+    var renewalDayInput by remember(provider) { mutableStateOf(provider.renewalDayOfMonth?.toString() ?: "") }
+    var isActive by remember(provider) { mutableStateOf(provider.isActive) }
+    var subscribedSince by remember(provider) { mutableStateOf(provider.subscribedSince) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = provider.name.take(2).uppercase(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = provider.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (isActive) "Active Subscription" else "Inactive / Not Subscribed",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+
+                Switch(
+                    checked = isActive,
+                    onCheckedChange = { isActive = it }
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            // Plan & Cost Section
+            Text(
+                text = "Plan & Billing Details",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = planNameInput,
+                    onValueChange = { planNameInput = it },
+                    label = { Text("Plan Tier") },
+                    placeholder = { Text("Standard, Ad-Free...") },
+                    modifier = Modifier.weight(1.2f),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = costInput,
+                    onValueChange = { costInput = it },
+                    label = { Text("Cost ($/mo)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.weight(0.8f),
+                    singleLine = true
+                )
+            }
+
+            OutlinedTextField(
+                value = renewalDayInput,
+                onValueChange = { renewalDayInput = it },
+                label = { Text("Billing Renewal Day (1 - 31)") },
+                placeholder = { Text("e.g. 15") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+
+            // Tenure & ROI Calculation Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Subscription Tenure & Value Metrics",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    val now = System.currentTimeMillis()
+                    val tenureDays = if (subscribedSince != null && subscribedSince!! > 0) {
+                        ((now - subscribedSince!!) / (1000L * 60 * 60 * 24)).coerceAtLeast(0)
+                    } else 0L
+                    val tenureMonths = tenureDays / 30
+
+                    val tenureString = if (subscribedSince != null && subscribedSince!! > 0) {
+                        val dateFormatted = SimpleDateFormat("MMM d, yyyy", Locale.US).format(Date(subscribedSince!!))
+                        if (tenureMonths > 0) "$tenureMonths months ($tenureDays days) • Since $dateFormatted"
+                        else "$tenureDays days • Since $dateFormatted"
+                    } else "Not specified"
+
+                    Text(
+                        text = "Tenure: $tenureString",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Quick set tenure chips
+                    Text(
+                        text = "Quick-set subscription start:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val presets = listOf(
+                            "This Month" to 15L,
+                            "3 Mos" to 90L,
+                            "6 Mos" to 180L,
+                            "1 Year" to 365L,
+                            "2+ Years" to 730L
+                        )
+                        presets.forEach { (label, daysAgo) ->
+                            AssistChip(
+                                onClick = {
+                                    subscribedSince = now - (daysAgo * 24 * 60 * 60 * 1000L)
+                                },
+                                label = { Text(label, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    if (stats != null) {
+                        val cost = costInput.toDoubleOrNull() ?: provider.costPerMonth
+                        val hours = stats.totalHours.toDouble()
+                        val roiPerHr = if (hours > 0.0) cost / hours else cost
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column {
+                                Text("Hours Watched", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text(String.format(Locale.US, "%.1f hrs", hours), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Minutes Streamed", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text("${stats.totalMinutes} min", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                            }
+                            Column {
+                                Text("Cost / Hour", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Text(
+                                    text = String.format(Locale.US, "$%.2f/hr", roiPerHr),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (roiPerHr <= 2.50) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Live Web Deals & Discount Search (The Streamable, Slickdeals, Doctor of Credit)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.25f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(Icons.Default.LocalOffer, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Text(
+                            text = "Live Deal Finder & Aggregators",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "Check independent deal trackers and promo communities for current discounts, Black Friday offers, annual plan savings, and student deals.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    val cleanSearchQuery = provider.name.replace("+", " Plus")
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val url = "https://thestreamable.com/?s=" + java.net.URLEncoder.encode("$cleanSearchQuery deal", "UTF-8")
+                                uriHandler.openUri(url)
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text("The Streamable Deals ↗", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val url = "https://slickdeals.net/newsearch.php?q=" + java.net.URLEncoder.encode("$cleanSearchQuery deal", "UTF-8")
+                                uriHandler.openUri(url)
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text("Slickdeals ↗", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val url = "https://www.doctorofcredit.com/?s=" + java.net.URLEncoder.encode("$cleanSearchQuery deal", "UTF-8")
+                                uriHandler.openUri(url)
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text("Doctor of Credit ↗", fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val url = "https://www.google.com/search?q=" + java.net.URLEncoder.encode("$cleanSearchQuery streaming promo discounts deals", "UTF-8")
+                                uriHandler.openUri(url)
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text("Google Deals ↗", fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+
+            // Save & Close Button
+            Button(
+                onClick = {
+                    val parsedCost = costInput.toDoubleOrNull() ?: provider.costPerMonth
+                    val parsedRenewalDay = renewalDayInput.toIntOrNull()?.coerceIn(1, 31)
+                    val updated = provider.copy(
+                        costPerMonth = parsedCost,
+                        isActive = isActive,
+                        planName = planNameInput.trim().ifEmpty { null },
+                        renewalDayOfMonth = parsedRenewalDay,
+                        subscribedSince = subscribedSince
+                    )
+                    onUpdateProvider(updated)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Save Service Changes")
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPOSABLE: Letterboxd Live RSS Sync Dialog
+// ==========================================
+@Composable
+fun LetterboxdSyncDialog(
+    isSyncing: Boolean,
+    result: LetterboxdSyncResult?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!isSyncing) onDismiss() },
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.RssFeed, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Text("Letterboxd Live RSS Sync", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (isSyncing) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                        Text(
+                            "Pulling live RSS feed from letterboxd.com...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            "Parsing diary entries, ratings, and watch dates",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else if (result != null) {
+                    if (result.errorMessage != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "Sync Error: ${result.errorMessage}",
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Text(
+                                "Sync Complete!",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Text(
+                            text = "Found ${result.totalFetched} items in RSS feed. Added ${result.newlyImportedCount} new movies to your Watched Vault.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+
+                        if (result.newlyImportedItems.isNotEmpty()) {
+                            Text(
+                                "Newly Imported Diary Entries:",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 180.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                            ) {
+                                LazyColumn(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    items(result.newlyImportedItems) { item ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = item.title,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Medium,
+                                                modifier = Modifier.weight(1f),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            if (item.rating != null) {
+                                                Text(
+                                                    text = "★ ${String.format(Locale.US, "%.1f", item.rating / 2.0)}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Text(
+                                "Your Watched Vault is already completely up to date with your Letterboxd diary!",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                enabled = !isSyncing
+            ) {
+                Text("Done")
+            }
+        }
+    )
+}
+
+// ==========================================
+// COMPOSABLE: HTML Asset Viewer Dialog (User Guide & Changelog)
+// ==========================================
+@Composable
+fun HtmlAssetViewerDialog(
+    title: String,
+    assetFileName: String,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, contentDescription = "Close")
+                }
+            }
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(480.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            settings.javaScriptEnabled = true
+                            settings.domStorageEnabled = true
+                            settings.builtInZoomControls = true
+                            settings.displayZoomControls = false
+                            webViewClient = WebViewClient()
+                            loadUrl("file:///android_asset/$assetFileName")
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+// ==========================================
+// COMPOSABLE: Settings Dialog (4-Tab Unified Hub)
 // ==========================================
 @Composable
 fun SettingsDialog(
     allProviders: List<StreamingProvider>,
     onProviderToggle: (String, Boolean) -> Unit,
+    letterboxdUsername: String,
+    onSaveLetterboxdUsername: (String) -> Unit,
+    userName: String,
+    onSaveUserName: (String) -> Unit,
+    onSyncLetterboxdLive: () -> Unit,
+    onOpenUserGuide: () -> Unit,
+    onOpenChangelog: () -> Unit,
+    updateStatus: UpdateStatus,
+    onCheckForUpdates: () -> Unit,
+    onDownloadAndInstallUpdate: (String) -> Unit,
+    onResetUpdateStatus: () -> Unit,
     tmdbApiKey: String,
     onSaveTmdbApiKey: (String) -> Unit,
     geminiApiKey: String,
@@ -2999,11 +3859,13 @@ fun SettingsDialog(
     onSaveGithubToken: (String) -> Unit,
     googleSheetWebhookUrl: String = "",
     onSaveGoogleSheetWebhookUrl: (String) -> Unit = {},
+    isSyncingToSheet: Boolean = false,
+    onSyncLetterboxdToSheet: () -> Unit = {},
     enableBetaFeedback: Boolean = true,
     onToggleBetaFeedback: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
-    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: APIs (TMDB/Gemini/Watchmode), 2: AI (Ollama) & About
+    var activeSubTab by remember { mutableStateOf(0) } // 0: Profile, 1: Services, 2: Guides & Docs, 3: Updates & System
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3013,7 +3875,7 @@ fun SettingsDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Settings", fontWeight = FontWeight.Bold)
+                Text("Settings & Hub", fontWeight = FontWeight.Bold)
                 IconButton(onClick = onDismiss) {
                     Icon(Icons.Default.Close, contentDescription = "Close Settings")
                 }
@@ -3023,32 +3885,171 @@ fun SettingsDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 500.dp)
+                    .heightIn(max = 520.dp)
             ) {
                 TabRow(
                     selectedTabIndex = activeSubTab,
                     containerColor = Color.Transparent,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                    modifier = Modifier.padding(bottom = 12.dp)
                 ) {
                     Tab(
                         selected = activeSubTab == 0,
                         onClick = { activeSubTab = 0 },
-                        text = { Text("Subs", fontSize = 11.sp) }
+                        text = { Text("Profile", fontSize = 11.sp) }
                     )
                     Tab(
                         selected = activeSubTab == 1,
                         onClick = { activeSubTab = 1 },
-                        text = { Text("APIs", fontSize = 11.sp) }
+                        text = { Text("Services", fontSize = 11.sp) }
                     )
                     Tab(
                         selected = activeSubTab == 2,
                         onClick = { activeSubTab = 2 },
-                        text = { Text("AI/Local", fontSize = 11.sp) }
+                        text = { Text("Guides", fontSize = 11.sp) }
+                    )
+                    Tab(
+                        selected = activeSubTab == 3,
+                        onClick = { activeSubTab = 3 },
+                        text = { Text("System", fontSize = 11.sp) }
                     )
                 }
 
                 when (activeSubTab) {
+                    // TAB 0: PROFILE & LETTERBOXD
                     0 -> {
+                        var nameInput by remember(userName) { mutableStateOf(userName) }
+                        var lbInput by remember(letterboxdUsername) { mutableStateOf(letterboxdUsername) }
+                        var sheetWebhookInput by remember(googleSheetWebhookUrl) { mutableStateOf(googleSheetWebhookUrl) }
+                        val scrollState = rememberScrollState()
+
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                        ) {
+                            Text("User Profile & Accounts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Display Name", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(
+                                        value = nameInput,
+                                        onValueChange = { nameInput = it },
+                                        label = { Text("Your Name") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Button(
+                                        onClick = { onSaveUserName(nameInput) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Save Name", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Letterboxd Integration", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Pulls live diary RSS feed directly from letterboxd.com without API keys.", style = MaterialTheme.typography.bodySmall)
+
+                                    OutlinedTextField(
+                                        value = lbInput,
+                                        onValueChange = { lbInput = it },
+                                        label = { Text("Letterboxd Username") },
+                                        placeholder = { Text("e.g. dschm") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = { onSaveLetterboxdUsername(lbInput) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("Save Username", fontSize = 12.sp)
+                                        }
+
+                                        FilledTonalButton(
+                                            onClick = onSyncLetterboxdLive,
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Icon(Icons.Default.RssFeed, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Sync RSS", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Google Sheet Webhook Section
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Google Sheet Ledger Webhook", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Apps Script Webhook to sync watched and watchlist items to your Google Drive sheet ($0/mo).", style = MaterialTheme.typography.bodySmall)
+
+                                    OutlinedTextField(
+                                        value = sheetWebhookInput,
+                                        onValueChange = { sheetWebhookInput = it },
+                                        label = { Text("Apps Script Webhook URL") },
+                                        placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = { onSaveGoogleSheetWebhookUrl(sheetWebhookInput) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("Save URL", fontSize = 12.sp)
+                                        }
+
+                                        FilledTonalButton(
+                                            onClick = onSyncLetterboxdToSheet,
+                                            enabled = !isSyncingToSheet && sheetWebhookInput.isNotBlank(),
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            if (isSyncingToSheet) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            }
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Sync Sheet", fontSize = 12.sp)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // TAB 1: STREAMING SERVICES (19 SERVICES)
+                    1 -> {
                         val scrollState = rememberScrollState()
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -3057,17 +4058,17 @@ fun SettingsDialog(
                                 .verticalScroll(scrollState)
                         ) {
                             Text(
-                                "Manage Subscriptions",
+                                "Streaming Services (${allProviders.size})",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Toggle active services you currently pay for. Free services (Tubi, Freevee, Pluto TV) are free and enabled by default.",
+                                "Toggle services you pay for or access. Filter ribbon and ROI stats adapt dynamically.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            
+
                             allProviders.forEach { provider ->
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -3090,7 +4091,7 @@ fun SettingsDialog(
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                text = if (provider.costPerMonth > 0) "$${provider.costPerMonth}/mo" else "Free Platform ($0.0)",
+                                                text = if (provider.costPerMonth > 0) "${provider.costPerMonth}/mo" + (provider.planName?.let { " • $it" } ?: "") else "Free Platform ($0.0)",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.outline
                                             )
@@ -3105,14 +4106,80 @@ fun SettingsDialog(
                             }
                         }
                     }
-                    1 -> {
+
+                    // TAB 2: GUIDES & DOCS
+                    2 -> {
+                        val scrollState = rememberScrollState()
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .verticalScroll(scrollState)
+                        ) {
+                            Text("In-App Guides & Documentation", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        Text("Streamwise User Guide", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(
+                                        "Learn all features: Watchlist management, podcast filters, ROI tracking, live deal searches, and Letterboxd RSS diary sync.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Button(
+                                        onClick = onOpenUserGuide,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Open User Guide", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
+                                        Text("Streamwise Changelog", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(
+                                        "Review the latest updates across v1.4.0, v1.3.1, and earlier releases with detailed feature breakdowns.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Button(
+                                        onClick = onOpenChangelog,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                    ) {
+                                        Text("Open Changelog", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // TAB 3: SYSTEM & UPDATES
+                    3 -> {
                         var tmdbInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
                         var geminiInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
                         var wmInput by remember(watchmodeApiKey) { mutableStateOf(watchmodeApiKey) }
+                        var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
+                        var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
                         var showTmdb by remember { mutableStateOf(false) }
                         var showGemini by remember { mutableStateOf(false) }
                         var showWm by remember { mutableStateOf(false) }
-                        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+                        var showToken by remember { mutableStateOf(false) }
                         val scrollState = rememberScrollState()
 
                         Column(
@@ -3121,22 +4188,93 @@ fun SettingsDialog(
                                 .fillMaxWidth()
                                 .verticalScroll(scrollState)
                         ) {
-                            Text(
-                                "Provider Data Sources",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            
-                            // TMDB Section
+                            Text("OTA Updates & System Config", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+
+                            // GitHub OTA Auto-Updater Card
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("App Version", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                            Text("v1.4.0 (Build 140)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                        }
+                                        Badge(containerColor = MaterialTheme.colorScheme.primary) {
+                                            Text("v1.4.0", modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onPrimary)
+                                        }
+                                    }
+
+                                    when (updateStatus) {
+                                        is UpdateStatus.Checking -> {
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                                Text("Checking GitHub Releases...", style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        }
+                                        is UpdateStatus.UpdateAvailable -> {
+                                            Text("Update Found: ${updateStatus.tagName} (${updateStatus.releaseName})", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                            Button(
+                                                onClick = { onDownloadAndInstallUpdate(updateStatus.apkDownloadUrl) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Download & Install Update", fontSize = 12.sp)
+                                            }
+                                        }
+                                        is UpdateStatus.Downloading -> {
+                                            val progress = updateStatus.progressPercent
+                                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Text("Downloading APK: $progress%", style = MaterialTheme.typography.labelSmall)
+                                                LinearProgressIndicator(
+                                                    progress = { progress / 100f },
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+                                        }
+                                        is UpdateStatus.ReadyToInstall -> {
+                                            Text("Download complete! Launching Android Package Installer...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        is UpdateStatus.UpToDate -> {
+                                            Text("✓ Streamwise is up to date with the latest GitHub release.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                        is UpdateStatus.Error -> {
+                                            Text("Update check failed: ${updateStatus.message}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                                        }
+                                        UpdateStatus.Idle -> {
+                                            Text("Check for newer versions published on GitHub Releases.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = onCheckForUpdates,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Check for Updates", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            // TMDB API Section
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("TMDB API (Primary)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Provides metadata, posters, and primary streaming status.", style = MaterialTheme.typography.bodySmall)
-                                    
+                                    Text("TMDB API Key", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                     OutlinedTextField(
                                         value = tmdbInput,
                                         onValueChange = { tmdbInput = it },
@@ -3150,7 +4288,6 @@ fun SettingsDialog(
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                    
                                     Button(
                                         onClick = { onSaveTmdbApiKey(tmdbInput) },
                                         modifier = Modifier.fillMaxWidth(),
@@ -3168,9 +4305,7 @@ fun SettingsDialog(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Gemini API (Cinephile AI)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Powers Explore taste analysis and tailored watchlist recommendations.", style = MaterialTheme.typography.bodySmall)
-                                    
+                                    Text("Gemini API (AI Explore)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                     OutlinedTextField(
                                         value = geminiInput,
                                         onValueChange = { geminiInput = it },
@@ -3184,7 +4319,6 @@ fun SettingsDialog(
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                    
                                     Button(
                                         onClick = { onSaveGeminiApiKey(geminiInput) },
                                         modifier = Modifier.fillMaxWidth(),
@@ -3202,9 +4336,7 @@ fun SettingsDialog(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Watchmode API (Fallback)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Deep-link availability source. Used when TMDB data is missing.", style = MaterialTheme.typography.bodySmall)
-                                    
+                                    Text("Watchmode API (Deep Links)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                     OutlinedTextField(
                                         value = wmInput,
                                         onValueChange = { wmInput = it },
@@ -3218,7 +4350,6 @@ fun SettingsDialog(
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                    
                                     Button(
                                         onClick = { onSaveWatchmodeApiKey(wmInput) },
                                         modifier = Modifier.fillMaxWidth(),
@@ -3227,142 +4358,70 @@ fun SettingsDialog(
                                     ) {
                                         Text("Save Watchmode Key", fontSize = 12.sp)
                                     }
-                                    
-                                    TextButton(onClick = { uriHandler.openUri("https://api.watchmode.com/") }) {
-                                        Text("Get Watchmode API Key", style = MaterialTheme.typography.labelSmall)
-                                    }
                                 }
                             }
 
-                            // Google Sheet Webhook Section (Issue #10)
-                            var sheetWebhookInput by remember(googleSheetWebhookUrl) { mutableStateOf(googleSheetWebhookUrl) }
+                            // Local AI (Ollama Host) Section
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Google Sheet Webhook (Letterboxd Sync)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Google Apps Script Webhook URL to receive watched & watchlist sync payloads directly into your Google Sheet ($0/mo).", style = MaterialTheme.typography.bodySmall)
-                                    
+                                    Text("Local AI Synthesis (Ollama)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                     OutlinedTextField(
-                                        value = sheetWebhookInput,
-                                        onValueChange = { sheetWebhookInput = it },
-                                        label = { Text("Apps Script Webhook URL") },
-                                        placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                                        value = hostInput,
+                                        onValueChange = { hostInput = it },
+                                        label = { Text("Ollama Host IP") },
+                                        placeholder = { Text("e.g. 192.168.1.100") },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                    
                                     Button(
-                                        onClick = { onSaveGoogleSheetWebhookUrl(sheetWebhookInput) },
+                                        onClick = { onSaveOllamaHost(hostInput) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Save Ollama Host", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            // GitHub PAT Token Section
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("GitHub Token (PAT)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    OutlinedTextField(
+                                        value = tokenInput,
+                                        onValueChange = { tokenInput = it },
+                                        label = { Text("GitHub Token (PAT)") },
+                                        placeholder = { Text("ghp_...") },
+                                        singleLine = true,
+                                        visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingIcon = {
+                                            IconButton(onClick = { showToken = !showToken }) {
+                                                Icon(
+                                                    imageVector = if (showToken) Icons.Default.Clear else Icons.Default.Search,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Button(
+                                        onClick = { onSaveGithubToken(tokenInput) },
                                         modifier = Modifier.fillMaxWidth(),
                                         shape = RoundedCornerShape(8.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)
                                     ) {
-                                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Save Webhook URL", fontSize = 12.sp)
+                                        Text("Save GitHub Token", fontSize = 12.sp)
                                     }
                                 }
                             }
-                        }
-                    }
-                    2 -> {
-                        val context = LocalContext.current
-                        var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
-                        var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
-                        var showToken by remember { mutableStateOf(false) }
-                        val scrollState = rememberScrollState()
-                        
-                        // Founder's Manual Loader
-                        val manualHtml = remember {
-                            try {
-                                context.assets.open("readme.html").bufferedReader().readText()
-                            } catch (e: Exception) {
-                                "Manual file not found."
-                            }
-                        }
-
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(scrollState)
-                        ) {
-                            Text(
-                                "Local AI Synthesis (Ollama)",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Synthesis 2.0 uses your local Ollama instance (Gemma 4) to analyze watch history for personalized research.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            OutlinedTextField(
-                                value = hostInput,
-                                onValueChange = { hostInput = it },
-                                label = { Text("Ollama Host IP") },
-                                placeholder = { Text("e.g. 192.168.1.100") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Button(
-                                onClick = { onSaveOllamaHost(hostInput) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Save Ollama Host")
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                            Text(
-                                "Synthesis 4.0: Self-Evolving App",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Connect a GitHub Personal Access Token to allow the Agent Chat to submit feature requests directly to the repository.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            OutlinedTextField(
-                                value = tokenInput,
-                                onValueChange = { tokenInput = it },
-                                label = { Text("GitHub Token (PAT)") },
-                                placeholder = { Text("ghp_...") },
-                                singleLine = true,
-                                visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
-                                trailingIcon = {
-                                    IconButton(onClick = { showToken = !showToken }) {
-                                        Icon(
-                                            imageVector = if (showToken) Icons.Default.Clear else Icons.Default.Search,
-                                            contentDescription = if (showToken) "Hide token" else "Show token"
-                                        )
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Button(
-                                onClick = { onSaveGithubToken(tokenInput) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Save GitHub Token")
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
                             // Beta Feedback FAB Toggle Card
                             Card(
@@ -3396,29 +4455,6 @@ fun SettingsDialog(
                                     )
                                 }
                             }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                            Text(
-                                "Founder's Manual & Roadmap",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            
-                            // Basic HTML renderer (strips tags for standard Text view, 
-                            // though full WebView would be better for complex styles)
-                            val cleanText = remember(manualHtml) {
-                                manualHtml.replace(Regex("<[^>]*>"), "")
-                                    .replace("&nbsp;", " ")
-                                    .trim()
-                            }
-                            
-                            Text(
-                                text = cleanText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                            )
                         }
                     }
                 }

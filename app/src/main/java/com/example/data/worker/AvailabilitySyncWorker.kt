@@ -337,10 +337,13 @@ class AvailabilitySyncWorker(
                 name.contains("mubi") -> localIds.add("mubi")
                 name.contains("shudder") -> localIds.add("shudder")
                 name.contains("starz") -> localIds.add("starz")
+                name.contains("amc") -> localIds.add("amc_plus")
                 name.contains("britbox") -> localIds.add("britbox")
                 name.contains("tubi") -> localIds.add("tubi")
                 name.contains("freevee") -> localIds.add("freevee")
                 name.contains("pluto") -> localIds.add("pluto")
+                name.contains("kanopy") -> localIds.add("kanopy")
+                name.contains("hoopla") -> localIds.add("hoopla")
             }
         }
         val result = localIds.distinct().joinToString(",")
@@ -364,10 +367,13 @@ class AvailabilitySyncWorker(
                 name.contains("mubi") -> localIds.add("mubi")
                 name.contains("shudder") -> localIds.add("shudder")
                 name.contains("starz") -> localIds.add("starz")
+                name.contains("amc") -> localIds.add("amc_plus")
                 name.contains("britbox") -> localIds.add("britbox")
                 name.contains("tubi") -> localIds.add("tubi")
                 name.contains("freevee") -> localIds.add("freevee")
                 name.contains("pluto") -> localIds.add("pluto")
+                name.contains("kanopy") -> localIds.add("kanopy")
+                name.contains("hoopla") -> localIds.add("hoopla")
             }
         }
         val result = localIds.distinct().joinToString(",")

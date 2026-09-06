@@ -2,6 +2,44 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.4.0] - 2026-09-06
+
+### Added
+- **Watchlist & Vault Live Title Count Clarity**:
+  - Top App Bar dynamically displays live counts: `Watchlist • X Titles`, `Watched Vault • Y Movies`, `My Services • Z Active`.
+  - Bottom Navigation items feature real-time badge counters (`Badge { 33 }` on Watchlist, `Badge { 1104 }` on Watched).
+  - Sticky list header provides clear queue tracking: `Showing X of Y titles • Z hidden by filters`.
+  - Removed redundant Top Bar refresh icon in favor of inline pull/sync and sticky bar status.
+- **Cinema Podcasts & Media Mentions Filter**:
+  - Dedicated "Podcasts & Media Mentions" section in `AdvancedFilterBottomSheet`.
+  - Filter by premier film podcasts: *What Went Wrong*, *The Rewatchables*, *The Big Picture*, *Blank Check*, and *How Did This Get Made?*.
+  - Sub-filter toggle: "Main Film / Featured Topic" vs "Any Mention (Inclusive)".
+  - Backed by offline `PodcastEpisodeCatalog` matching normalized movie titles.
+- **My Services Management & Live Deal Finder**:
+  - Clickable provider cards in `MonthlyRoiContent` open `ServiceDetailBottomSheet`.
+  - View and customize monthly subscription cost, plan tier (e.g. *Standard with Ads*), and billing renewal day of month (1-31).
+  - Accurate tenure tracking: view total months and days subscribed (`Tenure: 12 months (365 days) • Since Sep 6, 2025`) with quick-set chips (*This Month*, *3 Mos*, *6 Mos*, *1 Year*, *2+ Years*).
+  - Live return on investment metrics: total hours watched, minutes streamed, and effective cost-per-hour.
+  - 1-tap live deal finder search queries targeting *The Streamable Deals*, *Slickdeals*, *Doctor of Credit*, and *Google Deals* to discover discounts, bundles, and student offers beyond standard provider pricing.
+- **Letterboxd Live RSS Diary Sync**:
+  - Direct RSS parser (`LetterboxdSyncManager.kt`) fetching `https://letterboxd.com/$username/rss/` directly without API keys.
+  - Automatically scales 5-star ratings to 10-scale and parses watch dates into the offline Room database.
+  - Interactive `LetterboxdSyncDialog` with live status indicator and summary results.
+- **Unified 4-Tab Settings Hub**:
+  - Modernized `SettingsDialog` into 4 dedicated tabs:
+    1. *Profile & Accounts*: Display name, Letterboxd username, live RSS sync trigger, and Google Sheet ledger webhook URL.
+    2. *Streaming Services (19)*: Toggle switches and monthly pricing for all 19 tracked providers.
+    3. *Guides & Docs*: 1-tap in-app HTML asset viewers (`HtmlAssetViewerDialog`) for `user_guide.html` and `changelog.html`.
+    4. *Updates & System*: GitHub OTA Auto-Updater and API key management (TMDB, Gemini Pro, Watchmode, Ollama host, GitHub token).
+- **GitHub OTA Auto-Updater & Third-Party Aggregator Support**:
+  - `GitHubUpdateManager.kt` checks GitHub Releases API for new releases (`v1.4.0`, etc.).
+  - Shows update status, release notes, and download progress bar.
+  - Uses `FileProvider` (`com.aistudio.streammanager.qpwoei.fileprovider`) and `REQUEST_INSTALL_PACKAGES` permission to hand off APKs directly to Android's `PackageInstaller`.
+  - Releases are ready for public third-party sideloading tools like Obtainium.
+- **Expanded 19 Streaming Providers Coverage**:
+  - Full catalog and DB support across AMC+, Apple TV+, BritBox, Criterion Channel, Disney+, Fandango at Home, Freevee, Hoopla, Hulu, Kanopy, Max (HBO), MGM+, Netflix, Paramount+, Peacock, Pluto TV, Prime Video, Starz, and Tubi.
+  - Seeded in `AppDatabase.kt` via `MIGRATION_6_7`.
+
 ## [1.3.1] - 2026-09-06
 
 ### Improved
