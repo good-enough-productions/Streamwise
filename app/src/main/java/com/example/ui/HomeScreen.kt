@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,12 +65,15 @@ fun HomeScreen(
     val tmdbApiKey by viewModel.tmdbApiKey.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Explore
     var filterOnlyMyServices by remember { mutableStateOf(true) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showFeedbackDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
     val isDark by viewModel.isDarkMode.collectAsState()
+    val enableBetaFeedback by viewModel.enableBetaFeedback.collectAsState()
 
     // Clear and display Toast/Status banners beautifully
     LaunchedEffect(statusMessage) {
@@ -188,16 +192,29 @@ fun HomeScreen(
             }
         },
         floatingActionButton = {
-            if (selectedTab == 0 || selectedTab == 1) {
-                ExtendedFloatingActionButton(
-                    text = { Text("Add Title") },
-                    icon = { Icon(Icons.Default.Add, contentDescription = "Add media item") },
-                    onClick = { showAddDialog = true },
-                    modifier = Modifier
-                        .testTag("add_item_fab"),
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.navigationBarsPadding()
+            ) {
+                // Global Jules Beta Feedback FAB
+                if (enableBetaFeedback) {
+                    FloatingFeedbackButton(
+                        onClick = { showFeedbackDialog = true }
+                    )
+                }
+
+                if (selectedTab == 0 || selectedTab == 1) {
+                    ExtendedFloatingActionButton(
+                        text = { Text("Add Title") },
+                        icon = { Icon(Icons.Default.Add, contentDescription = "Add media item") },
+                        onClick = { showAddDialog = true },
+                        modifier = Modifier
+                            .testTag("add_item_fab"),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
             }
         }
     ) { innerPadding ->
@@ -315,7 +332,33 @@ fun HomeScreen(
                 onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
                 githubToken = githubToken,
                 onSaveGithubToken = { viewModel.saveGithubToken(it) },
+                enableBetaFeedback = enableBetaFeedback,
+                onToggleBetaFeedback = { viewModel.setEnableBetaFeedback(it) },
                 onDismiss = { showSettingsDialog = false }
+            )
+        }
+
+        // Autonomous Jules Feedback Dialog
+        if (showFeedbackDialog) {
+            val githubToken by viewModel.githubToken.collectAsState()
+            val currentTabName = when (selectedTab) {
+                0 -> "Watchlist"
+                1 -> "Watched Vault"
+                2 -> "My Services"
+                3 -> "Explore & Cinema AI"
+                else -> "Main"
+            }
+            FeedbackDialog(
+                githubToken = githubToken,
+                currentTabName = currentTabName,
+                watchlistCount = watchlistItems.count { it.status != MediaStatus.WATCHED.name },
+                watchedCount = watchlistItems.count { it.status == MediaStatus.WATCHED.name },
+                onDismiss = { showFeedbackDialog = false },
+                onSubmitSuccess = { msg ->
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar(msg)
+                    }
+                }
             )
         }
 
@@ -2067,6 +2110,8 @@ fun SettingsDialog(
     onSaveOllamaHost: (String) -> Unit,
     githubToken: String,
     onSaveGithubToken: (String) -> Unit,
+    enableBetaFeedback: Boolean = true,
+    onToggleBetaFeedback: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: APIs (TMDB/Gemini/Watchmode), 2: AI (Ollama) & About
@@ -2393,6 +2438,41 @@ fun SettingsDialog(
                                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Save GitHub Token")
+                            }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+
+                            // Beta Feedback FAB Toggle Card
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text(
+                                            "Enable Beta Feedback FAB",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            "Display floating button on all screens to capture screen diagnostics and file issues directly to Jules & Antigravity.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                    Switch(
+                                        checked = enableBetaFeedback,
+                                        onCheckedChange = onToggleBetaFeedback,
+                                        modifier = Modifier.testTag("enable_feedback_switch")
+                                    )
+                                }
                             }
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))

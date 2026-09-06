@@ -34,6 +34,10 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getBoolean(KEY_DARK_MODE, true)
         set(value) = prefs.edit().putBoolean(KEY_DARK_MODE, value).apply()
 
+    var enableBetaFeedback: Boolean
+        get() = prefs.getBoolean(KEY_ENABLE_BETA_FEEDBACK, true)
+        set(value) = prefs.edit().putBoolean(KEY_ENABLE_BETA_FEEDBACK, value).apply()
+
     companion object {
         private const val PREFS_NAME = "user_preferences"
         private const val KEY_TMDB_API_KEY = "tmdb_api_key"
@@ -42,5 +46,6 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_OLLAMA_HOST = "ollama_host"
         private const val KEY_GITHUB_TOKEN = "github_token"
         private const val KEY_DARK_MODE = "dark_mode"
+        private const val KEY_ENABLE_BETA_FEEDBACK = "enable_beta_feedback"
     }
 }
