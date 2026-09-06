@@ -85,12 +85,34 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
             val parsedEntries = parseRssXml(xmlContent)
             Log.d(TAG, "Successfully parsed ${parsedEntries.size} items from Letterboxd RSS.")
 
-            val existingTitles = mediaDao.getAllTitles().map { it.trim().lowercase() }.toSet()
+            val existingItems = mediaDao.getAllMediaItemsList().associateBy { it.title.trim().lowercase() }.toMutableMap()
             val newlyImported = mutableListOf<MediaItem>()
 
             for (entry in parsedEntries) {
                 val normalizedTitle = entry.title.trim().lowercase()
-                if (normalizedTitle.isNotEmpty() && !existingTitles.contains(normalizedTitle)) {
+                if (normalizedTitle.isEmpty()) continue
+
+                val existing = existingItems[normalizedTitle]
+                if (existing != null) {
+                    val hasNewerWatch = entry.watchedAt > (existing.watchedAt ?: 0L)
+                    val hasNewRating = entry.ratingTenScale != null && existing.rating == null
+                    val hasNewNotes = !entry.notes.isNullOrBlank() && existing.userNotes.isNullOrBlank()
+                    val needsStatusUpgrade = existing.status != MediaStatus.WATCHED.name
+
+                    if (needsStatusUpgrade || hasNewerWatch || hasNewRating || hasNewNotes) {
+                        val updated = existing.copy(
+                            status = MediaStatus.WATCHED.name,
+                            watchedAt = if (hasNewerWatch || existing.watchedAt == null) entry.watchedAt else existing.watchedAt,
+                            rating = entry.ratingTenScale ?: existing.rating,
+                            userNotes = entry.notes ?: existing.userNotes,
+                            importSource = "Letterboxd Live RSS (@$cleanUser)",
+                            overview = existing.overview ?: "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}."
+                        )
+                        mediaDao.updateMediaItem(updated)
+                        existingItems[normalizedTitle] = updated
+                        newlyImported.add(updated)
+                    }
+                } else {
                     val item = MediaItem(
                         title = entry.title,
                         sharedUrl = entry.link,
@@ -103,7 +125,9 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                         overview = "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}."
                     )
                     val insertedId = mediaDao.insertMediaItem(item)
-                    newlyImported.add(item.copy(id = insertedId))
+                    val insertedItem = item.copy(id = insertedId)
+                    existingItems[normalizedTitle] = insertedItem
+                    newlyImported.add(insertedItem)
                 }
             }
 
@@ -174,13 +198,14 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                         curPubDate = null
                         curDescription = null
                     } else if (inItem) {
-                        when (tagName.lowercase()) {
+                        val cleanTag = tagName.substringAfterLast(':').lowercase()
+                        when (cleanTag) {
                             "title" -> curTitle = parser.nextText().trim()
                             "link" -> curLink = parser.nextText().trim()
-                            "letterboxd:filmtitle", "filmtitle" -> curFilmTitle = parser.nextText().trim()
-                            "letterboxd:filmyear", "filmyear" -> curFilmYear = parser.nextText().trim()
-                            "letterboxd:watcheddate", "watcheddate" -> curWatchedDate = parser.nextText().trim()
-                            "letterboxd:memberrating", "memberrating" -> curRating = parser.nextText().trim()
+                            "filmtitle" -> curFilmTitle = parser.nextText().trim()
+                            "filmyear" -> curFilmYear = parser.nextText().trim()
+                            "watcheddate" -> curWatchedDate = parser.nextText().trim()
+                            "memberrating" -> curRating = parser.nextText().trim()
                             "pubdate" -> curPubDate = parser.nextText().trim()
                             "description" -> curDescription = parser.nextText().trim()
                         }

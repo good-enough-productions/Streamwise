@@ -215,10 +215,12 @@ fun HomeScreen(
                         BadgedBox(badge = {
                             if (watchlistItems.isNotEmpty()) {
                                 Badge(
+                                    modifier = Modifier.offset(x = 6.dp, y = (-2).dp),
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary
                                 ) {
-                                    Text("${watchlistItems.size}")
+                                    val countText = if (watchlistItems.size > 999) "${watchlistItems.size / 1000}k+" else "${watchlistItems.size}"
+                                    Text(countText, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }) {
@@ -235,10 +237,16 @@ fun HomeScreen(
                         BadgedBox(badge = {
                             if (watchedItems.isNotEmpty()) {
                                 Badge(
+                                    modifier = Modifier.offset(x = 8.dp, y = (-2).dp),
                                     containerColor = MaterialTheme.colorScheme.secondary,
                                     contentColor = MaterialTheme.colorScheme.onSecondary
                                 ) {
-                                    Text("${watchedItems.size}")
+                                    val countText = if (watchedItems.size >= 1000) {
+                                        String.format(Locale.US, "%.1fk", watchedItems.size / 1000.0)
+                                    } else {
+                                        "${watchedItems.size}"
+                                    }
+                                    Text(countText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }) {
@@ -320,16 +328,23 @@ fun HomeScreen(
                     )
                     1 -> {
                         val watchedItems by viewModel.watchedItems.collectAsState()
+                        // Automatically sync Letterboxd when viewing the Watched Vault
+                        LaunchedEffect(Unit) {
+                            viewModel.syncLetterboxdLive(silent = true)
+                        }
                         WatchedTabContent(
                             watchedItems = watchedItems,
                             allProviders = allProviders,
                             onMovieClick = { detailMovieItem = it },
                             onDeleteClick = { viewModel.deleteItem(it) },
-                            onSyncClick = { viewModel.triggerImmediateSync() },
+                            onSyncClick = {
+                                viewModel.syncLetterboxdLive(silent = false)
+                                viewModel.triggerImmediateSync()
+                            },
                             isSyncingToSheet = isSyncingToSheet,
                             onSyncLetterboxdToSheet = { viewModel.syncLetterboxdToGoogleSheet() },
                             onSyncLetterboxdLive = {
-                                viewModel.syncLetterboxdLive()
+                                viewModel.syncLetterboxdLive(silent = false)
                                 showLetterboxdSyncDialog = true
                             },
                             onRewatchIntent = { viewModel.startIntendingToWatch(it) },
@@ -1934,7 +1949,10 @@ fun WatchedTabContent(
         when (sortBy) {
             "alpha" -> filteredItems.sortedBy { it.title.lowercase() }
             "rating" -> filteredItems.sortedByDescending { it.rating ?: 0.0 }
-            else -> filteredItems.sortedByDescending { it.watchedAt ?: it.updatedAt }
+            else -> filteredItems.sortedWith(
+                compareByDescending<MediaItem> { it.watchedAt ?: it.addedAt }
+                    .thenByDescending { it.id }
+            )
         }
     }
 

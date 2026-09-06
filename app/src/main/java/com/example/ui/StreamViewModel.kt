@@ -166,23 +166,36 @@ class StreamViewModel(
         _letterboxdSyncResult.value = null
     }
 
-    fun syncLetterboxdLive(username: String? = null) {
+    init {
+        // Automatically sync Letterboxd live diary in background on app startup
+        val lbUser = userPreferences.letterboxdUsername.trim()
+        if (lbUser.isNotBlank()) {
+            syncLetterboxdLive(lbUser, silent = true)
+        }
+    }
+
+    fun syncLetterboxdLive(username: String? = null, silent: Boolean = false) {
         val targetUser = (username ?: userPreferences.letterboxdUsername).trim()
         if (targetUser.isBlank()) {
-            _statusMessage.value = "Please enter a Letterboxd username."
+            if (!silent) _statusMessage.value = "Please enter a Letterboxd username."
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
             _isSyncingLetterboxd.value = true
-            _statusMessage.value = "Syncing diary from Letterboxd for @$targetUser..."
+            if (!silent) _statusMessage.value = "Syncing diary from Letterboxd for @$targetUser..."
             val syncManager = LetterboxdSyncManager(repository.mediaDao)
             val result = syncManager.syncUserDiary(targetUser)
             _letterboxdSyncResult.value = result
             _isSyncingLetterboxd.value = false
             if (result.isSuccess) {
-                _statusMessage.value = "Letterboxd sync complete: ${result.newlyImportedCount} new titles imported!"
+                userPreferences.lastLetterboxdSyncTime = System.currentTimeMillis()
+                if (!silent) {
+                    _statusMessage.value = "Letterboxd sync complete: ${result.newlyImportedCount} new titles imported!"
+                }
             } else {
-                _statusMessage.value = "Letterboxd sync: ${result.errorMessage}"
+                if (!silent) {
+                    _statusMessage.value = "Letterboxd sync: ${result.errorMessage}"
+                }
             }
         }
     }
