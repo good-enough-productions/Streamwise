@@ -65,7 +65,7 @@ fun HomeScreen(
 
     val snackbarHostState = remember { SnackbarHostState() }
     var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Explore
-    var filterOnlyMyServices by remember { mutableStateOf(false) }
+    var filterOnlyMyServices by remember { mutableStateOf(true) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
@@ -137,12 +137,12 @@ fun HomeScreen(
                         )
                     }
                     IconButton(
-                        onClick = simulateForegroundReturn,
-                        modifier = Modifier.testTag("simulate_foreground_button")
+                        onClick = { viewModel.triggerImmediateSync() },
+                        modifier = Modifier.testTag("refresh_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
-                            contentDescription = "Simulate App Resume (Foreground Check)",
+                            contentDescription = "Refresh streaming availability from TMDB",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -534,9 +534,13 @@ fun WatchlistTabContent(
             }
 
             if (filterOnlyMyServices) {
-                // Return items having at least one of their available platforms as locally active/subscribed
+                // Return items having at least one of their available platforms as locally active/subscribed or free
                 val provs = item.providersList
-                provs.isEmpty() || provs.any { activeProviderIds.contains(it) }
+                if (item.tmdbId == null) {
+                    true // Keep newly added/unmatched items visible until sync resolves
+                } else {
+                    provs.any { activeProviderIds.contains(it) || freeProviderIds.contains(it) }
+                }
             } else {
                 true
             }

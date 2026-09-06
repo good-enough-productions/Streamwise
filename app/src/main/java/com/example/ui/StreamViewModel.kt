@@ -86,10 +86,21 @@ class StreamViewModel(
     private val _githubToken = MutableStateFlow(userPreferences.githubToken)
     val githubToken: StateFlow<String> = _githubToken.asStateFlow()
 
+    init {
+        // Auto-sync TMDB metadata on launch if items are unpopulated
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(800)
+            syncWatchlistMetadata(forceAll = false)
+        }
+    }
+
     fun saveTmdbApiKey(key: String) {
         userPreferences.tmdbApiKey = key
         _tmdbApiKey.value = key.trim()
         _statusMessage.value = if (key.isBlank()) "TMDB API key cleared." else "TMDB API key saved."
+        if (key.isNotBlank()) {
+            syncWatchlistMetadata(forceAll = false)
+        }
     }
 
     fun saveWatchmodeApiKey(key: String) {
@@ -723,8 +734,168 @@ class StreamViewModel(
         _statusMessage.value = null
     }
 
+    private var isSyncing = false
+
+    private fun mapTmdbProviders(providers: List<com.example.data.remote.TmdbProvider>): String? {
+        val localIds = mutableListOf<String>()
+        for (p in providers) {
+            val name = p.providerName.lowercase()
+            when {
+                name.contains("netflix") -> localIds.add("netflix")
+                name.contains("hulu") -> localIds.add("hulu")
+                name.contains("max") || name.contains("hbo") -> localIds.add("max")
+                name.contains("disney") -> localIds.add("disney")
+                name.contains("amazon") || name.contains("prime video") -> localIds.add("prime")
+                name.contains("apple tv") || name.contains("apple") -> localIds.add("apple")
+                name.contains("criterion") -> localIds.add("criterion")
+                name.contains("peacock") -> localIds.add("peacock")
+                name.contains("paramount") -> localIds.add("paramount")
+                name.contains("mubi") -> localIds.add("mubi")
+                name.contains("shudder") -> localIds.add("shudder")
+                name.contains("starz") -> localIds.add("starz")
+                name.contains("britbox") -> localIds.add("britbox")
+                name.contains("tubi") -> localIds.add("tubi")
+                name.contains("freevee") -> localIds.add("freevee")
+                name.contains("pluto") -> localIds.add("pluto")
+            }
+        }
+        val result = localIds.distinct().joinToString(",")
+        return if (result.isEmpty()) null else result
+    }
+
+    fun syncWatchlistMetadata(forceAll: Boolean = false) {
+        if (isSyncing) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                isSyncing = true
+                val runtimeKey = userPreferences.tmdbApiKey
+                val buildTimeKey = com.example.BuildConfig.TMDB_API_KEY
+                val key = if (runtimeKey.isNotEmpty() && runtimeKey != "MY_TMDB_API_KEY") runtimeKey else buildTimeKey
+                if (key.isEmpty() || key == "MY_TMDB_API_KEY") {
+                    _statusMessage.value = "Please configure your TMDB API Key in Settings."
+                    return@launch
+                }
+
+                val allItems = repository.allMediaItems.first()
+                val targetItems = if (forceAll) {
+                    allItems.filter { it.status == MediaStatus.WATCHLIST.name || it.status == MediaStatus.PENDING_METADATA.name }
+                } else {
+                    allItems.filter { 
+                        (it.status == MediaStatus.WATCHLIST.name || it.status == MediaStatus.PENDING_METADATA.name) &&
+                        (it.providerIds.isNullOrEmpty() || it.imageUrl.isNullOrEmpty() || it.tmdbId.isNullOrEmpty())
+                    }
+                }
+
+                if (targetItems.isEmpty()) {
+                    _statusMessage.value = "Watchlist availability is up to date."
+                    return@launch
+                }
+
+                _statusMessage.value = "Syncing ${targetItems.size} titles from TMDB..."
+
+                val genreMap = try {
+                    val resp = com.example.data.remote.TmdbClient.tmdbApiService.getGenreList(key)
+                    resp.genres.associate { it.id to it.name }
+                } catch (e: Exception) {
+                    emptyMap<Int, String>()
+                }
+
+                var updatedCount = 0
+                for (item in targetItems) {
+                    try {
+                        val searchResp = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, item.title)
+                        val match = searchResp.results.firstOrNull()
+                        if (match != null) {
+                            val movieId = match.id
+                            var providersString: String? = null
+                            try {
+                                val provResp = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(movieId, key)
+                                val us = provResp.results?.get("US")
+                                val list = mutableListOf<com.example.data.remote.TmdbProvider>()
+                                us?.flatrate?.let { list.addAll(it) }
+                                us?.free?.let { list.addAll(it) }
+                                us?.ads?.let { list.addAll(it) }
+                                providersString = mapTmdbProviders(list)
+                            } catch (e: Exception) {
+                                android.util.Log.w(TAG, "Provider fetch failed for ${item.title}: ${e.message}")
+                            }
+
+                            val genres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ") ?: item.genres
+                            val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+                            val rating = match.voteAverage ?: item.rating
+                            val overview = match.overview?.ifBlank { item.overview } ?: item.overview
+
+                            val updated = item.copy(
+                                tmdbId = movieId.toString(),
+                                providerIds = providersString ?: item.providerIds,
+                                imageUrl = poster,
+                                rating = rating,
+                                overview = overview,
+                                genres = genres,
+                                status = if (item.status == MediaStatus.PENDING_METADATA.name) MediaStatus.WATCHLIST.name else item.status,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            repository.updateMediaItem(updated)
+                            updatedCount++
+                        } else {
+                            // Try TV search if not found in movies
+                            try {
+                                val tvResp = com.example.data.remote.TmdbClient.tmdbApiService.searchTv(key, item.title)
+                                val tvMatch = tvResp.results.firstOrNull()
+                                if (tvMatch != null) {
+                                    val tvId = tvMatch.id
+                                    var tvProvString: String? = null
+                                    try {
+                                        val tvProvResp = com.example.data.remote.TmdbClient.tmdbApiService.getTvWatchProviders(tvId, key)
+                                        val us = tvProvResp.results?.get("US")
+                                        val list = mutableListOf<com.example.data.remote.TmdbProvider>()
+                                        us?.flatrate?.let { list.addAll(it) }
+                                        us?.free?.let { list.addAll(it) }
+                                        us?.ads?.let { list.addAll(it) }
+                                        tvProvString = mapTmdbProviders(list)
+                                    } catch (e: Exception) {
+                                        android.util.Log.w(TAG, "TV provider fetch failed for ${item.title}: ${e.message}")
+                                    }
+
+                                    val tvGenres = tvMatch.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ") ?: item.genres
+                                    val tvPoster = tvMatch.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+
+                                    val updated = item.copy(
+                                        tmdbId = tvId.toString(),
+                                        providerIds = tvProvString ?: item.providerIds,
+                                        imageUrl = tvPoster,
+                                        rating = tvMatch.voteAverage ?: item.rating,
+                                        overview = tvMatch.overview?.ifBlank { item.overview } ?: item.overview,
+                                        genres = tvGenres,
+                                        status = if (item.status == MediaStatus.PENDING_METADATA.name) MediaStatus.WATCHLIST.name else item.status,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                    repository.updateMediaItem(updated)
+                                    updatedCount++
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.w(TAG, "TV search failed for ${item.title}: ${e.message}")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e(TAG, "Failed syncing item ${item.title}: ${e.message}")
+                    }
+                    kotlinx.coroutines.delay(120)
+                }
+
+                _statusMessage.value = "Synced $updatedCount titles with TMDB streaming availability!"
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Error in direct TMDB sync: ${e.message}", e)
+                _statusMessage.value = "TMDB sync encountered an issue: ${e.message}"
+            } finally {
+                isSyncing = false
+            }
+        }
+    }
+
     fun triggerImmediateSync() {
-        enqueueTmdbSync(showMessage = true)
+        syncWatchlistMetadata(forceAll = false)
+        enqueueTmdbSync(showMessage = false)
     }
 
     private fun enqueueTmdbSync(showMessage: Boolean) {
@@ -735,8 +906,8 @@ class StreamViewModel(
             .setConstraints(constraints)
             .build()
         WorkManager.getInstance(getApplication()).enqueueUniqueWork(
-            AvailabilitySyncWorker.WORK_NAME,
-            androidx.work.ExistingWorkPolicy.KEEP,
+            AvailabilitySyncWorker.ONE_TIME_WORK_NAME,
+            androidx.work.ExistingWorkPolicy.REPLACE,
             request
         )
         if (showMessage) {
