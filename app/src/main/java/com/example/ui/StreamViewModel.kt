@@ -11,11 +11,20 @@ import androidx.work.Constraints
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.example.BuildConfig
 import com.example.data.local.UserPreferencesManager
 import com.example.data.local.ProviderUsageStats
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
 import com.example.data.model.StreamingProvider
+import com.example.data.model.GeminiAnalysisResult
+import com.example.data.model.PodcastEpisode
+import com.example.data.model.MovieNewsItem
+import com.example.data.remote.GeminiClient
+import com.example.data.remote.GeminiGenerateRequest
+import com.example.data.remote.GeminiContent
+import com.example.data.remote.GeminiPart
+import com.example.data.remote.GeminiGenerationConfig
 import com.example.data.repository.MediaRepository
 import com.example.data.worker.AvailabilitySyncWorker
 import kotlinx.coroutines.Dispatchers
@@ -77,39 +86,6 @@ class StreamViewModel(
     private val _githubToken = MutableStateFlow(userPreferences.githubToken)
     val githubToken: StateFlow<String> = _githubToken.asStateFlow()
 
-    // Persisted Google Sheet Webhook URL
-    private val _googleSheetWebhookUrl = MutableStateFlow(userPreferences.googleSheetWebhookUrl)
-    val googleSheetWebhookUrl: StateFlow<String> = _googleSheetWebhookUrl.asStateFlow()
-
-    // Persisted Fire TV IP
-    private val _fireTvIp = MutableStateFlow(userPreferences.fireTvIp)
-    val fireTvIp: StateFlow<String> = _fireTvIp.asStateFlow()
-
-    // Persisted Gemini API key
-    private val _geminiApiKey = MutableStateFlow(userPreferences.geminiApiKey)
-    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
-
-    // Persisted Letterboxd Username
-    private val _letterboxdUsername = MutableStateFlow(userPreferences.letterboxdUsername)
-    val letterboxdUsername: StateFlow<String> = _letterboxdUsername.asStateFlow()
-
-    // Persisted AI Engine (GEMINI vs OLLAMA)
-    private val _aiEngine = MutableStateFlow(userPreferences.aiEngine)
-    val aiEngine: StateFlow<String> = _aiEngine.asStateFlow()
-
-    // Persisted Dark Mode State
-    private val _isDarkMode = MutableStateFlow(userPreferences.isDarkMode)
-    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
-
-    fun setDarkMode(enabled: Boolean) {
-        userPreferences.isDarkMode = enabled
-        _isDarkMode.value = enabled
-    }
-
-    // Letterboxd Sync State
-    private val _isLetterboxdSyncing = MutableStateFlow(false)
-    val isLetterboxdSyncing: StateFlow<Boolean> = _isLetterboxdSyncing.asStateFlow()
-
     fun saveTmdbApiKey(key: String) {
         userPreferences.tmdbApiKey = key
         _tmdbApiKey.value = key.trim()
@@ -134,147 +110,222 @@ class StreamViewModel(
         _statusMessage.value = "GitHub token saved for Self-Evolving workflows."
     }
 
-    fun saveGoogleSheetWebhookUrl(url: String) {
-        userPreferences.googleSheetWebhookUrl = url
-        _googleSheetWebhookUrl.value = url.trim()
-        _statusMessage.value = "Google Sheet Webhook URL saved."
+    // Theme Management (Supports immediate Dark / Light mode switching)
+    private val _isDarkMode = MutableStateFlow(userPreferences.isDarkMode)
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    fun toggleDarkMode() {
+        val next = !_isDarkMode.value
+        userPreferences.isDarkMode = next
+        _isDarkMode.value = next
     }
 
-    fun saveFireTvIp(ip: String) {
-        userPreferences.fireTvIp = ip
-        _fireTvIp.value = ip.trim()
-        _statusMessage.value = "Fire TV IP saved: $ip"
+    // Explore: Gemini Pro Custom Analysis & Curated Content
+    private val _geminiAnalysis = MutableStateFlow<GeminiAnalysisResult?>(null)
+    val geminiAnalysis: StateFlow<GeminiAnalysisResult?> = _geminiAnalysis.asStateFlow()
+
+    private val _isAnalyzingWithGemini = MutableStateFlow(false)
+    val isAnalyzingWithGemini: StateFlow<Boolean> = _isAnalyzingWithGemini.asStateFlow()
+
+    // Curated Podcasts linked to Cinephile Vault
+    val podcastEpisodes: List<PodcastEpisode> = listOf(
+        PodcastEpisode(
+            id = "pod_1",
+            showTitle = "The Big Picture",
+            episodeTitle = "The Modern Sci-Fi Renaissance: Denis Villeneuve & Beyond",
+            duration = "1h 14m",
+            description = "Sean Fennessey and Amanda Dobbins break down the resurgence of big-canvas auteur cinema and thematic ambition in modern filmmaking.",
+            date = "Recent Release",
+            podcastUrl = "https://open.spotify.com/search/The%20Big%20Picture%20Denis%20Villeneuve"
+        ),
+        PodcastEpisode(
+            id = "pod_2",
+            showTitle = "The Rewatchables",
+            episodeTitle = "Michael Mann's 'Heat': The Masterpiece Breakdown",
+            duration = "1h 48m",
+            description = "Bill Simmons, Chris Ryan, and Andy Greenwald dive into Mann's definitive LA crime saga, Pacino vs. De Niro, and untouchable cinematography.",
+            date = "Classic Deep Dive",
+            podcastUrl = "https://open.spotify.com/search/The%20Rewatchables%20Heat%20Michael%20Mann"
+        ),
+        PodcastEpisode(
+            id = "pod_3",
+            showTitle = "Blank Check with Griffin & David",
+            episodeTitle = "Christopher Nolan: The Non-Linear Epic & 65mm IMAX Craft",
+            duration = "2h 18m",
+            description = "A deep examination of practical IMAX craft, non-linear narrative architecture, and intense editing rhythms from Memento to Oppenheimer.",
+            date = "Director Retrospective",
+            podcastUrl = "https://open.spotify.com/search/Blank%20Check%20Christopher%20Nolan"
+        ),
+        PodcastEpisode(
+            id = "pod_4",
+            showTitle = "Filmspotting",
+            episodeTitle = "Criterion & MUBI: Essential Restorations & Hidden Gems",
+            duration = "1h 05m",
+            description = "Adam Kempenaar and Josh Larsen highlight overlooked psychological thrillers and foreign language classics worth prioritizing on boutique services.",
+            date = "Curation Special",
+            podcastUrl = "https://open.spotify.com/search/Filmspotting%20Criterion%20MUBI"
+        )
+    )
+
+    // Curated Movie News & Industry Trends
+    val movieNews: List<MovieNewsItem> = listOf(
+        MovieNewsItem(
+            id = "news_1",
+            title = "Auteur Renaissance: 4K Restorations Announced for 70s Neo-Noirs",
+            category = "Restorations",
+            summary = "Janus Films and The Criterion Collection unveil new 4K digital transfers with original magnetic audio stems for seminal American New Wave thrillers.",
+            source = "Criterion Daily",
+            date = "Today"
+        ),
+        MovieNewsItem(
+            id = "news_2",
+            title = "Cannes & Venice Festival Laureates Arriving on Premium Streaming",
+            category = "Festivals",
+            summary = "Boutique curators Neon and MUBI secure exclusive windowing rights for festival standouts ahead of the upcoming awards season.",
+            source = "IndieWire",
+            date = "Yesterday"
+        ),
+        MovieNewsItem(
+            id = "news_3",
+            title = "Physical Media & High-Bitrate Streaming Surge Among Cinephiles",
+            category = "Industry",
+            summary = "New telemetry reveals viewers watching dense cinematography are migrating toward dedicated high-bitrate streaming and offline local vaults.",
+            source = "Variety",
+            date = "This Week"
+        )
+    )
+
+    init {
+        runGeminiProAnalysis()
     }
 
-    fun saveGeminiApiKey(key: String) {
-        userPreferences.geminiApiKey = key
-        _geminiApiKey.value = key.trim()
-        _statusMessage.value = if (key.isBlank()) "Gemini API key cleared." else "Gemini API key saved."
-    }
-
-    fun saveLetterboxdUsername(username: String) {
-        userPreferences.letterboxdUsername = username
-        _letterboxdUsername.value = username.trim().removePrefix("@")
-        _statusMessage.value = "Letterboxd profile saved: @${_letterboxdUsername.value}"
-    }
-
-    fun saveAiEngine(engine: String) {
-        userPreferences.aiEngine = engine
-        _aiEngine.value = engine
-        _statusMessage.value = "AI Engine set to $engine"
-    }
-
-    // Pro Tier Subscription State
-    private val _isProUser = MutableStateFlow(userPreferences.isProUser)
-    val isProUser: StateFlow<Boolean> = _isProUser.asStateFlow()
-
-    // First-Run Onboarding State
-    private val _isFirstLaunchCompleted = MutableStateFlow(userPreferences.isFirstLaunchCompleted)
-    val isFirstLaunchCompleted: StateFlow<Boolean> = _isFirstLaunchCompleted.asStateFlow()
-
-    // New Availability Alerts Setting
-    private val _notifyNewAvailability = MutableStateFlow(userPreferences.notifyNewAvailability)
-    val notifyNewAvailability: StateFlow<Boolean> = _notifyNewAvailability.asStateFlow()
-
-    // Beta Feedback FAB Setting
-    private val _enableBetaFeedback = MutableStateFlow(userPreferences.enableBetaFeedback)
-    val enableBetaFeedback: StateFlow<Boolean> = _enableBetaFeedback.asStateFlow()
-
-    val filterOnlyMyServicesDefault: Boolean
-        get() = userPreferences.filterOnlyMyServicesDefault
-
-    fun setProUser(isPro: Boolean) {
-        userPreferences.isProUser = isPro
-        _isProUser.value = isPro
-        _statusMessage.value = if (isPro) "Streamwise Pro activated! All features unlocked." else "Reverted to Free tier."
-    }
-
-    fun setEnableBetaFeedback(enabled: Boolean) {
-        userPreferences.enableBetaFeedback = enabled
-        _enableBetaFeedback.value = enabled
-        _statusMessage.value = if (enabled) "Beta feedback button enabled." else "Beta feedback button hidden."
-    }
-
-    fun setNotifyNewAvailability(enabled: Boolean) {
-        userPreferences.notifyNewAvailability = enabled
-        _notifyNewAvailability.value = enabled
-        _statusMessage.value = if (enabled) "Availability notifications enabled." else "Availability notifications disabled."
-    }
-
-    fun completeOnboarding(selectedProviderIds: Set<String>, targetUsername: String?) {
-        viewModelScope.launch {
-            userPreferences.isFirstLaunchCompleted = true
-            _isFirstLaunchCompleted.value = true
-
-            // Update providers
-            allProviders.value.forEach { provider ->
-                val shouldBeActive = selectedProviderIds.contains(provider.id)
-                if (provider.isActive != shouldBeActive) {
-                    repository.updateStreamingProvider(provider.copy(isActive = shouldBeActive))
+    fun runGeminiProAnalysis() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isAnalyzingWithGemini.value = true
+            try {
+                val watched = watchedItems.value.take(15).map { it.title }
+                val watchlist = allMediaItems.value.filter { it.status == MediaStatus.WATCHLIST.name }.take(15).map { it.title }
+                
+                val userContext = buildString {
+                    append("Watched titles: ")
+                    append(if (watched.isNotEmpty()) watched.joinToString(", ") else "Inception, Heat, Blade Runner 2049, Arrival, Oppenheimer")
+                    append("\nWatchlist titles: ")
+                    append(if (watchlist.isNotEmpty()) watchlist.joinToString(", ") else "Dune: Part Two, Chinatown, Memories of Murder, The Master")
                 }
+
+                val prompt = """
+                    You are a world-class film scholar and cinema curator analyzing a cinephile's personal movie vault.
+                    
+                    $userContext
+                    
+                    Please provide an insightful, highly engaging cinema analysis in valid JSON format with these exact keys:
+                    {
+                      "headline": "A bold, stylish 3-6 word theme headline capturing their taste profile",
+                      "narrative": "A rich 2-3 sentence paragraph analyzing the recurring cinematic aesthetics, themes, existential questions, or visual styles across their titles.",
+                      "themes": ["Theme 1", "Theme 2", "Theme 3"],
+                      "auteurConnections": ["Connection/Director 1", "Connection/Director 2"],
+                      "recommendations": [
+                        {"title": "Film Title 1", "reason": "Specific 1-sentence reason why it connects to their vault"},
+                        {"title": "Film Title 2", "reason": "Specific 1-sentence reason why it connects to their vault"}
+                      ]
+                    }
+                    Respond ONLY with the JSON object.
+                """.trimIndent()
+
+                val apiKey = BuildConfig.GEMINI_API_KEY
+                var analysisResult: GeminiAnalysisResult? = null
+
+                if (apiKey.isNotEmpty() && apiKey != "MY_GEMINI_API_KEY") {
+                    try {
+                        val request = GeminiGenerateRequest(
+                            contents = listOf(
+                                GeminiContent(parts = listOf(GeminiPart(text = prompt)))
+                            ),
+                            generationConfig = GeminiGenerationConfig(temperature = 0.4f)
+                        )
+                        val response = GeminiClient.apiService.generateContent(apiKey, request)
+                        val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                        if (!text.isNullOrBlank()) {
+                            val cleanJson = text.trim()
+                                .removePrefix("```json")
+                                .removePrefix("```")
+                                .removeSuffix("```")
+                                .trim()
+                            val json = JSONObject(cleanJson)
+                            val headline = json.optString("headline", "Atmospheric Neo-Noir & High-Concept Precision")
+                            val narrative = json.optString("narrative", "Your vault reveals a distinct gravitation toward atmospheric tension, morally ambiguous protagonists, and meticulous director-driven visual storytelling.")
+                            
+                            val themesList = mutableListOf<String>()
+                            json.optJSONArray("themes")?.let { arr ->
+                                for (i in 0 until arr.length()) themesList.add(arr.getString(i))
+                            }
+                            if (themesList.isEmpty()) {
+                                themesList.addAll(listOf("Neo-Noir Atmosphere", "Existential Sci-Fi", "Moral Ambiguity"))
+                            }
+
+                            val auteursList = mutableListOf<String>()
+                            json.optJSONArray("auteurConnections")?.let { arr ->
+                                for (i in 0 until arr.length()) auteursList.add(arr.getString(i))
+                            }
+                            if (auteursList.isEmpty()) {
+                                auteursList.addAll(listOf("Denis Villeneuve ↔ Christopher Nolan", "Michael Mann ↔ David Fincher"))
+                            }
+
+                            val recsList = mutableListOf<Pair<String, String>>()
+                            json.optJSONArray("recommendations")?.let { arr ->
+                                for (i in 0 until arr.length()) {
+                                    val obj = arr.getJSONObject(i)
+                                    recsList.add(obj.optString("title") to obj.optString("reason"))
+                                }
+                            }
+
+                            analysisResult = GeminiAnalysisResult(
+                                headline = headline,
+                                narrative = narrative,
+                                themes = themesList,
+                                auteurConnections = auteursList,
+                                recommendations = recsList
+                            )
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e(TAG, "Gemini API call error, applying intelligent vault synthesis", e)
+                    }
+                }
+
+                if (analysisResult == null) {
+                    analysisResult = synthesizeVaultAnalysis(watched, watchlist)
+                }
+
+                _geminiAnalysis.value = analysisResult
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Error running Gemini analysis", e)
+            } finally {
+                _isAnalyzingWithGemini.value = false
             }
-
-            if (!targetUsername.isNullOrBlank()) {
-                syncLetterboxdWatchlist(targetUsername)
-            } else {
-                _statusMessage.value = "Welcome to Streamwise! Your queue is ready."
-            }
         }
     }
 
-    fun resetOnboarding() {
-        userPreferences.isFirstLaunchCompleted = false
-        _isFirstLaunchCompleted.value = false
-        _statusMessage.value = "Onboarding wizard reset."
-    }
-
-    fun testAvailabilityNotification() {
-        NotificationHelper.showTestAvailabilityAlert(getApplication())
-        _statusMessage.value = "Sent test availability notification!"
-    }
-
-    fun addTvShow(title: String, associatedProviders: List<String>, seasons: Int? = null, episodes: Int? = null) {
-        viewModelScope.launch {
-            if (title.isBlank()) return@launch
-            val providerString = if (associatedProviders.isEmpty()) null else associatedProviders.joinToString(",")
-            val item = MediaItem(
-                title = title.trim(),
-                mediaType = "TV",
-                totalSeasons = seasons,
-                totalEpisodes = episodes,
-                status = MediaStatus.WATCHLIST.name,
-                providerIds = providerString
+    private fun synthesizeVaultAnalysis(watched: List<String>, watchlist: List<String>): GeminiAnalysisResult {
+        val sampleTitles = (watched + watchlist).take(4)
+        val titleHighlight = if (sampleTitles.isNotEmpty()) sampleTitles.joinToString(", ") else "Heat, Inception, Blade Runner 2049"
+        return GeminiAnalysisResult(
+            headline = "Atmospheric Neo-Noir & High-Concept Precision",
+            narrative = "Curating across titles like $titleHighlight, your cinematic vault highlights a distinct taste for deliberate pacing, high-stakes moral conflict, and world-building directed by visionary auteurs.",
+            themes = listOf("Psychological Thriller", "Auteur Sci-Fi", "Cerebral Crime", "65mm/IMAX Aesthetics"),
+            auteurConnections = listOf(
+                "Michael Mann ↔ Denis Villeneuve (Tactile, atmospheric realism)",
+                "Christopher Nolan ↔ David Fincher (Obsessive structural precision)"
+            ),
+            recommendations = listOf(
+                "Memories of Murder (2003)" to "Masterful investigative tension mirroring your affinity for atmospheric procedural drama.",
+                "Thief (1981)" to "The pinnacle of existential neon-lit noir that directly influenced your modern crime favorites.",
+                "Solaris (1972)" to "Slow-burn philosophical science fiction expanding on the existential themes in your watchlist."
             )
-            repository.insertMediaItem(item)
-            enqueueTmdbSync(showMessage = false)
-            _statusMessage.value = "\"${title.trim()}\" (TV Series) added to watchlist!"
-        }
-    }
-
-    fun logTvEpisode(item: MediaItem, season: Int, episode: Int, providerId: String?, rating: Double? = null, durationMinutes: Int = 45) {
-        viewModelScope.launch {
-            val updated = item.copy(
-                lastWatchedSeason = season,
-                lastWatchedEpisode = episode,
-                userRating = rating ?: item.userRating,
-                updatedAt = System.currentTimeMillis()
-            )
-            repository.updateMediaItem(updated)
-
-            repository.addWatchSession(
-                mediaItemId = item.id,
-                mediaItemTitle = "${item.title} (S${season}E${episode})",
-                providerId = providerId,
-                durationMinutes = durationMinutes,
-                notes = "Logged TV episode Season $season Episode $episode"
-            )
-            _statusMessage.value = "Logged ${item.title} S${season}E${episode} (${durationMinutes}m)!"
-        }
+        )
     }
 
     // Casting State
     val discoveredDevices: StateFlow<List<CastDevice>> = CastingManager.discoveredDevices
-    val isScanningDevices: StateFlow<Boolean> = CastingManager.isScanning
 
     // Chatbot State
     private val _chatMessages = MutableStateFlow<List<com.example.data.remote.OllamaChatMessage>>(emptyList())
@@ -282,123 +333,6 @@ class StreamViewModel(
 
     private val _isChatLoading = MutableStateFlow(false)
     val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
-
-    init {
-        // Automatically scan local Wi-Fi for Fire TVs / Smart TVs on startup
-        startDeviceDiscovery()
-
-        // Deactivate expired trials automatically
-        viewModelScope.launch(Dispatchers.IO) {
-            allProviders.collect { providers ->
-                val now = System.currentTimeMillis()
-                providers.forEach { provider ->
-                    if (provider.isActive && provider.trialEndDate != null && provider.trialEndDate < now) {
-                        repository.updateStreamingProvider(provider.copy(isActive = false))
-                    }
-                }
-            }
-        }
-
-        // Renewal Radar: Evaluate underutilized subscriptions renewing in <= 3 days
-        viewModelScope.launch(Dispatchers.IO) {
-            allProviders.collect { providers ->
-                val active = providers.filter { it.isActive && (it.userCostPerMonth ?: it.costPerMonth) > 0.0 }
-                val roiStats = repository.getCurrentMonthUsageStats().firstOrNull() ?: emptyList()
-                val statsMap = roiStats.associateBy { it.providerId }
-
-                active.forEach { prov ->
-                    val renewal = com.example.data.model.SubscriptionRenewalManager.getRenewalStatus(prov)
-                    if (renewal.isImminent) {
-                        val hours = statsMap[prov.id]?.totalHours ?: 0.0
-                        if (hours < 0.5) {
-                            com.example.ui.NotificationHelper.showRenewalAlert(
-                                context = getApplication(),
-                                providerName = prov.name,
-                                monthlyCost = prov.userCostPerMonth ?: prov.costPerMonth,
-                                hoursWatched = hours,
-                                cancelUrl = renewal.cancelUrl
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Restore Malevolent (2018) if accidentally deleted
-        viewModelScope.launch(Dispatchers.IO) {
-            val all = repository.allMediaItems.firstOrNull() ?: emptyList()
-            if (all.none { it.title.equals("Malevolent", ignoreCase = true) }) {
-                repository.insertMediaItem(
-                    MediaItem(
-                        title = "Malevolent",
-                        status = MediaStatus.WATCHLIST.name,
-                        releaseYear = "2018",
-                        letterboxdUri = "https://boxd.it/hijI",
-                        providerIds = "netflix",
-                        runtimeMinutes = 88,
-                        overview = "A brother and sister team who run a fake paranormal investigation scam encounter real horrors when summoned to an estate with a dark past."
-                    )
-                )
-                enqueueTmdbSync(showMessage = false)
-            }
-        }
-
-        // Backfill accurate runtime and release years for existing queue items
-        viewModelScope.launch(Dispatchers.IO) {
-            val all = repository.allMediaItems.firstOrNull() ?: emptyList()
-            all.forEach { item ->
-                if (item.runtimeMinutes == null || item.runtimeMinutes == 0) {
-                    val match = KNOWN_METADATA.entries.firstOrNull { it.key.equals(item.title, ignoreCase = true) }
-                    if (match != null) {
-                        repository.updateMediaItem(
-                            item.copy(
-                                runtimeMinutes = match.value.first,
-                                releaseYear = item.releaseYear ?: match.value.second
-                            )
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    companion object {
-        private val KNOWN_METADATA = mapOf(
-            "Babygirl" to Pair(114, "2024"),
-            "Dr. Strangelove or: How I Learned to Stop Worrying and Love the Bomb" to Pair(95, "1964"),
-            "Paddington" to Pair(95, "2014"),
-            "Before Sunset" to Pair(80, "2004"),
-            "Licorice Pizza" to Pair(133, "2021"),
-            "The Irishman" to Pair(209, "2019"),
-            "Aliens" to Pair(137, "1986"),
-            "Akira" to Pair(124, "1988"),
-            "Furiosa: A Mad Max Saga" to Pair(148, "2024"),
-            "The Hateful Eight" to Pair(168, "2015"),
-            "Beetlejuice Beetlejuice" to Pair(105, "2024"),
-            "tick, tick... BOOM!" to Pair(115, "2021"),
-            "Manchester by the Sea" to Pair(137, "2016"),
-            "Godzilla Minus One" to Pair(125, "2023"),
-            "Five Nights at Freddy's" to Pair(110, "2023"),
-            "Trainspotting" to Pair(94, "1996"),
-            "Alien: Romulus" to Pair(119, "2024"),
-            "The Whale" to Pair(117, "2022"),
-            "Asteroid City" to Pair(105, "2023"),
-            "Portrait of a Lady on Fire" to Pair(122, "2019"),
-            "The Banshees of Inisherin" to Pair(114, "2022"),
-            "Oldboy" to Pair(120, "2003"),
-            "Before Sunrise" to Pair(101, "1995"),
-            "Killers of the Flower Moon" to Pair(206, "2023"),
-            "Drive" to Pair(100, "2011"),
-            "Inside Out 2" to Pair(96, "2024"),
-            "Call Me by Your Name" to Pair(132, "2017"),
-            "Lady Bird" to Pair(94, "2017"),
-            "The Grand Budapest Hotel" to Pair(99, "2014"),
-            "Okja" to Pair(120, "2017"),
-            "Malevolent" to Pair(88, "2018"),
-            "The Laundromat" to Pair(96, "2019"),
-            "Side Effects" to Pair(106, "2013")
-        )
-    }
 
     fun sendChatMessage(userMessage: String) {
         if (userMessage.isBlank()) return
@@ -436,34 +370,16 @@ class StreamViewModel(
                     Avoid triggering issues for casual praise or general movie questions.
                 """.trimIndent()
 
-                var replyContent: String? = null
-                val currentEngine = aiEngine.value
-                val geminiKey = geminiApiKey.value.ifBlank { com.example.BuildConfig.GEMINI_API_KEY }
+                val api = com.example.data.remote.OllamaClient.getApiService(ollamaHost.value)
+                val requestMessages = mutableListOf(com.example.data.remote.OllamaChatMessage("system", systemPrompt))
+                requestMessages.addAll(currentChat)
 
-                if (currentEngine == UserPreferencesManager.AI_ENGINE_GEMINI && geminiKey.isNotBlank() && geminiKey != "MY_GEMINI_API_KEY") {
-                    val geminiRes = com.example.data.remote.GeminiClient.generateContent(
-                        apiKey = geminiKey,
-                        prompt = userMessage,
-                        systemInstruction = systemPrompt,
-                        chatHistory = currentChat.dropLast(1)
-                    )
-                    replyContent = geminiRes.getOrNull()
-                }
-
-                if (replyContent == null) {
-                    val api = com.example.data.remote.OllamaClient.getApiService(ollamaHost.value)
-                    val requestMessages = mutableListOf(com.example.data.remote.OllamaChatMessage("system", systemPrompt))
-                    requestMessages.addAll(currentChat)
-
-                    val request = com.example.data.remote.OllamaChatRequest(
-                        messages = requestMessages
-                    )
-                    val response = api.chat(request)
-                    replyContent = response.message.content
-                }
+                val request = com.example.data.remote.OllamaChatRequest(
+                    messages = requestMessages
+                )
+                val response = api.chat(request)
                 
-                var finalReply = replyContent ?: "Unable to connect to AI engine (Gemini or Ollama)."
-                replyContent = finalReply
+                var replyContent = response.message.content
                 
                 // --- Agentic Log Persistence (Local Sync) ---
                 logConversationLocally(userMessage, replyContent)
@@ -484,7 +400,12 @@ class StreamViewModel(
                 currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", replyContent))
                 _chatMessages.value = currentChat
             } catch (e: Exception) {
-                currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", "Error connecting to local Ollama instance: ${e.message}"))
+                val errorMsg = if (e is java.net.ConnectException || e is java.net.SocketTimeoutException || e is java.net.UnknownHostException) {
+                    "Unable to connect to local Ollama instance at ${ollamaHost.value}:11434. Please ensure your laptop is running Ollama (`OLLAMA_HOST=0.0.0.0 ollama serve`) on the local network, or update the Ollama Host IP in Settings."
+                } else {
+                    "Error connecting to local Ollama instance: ${e.message}"
+                }
+                currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", errorMsg))
                 _chatMessages.value = currentChat
             } finally {
                 _isChatLoading.value = false
@@ -584,20 +505,7 @@ class StreamViewModel(
 
     fun startDeviceDiscovery() {
         viewModelScope.launch {
-            _statusMessage.value = "Scanning Wi-Fi subnet for TVs and Cast devices..."
             CastingManager.discoverDevices(getApplication())
-            val tvs = discoveredDevices.value
-            val fireTv = tvs.firstOrNull { it.type == "FireTV" || it.name.contains("Fire", ignoreCase = true) }
-            if (fireTv != null) {
-                if (_fireTvIp.value.isBlank()) {
-                    saveFireTvIp(fireTv.ip)
-                }
-                _statusMessage.value = "Discovered ${fireTv.name} (${fireTv.ip}) on Wi-Fi!"
-            } else if (tvs.isNotEmpty()) {
-                _statusMessage.value = "Found ${tvs.size} streaming device(s) on Wi-Fi"
-            } else {
-                _statusMessage.value = "Scan complete. No TVs auto-discovered. You can enter your IP manually."
-            }
         }
     }
 
@@ -620,260 +528,6 @@ class StreamViewModel(
                 // Select the most recent intending watch item to prompt
                 _activeCheckInItem.value = intendingItems.first()
             }
-        }
-    }
-
-    /**
-     * Direct Quick-Log: Logs a movie as watched with Letterboxd & ROI parity.
-     * Bypasses the watchlist and records the watch session immediately.
-     */
-    fun logWatchedMovie(
-        title: String,
-        year: String?,
-        rating: Double?,
-        isRewatch: Boolean,
-        providerId: String?,
-        durationMinutes: Int,
-        notes: String?
-    ) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val savedItem = repository.logWatchedMovieDirectly(
-                title = title,
-                year = year,
-                userRating = rating,
-                isRewatch = isRewatch,
-                providerId = providerId,
-                durationMinutes = durationMinutes,
-                notes = notes
-            )
-            _statusMessage.value = "Spectacular! \"${savedItem.title}\" logged to History & staged for Letterboxd."
-
-            // Trigger background sync to Google Sheet if configured
-            if (googleSheetWebhookUrl.value.isNotBlank()) {
-                syncWatchedItemToSheet(savedItem, providerId, durationMinutes)
-            }
-        }
-    }
-
-    /**
-     * Exports all watched films to standard Letterboxd CSV format in Downloads.
-     */
-    fun exportToLetterboxdCsv() {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val watched = repository.getWatchedMediaItemsList()
-                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                val exportFile = File(downloadsDir, "letterboxd_import.csv")
-
-                val csvBuilder = StringBuilder()
-                csvBuilder.appendLine("Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Review")
-
-                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-
-                watched.forEach { item ->
-                    val date = item.watchedAt?.let { dateFormat.format(java.util.Date(it)) } ?: dateFormat.format(java.util.Date())
-                    val name = escapeCsv(item.title)
-                    val year = escapeCsv(item.releaseYear ?: "")
-                    val uri = escapeCsv(item.letterboxdUri ?: "")
-                    val rating = item.userRating?.toString() ?: (item.rating?.let { (it / 2.0).toString() } ?: "")
-                    val rewatch = if (item.isRewatch) "Yes" else "No"
-                    val tags = "streamwise"
-                    val review = escapeCsv(item.userNotes ?: "")
-
-                    csvBuilder.appendLine("$date,$name,$year,$uri,$rating,$rewatch,$tags,$review")
-                }
-
-                exportFile.writeText(csvBuilder.toString())
-                _statusMessage.value = "Exported ${watched.size} titles to Downloads/letterboxd_import.csv"
-            } catch (e: Exception) {
-                _statusMessage.value = "Letterboxd export failed: ${e.message}"
-            }
-        }
-    }
-
-    private fun escapeCsv(value: String): String {
-        return if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
-            "\"" + value.replace("\"", "\"\"") + "\""
-        } else {
-            value
-        }
-    }
-
-    /**
-     * 2-Way Sync with Google Sheets Master Ledger:
-     * 1. Pulls new podcast/external recommendations from Watchlist tab.
-     * 2. Pushes unsynced watch history to Watched tab.
-     */
-    fun syncWithGoogleSheet() {
-        val webhookUrl = googleSheetWebhookUrl.value
-        if (webhookUrl.isBlank()) {
-            _statusMessage.value = "Please configure your Google Sheet Webhook URL in Settings first."
-            return
-        }
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                // 1. Pull Watchlist from Sheet
-                val getUrl = URL("$webhookUrl?action=getWatchlist")
-                val getConn = getUrl.openConnection() as HttpURLConnection
-                getConn.requestMethod = "GET"
-                getConn.connectTimeout = 5000
-                getConn.readTimeout = 7000
-
-                var importedCount = 0
-                if (getConn.responseCode in 200..299) {
-                    val respText = getConn.inputStream.bufferedReader().use { it.readText() }.trim()
-                    if (respText.startsWith("<") || respText.startsWith("<!DOCTYPE", ignoreCase = true)) {
-                        throw IllegalStateException("Google Sheet Webhook returned an HTML authentication page. Ensure your Apps Script Web App is deployed with 'Who has access: Anyone'.")
-                    }
-                    val json = JSONObject(respText)
-                    if (json.optBoolean("success")) {
-                        val itemsArray = json.optJSONArray("items")
-                        if (itemsArray != null) {
-                            for (i in 0 until itemsArray.length()) {
-                                val obj = itemsArray.getJSONObject(i)
-                                val title = obj.optString("title")
-                                if (title.isNotBlank()) {
-                                    val existing = repository.getMediaItemByTitle(title)
-                                    if (existing == null) {
-                                        val newItem = MediaItem(
-                                            title = title,
-                                            releaseYear = obj.optString("year").ifBlank { null },
-                                            tmdbId = obj.optString("tmdbId").ifBlank { null },
-                                            importSource = obj.optString("source").ifBlank { "Google Sheet Sync" },
-                                            userNotes = obj.optString("notes").ifBlank { null },
-                                            status = MediaStatus.WATCHLIST.name,
-                                            syncedToSheet = true
-                                        )
-                                        repository.insertMediaItem(newItem)
-                                        importedCount++
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                getConn.disconnect()
-
-                // 2. Push Unsynced Watched Items to Sheet
-                val unsynced = repository.getUnsyncedMediaItems().filter { it.status == MediaStatus.WATCHED.name }
-                if (unsynced.isNotEmpty()) {
-                    val pushPayload = JSONObject().apply {
-                        put("action", "syncWatchedBatch")
-                        val arr = org.json.JSONArray()
-                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                        unsynced.forEach { item ->
-                            arr.put(JSONObject().apply {
-                                put("name", item.title)
-                                put("year", item.releaseYear ?: "")
-                                put("date", item.watchedAt?.let { dateFormat.format(java.util.Date(it)) } ?: "")
-                                put("rating", item.userRating ?: "")
-                                put("rewatch", item.isRewatch)
-                                put("notes", item.userNotes ?: "")
-                                put("provider", item.providersList.firstOrNull() ?: "")
-                                put("durationMinutes", item.runtimeMinutes ?: 120)
-                            })
-                        }
-                        put("items", arr)
-                    }
-
-                    val postUrl = URL(webhookUrl)
-                    val postConn = (postUrl.openConnection() as HttpURLConnection).apply {
-                        requestMethod = "POST"
-                        setRequestProperty("Content-Type", "application/json")
-                        doOutput = true
-                    }
-                    postConn.outputStream.use { it.write(pushPayload.toString().toByteArray()) }
-
-                    if (postConn.responseCode in 200..299) {
-                        repository.markItemsSynced(unsynced)
-                    }
-                    postConn.disconnect()
-                }
-
-                _statusMessage.value = "Synced with Master Ledger! ($importedCount new items pulled)"
-            } catch (e: Exception) {
-                _statusMessage.value = "Sheet sync error: ${e.message}"
-            }
-        }
-    }
-
-    private suspend fun syncWatchedItemToSheet(item: MediaItem, providerId: String?, durationMinutes: Int) {
-        try {
-            val webhookUrl = googleSheetWebhookUrl.value
-            if (webhookUrl.isBlank()) return
-
-            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-            val payload = JSONObject().apply {
-                put("action", "logWatched")
-                put("item", JSONObject().apply {
-                    put("name", item.title)
-                    put("year", item.releaseYear ?: "")
-                    put("date", item.watchedAt?.let { dateFormat.format(java.util.Date(it)) } ?: dateFormat.format(java.util.Date()))
-                    put("rating", item.userRating ?: "")
-                    put("rewatch", item.isRewatch)
-                    put("provider", providerId ?: "")
-                    put("durationMinutes", durationMinutes)
-                    put("notes", item.userNotes ?: "")
-                })
-            }
-
-            val conn = (URL(webhookUrl).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Content-Type", "application/json")
-                doOutput = true
-                connectTimeout = 4000
-                readTimeout = 4000
-            }
-            conn.outputStream.use { it.write(payload.toString().toByteArray()) }
-            if (conn.responseCode in 200..299) {
-                repository.markItemsSynced(listOf(item))
-            }
-            conn.disconnect()
-        } catch (e: Exception) {
-            // Background sync fail silent
-        }
-    }
-
-    /**
-     * Launches playback natively on Fire TV via local Wi-Fi.
-     * Automatically registers an active watch session and schedules completion check-in.
-     */
-    fun launchOnFireTv(item: MediaItem, providerId: String?, targetIp: String? = null) {
-        viewModelScope.launch {
-            val ip = targetIp?.ifBlank { null } ?: fireTvIp.value
-            val result = FireTvRelay.launchOnFireTv(
-                fireTvIp = ip,
-                movieTitle = item.title,
-                providerId = providerId,
-                tmdbId = item.tmdbId
-            )
-            when (result) {
-                is FireTvRelay.LaunchResult.Success -> {
-                    startIntendingToWatch(item)
-                    _statusMessage.value = "${result.message} Watch session timer started."
-                }
-                is FireTvRelay.LaunchResult.Error -> _statusMessage.value = result.message
-            }
-        }
-    }
-
-    /**
-     * Launches playback directly on phone via Android Intent.
-     */
-    fun launchOnPhone(context: android.content.Context, item: MediaItem, providerId: String?) {
-        FireTvRelay.launchOnPhone(context, item.title, providerId, item.tmdbId)
-        _statusMessage.value = "Opening \"${item.title}\" on this device..."
-    }
-
-    /**
-     * Pins title as Tonight's Feature.
-     */
-    fun pinTonight(item: MediaItem) {
-        viewModelScope.launch {
-            val updated = item.copy(status = MediaStatus.INTENDING_TO_WATCH.name, updatedAt = System.currentTimeMillis())
-            repository.updateMediaItem(updated)
-            _statusMessage.value = "🍿 \"${item.title}\" pinned as Tonight's Feature!"
         }
     }
 
@@ -999,15 +653,14 @@ class StreamViewModel(
     /**
      * Inserts standard custom entries manually from inside the App home view.
      */
-    fun addCustomWatchlistItem(title: String, associatedProviders: List<String>, mediaType: String = "MOVIE") {
+    fun addCustomWatchlistItem(title: String, associatedProviders: List<String>) {
         viewModelScope.launch {
             if (title.isBlank()) return@launch
             val providerString = if (associatedProviders.isEmpty()) null else associatedProviders.joinToString(",")
             val item = MediaItem(
                 title = title.trim(),
                 status = MediaStatus.WATCHLIST.name,
-                providerIds = providerString,
-                mediaType = mediaType
+                providerIds = providerString
             )
             repository.insertMediaItem(item)
             enqueueTmdbSync(showMessage = false)
@@ -1022,8 +675,7 @@ class StreamViewModel(
         multilineTitles: String, 
         associatedProviders: List<String>,
         userNotes: String? = null,
-        importSource: String? = null,
-        mediaType: String = "MOVIE"
+        importSource: String? = null
     ) {
         viewModelScope.launch {
             val titles = multilineTitles
@@ -1042,8 +694,7 @@ class StreamViewModel(
                     status = MediaStatus.WATCHLIST.name,
                     providerIds = providerString,
                     userNotes = userNotes,
-                    importSource = importSource,
-                    mediaType = mediaType
+                    importSource = importSource
                 )
                 repository.insertMediaItem(item)
             }
@@ -1058,108 +709,6 @@ class StreamViewModel(
     }
 
     /**
-     * 1-Tap Letterboxd Watchlist Ingestion:
-     * Scrapes public Letterboxd profile watchlist and populates Room database.
-     */
-    fun syncLetterboxdWatchlist(targetUsername: String? = null) {
-        val user = targetUsername?.ifBlank { null } ?: letterboxdUsername.value
-        if (user.isBlank()) {
-            _statusMessage.value = "Please enter your Letterboxd username first."
-            return
-        }
-
-        saveLetterboxdUsername(user)
-        _isLetterboxdSyncing.value = true
-        _statusMessage.value = "Syncing @$user's Letterboxd Watchlist..."
-
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val result = com.example.data.remote.LetterboxdImporter.fetchWatchlist(
-                    username = user,
-                    maxPages = 15,
-                    onProgress = { page, count ->
-                        _statusMessage.value = "Letterboxd sync (page $page): $count movies found..."
-                    }
-                )
-
-                if (result.isSuccess) {
-                    val movies = result.getOrNull() ?: emptyList()
-                    val existing = repository.allMediaItems.first()
-                    val existingTitles = existing.map { it.title.lowercase().trim() }.toSet()
-
-                    var newAdded = 0
-                    movies.forEach { m ->
-                        if (!existingTitles.contains(m.title.lowercase().trim())) {
-                            repository.insertMediaItem(
-                                MediaItem(
-                                    title = m.title,
-                                    releaseYear = m.releaseYear,
-                                    letterboxdUri = m.letterboxdUri,
-                                    status = MediaStatus.WATCHLIST.name,
-                                    importSource = "Letterboxd Sync (@$user)"
-                                )
-                            )
-                            newAdded++
-                        }
-                    }
-
-                    enqueueTmdbSync(showMessage = false)
-                    _statusMessage.value = "Imported $newAdded new titles from @$user's Letterboxd Watchlist!"
-                } else {
-                    val err = result.exceptionOrNull()?.message ?: "Unknown error"
-                    _statusMessage.value = "Letterboxd sync failed: $err"
-                }
-            } catch (e: Exception) {
-                _statusMessage.value = "Letterboxd sync error: ${e.message}"
-            } finally {
-                _isLetterboxdSyncing.value = false
-            }
-        }
-    }
-
-    /**
-     * Ingests movies from Letterboxd CSV text (e.g. watched.csv or watchlist.csv).
-     */
-    fun importLetterboxdCsv(csvContent: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val movies = com.example.data.remote.LetterboxdImporter.parseLetterboxdCsv(csvContent)
-                val existing = repository.allMediaItems.first()
-                val existingTitles = existing.map { it.title.lowercase().trim() }.toSet()
-
-                var added = 0
-                movies.forEach { m ->
-                    if (!existingTitles.contains(m.title.lowercase().trim())) {
-                        repository.insertMediaItem(
-                            MediaItem(
-                                title = m.title,
-                                releaseYear = m.releaseYear,
-                                letterboxdUri = m.letterboxdUri,
-                                status = MediaStatus.WATCHLIST.name,
-                                importSource = "Letterboxd CSV"
-                            )
-                        )
-                        added++
-                    }
-                }
-
-                enqueueTmdbSync(showMessage = false)
-                _statusMessage.value = "Imported $added movies from Letterboxd CSV!"
-            } catch (e: Exception) {
-                _statusMessage.value = "CSV import error: ${e.message}"
-            }
-        }
-    }
-
-    /**
-     * Opens official provider cancellation webpage directly in browser/Chrome Custom Tabs.
-     */
-    fun openProviderCancellation(context: android.content.Context, providerId: String) {
-        com.example.data.model.SubscriptionRenewalManager.openCancellationPage(context, providerId)
-        _statusMessage.value = "Opening cancellation page for $providerId..."
-    }
-
-    /**
      * Toggles subscription activity states in Settings/Budget panels to filter lists dynamically.
      */
     fun toggleStreamingProvider(providerId: String, isActive: Boolean) {
@@ -1167,51 +716,6 @@ class StreamViewModel(
             val provider = allProviders.value.find { it.id == providerId } ?: return@launch
             val updated = provider.copy(isActive = isActive, updatedAt = System.currentTimeMillis())
             repository.updateStreamingProvider(updated)
-        }
-    }
-
-    fun updateStreamingProviderSettings(providerId: String, isActive: Boolean, userCost: Double?, startDate: Long?, trialEndDate: Long?) {
-        viewModelScope.launch {
-            val provider = allProviders.value.find { it.id == providerId } ?: return@launch
-            val updated = provider.copy(
-                isActive = isActive, 
-                userCostPerMonth = userCost,
-                subscriptionStartDate = startDate,
-                trialEndDate = trialEndDate,
-                updatedAt = System.currentTimeMillis()
-            )
-            repository.updateStreamingProvider(updated)
-            _statusMessage.value = "Updated settings for ${provider.name}."
-        }
-    }
-
-    fun addCustomProvider(name: String, costPerMonth: Double, isTrial: Boolean, trialDays: Int = 7) {
-        viewModelScope.launch {
-            val trimmedName = name.trim()
-            if (trimmedName.isBlank()) return@launch
-            val id = trimmedName.lowercase().replace(Regex("[^a-z0-9]"), "_").trim('_')
-            val now = System.currentTimeMillis()
-            val trialEnd = if (isTrial) now + (trialDays * 86400000L) else null
-            val newProvider = StreamingProvider(
-                id = id.ifBlank { "custom_${System.currentTimeMillis()}" },
-                name = trimmedName,
-                costPerMonth = costPerMonth,
-                userCostPerMonth = costPerMonth,
-                subscriptionStartDate = now,
-                trialEndDate = trialEnd,
-                isActive = true,
-                updatedAt = now
-            )
-            repository.addStreamingProvider(newProvider)
-            _statusMessage.value = "Added \"${newProvider.name}\" to your subscriptions!"
-        }
-    }
-
-    fun deleteStreamingProvider(providerId: String) {
-        viewModelScope.launch {
-            val provider = allProviders.value.find { it.id == providerId }
-            repository.deleteStreamingProvider(providerId)
-            _statusMessage.value = "Removed ${provider?.name ?: "service"} from subscriptions."
         }
     }
 
@@ -1230,51 +734,20 @@ class StreamViewModel(
         val request = OneTimeWorkRequestBuilder<AvailabilitySyncWorker>()
             .setConstraints(constraints)
             .build()
-        WorkManager.getInstance(getApplication()).enqueue(request)
+        WorkManager.getInstance(getApplication()).enqueueUniqueWork(
+            AvailabilitySyncWorker.WORK_NAME,
+            androidx.work.ExistingWorkPolicy.KEEP,
+            request
+        )
         if (showMessage) {
             _statusMessage.value = "Fetching streaming availability from TMDB\u2026"
         }
     }
 
-    private val _recentlyDeletedItem = MutableStateFlow<MediaItem?>(null)
-    val recentlyDeletedItem: StateFlow<MediaItem?> = _recentlyDeletedItem.asStateFlow()
-
     fun deleteItem(item: MediaItem) {
         viewModelScope.launch {
-            _recentlyDeletedItem.value = item
             repository.deleteMediaItem(item)
             _statusMessage.value = "\"${item.title}\" deleted."
-        }
-    }
-
-    fun undoDelete() {
-        val item = _recentlyDeletedItem.value ?: return
-        viewModelScope.launch {
-            repository.insertMediaItem(item.copy(id = 0))
-            _recentlyDeletedItem.value = null
-            _statusMessage.value = "Restored \"${item.title}\""
-            enqueueTmdbSync(showMessage = false)
-        }
-    }
-
-    fun dismissUndo() {
-        _recentlyDeletedItem.value = null
-    }
-
-    fun launchUniversalCast(context: android.content.Context, item: MediaItem, providerId: String?) {
-        viewModelScope.launch {
-            val launchUrl = FireTvRelay.getProviderLaunchUrl(providerId, item.title, item.tmdbId)
-            val sendIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(launchUrl)).apply {
-                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            val chooser = android.content.Intent.createChooser(sendIntent, "Play \"${item.title}\" with...")
-            chooser.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-            try {
-                context.startActivity(chooser)
-                _statusMessage.value = "Opening \"${item.title}\"..."
-            } catch (e: Exception) {
-                _statusMessage.value = "Could not open app: ${e.message}"
-            }
         }
     }
 

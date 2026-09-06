@@ -33,46 +33,9 @@ data class MediaItem(
     // Latest timestamp when this movie was watched
     val watchedAt: Long? = null,
     // Comma-separated list of active provider IDs (e.g., "netflix,hulu,max") available for this media item
-    val providerIds: String? = null,
-    // User's personal rating (0.5 to 5.0 stars)
-    val userRating: Double? = null,
-    // Letterboxd rewatch indicator
-    val isRewatch: Boolean = false,
-    // Letterboxd URI link
-    val letterboxdUri: String? = null,
-    // Google Sheet cloud sync indicator
-    val syncedToSheet: Boolean = false,
-    // Runtime duration in minutes for <90m and <120m filtering
-    val runtimeMinutes: Int? = null,
-    // Release year (e.g., "1995")
-    val releaseYear: String? = null,
-    // Media type: "MOVIE" or "TV"
-    val mediaType: String = "MOVIE",
-    // TV Show metadata
-    val totalSeasons: Int? = null,
-    val totalEpisodes: Int? = null,
-    val lastWatchedSeason: Int? = null,
-    val lastWatchedEpisode: Int? = null,
-    // Release Radar & Anticipation Tracker
-    val nextAirDate: String? = null,           // e.g. "2026-10-14"
-    val nextEpisodeTitle: String? = null,      // e.g. "S2E1: Hello Ms. Cobel"
-    val releaseStatus: String? = null,         // e.g. "RETURNING_SERIES", "IN_THEATERS", "STREAMING_SOON", "ENDED"
-    val digitalReleaseDate: String? = null     // e.g. "2026-11-04"
+    val providerIds: String? = null
 ) {
     // Utility to parse provider IDs array
     val providersList: List<String>
         get() = providerIds?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
-
-    val isTvShow: Boolean
-        get() = mediaType.equals("TV", ignoreCase = true)
-
-    val isPodcastRec: Boolean
-        get() = importSource?.startsWith("Podcast", ignoreCase = true) == true
-
-    val hasUpcomingRelease: Boolean
-        get() = !nextAirDate.isNullOrBlank() || 
-                !digitalReleaseDate.isNullOrBlank() || 
-                releaseStatus.equals("RETURNING_SERIES", ignoreCase = true) || 
-                releaseStatus.equals("IN_THEATERS", ignoreCase = true) ||
-                releaseStatus.equals("STREAMING_SOON", ignoreCase = true)
 }

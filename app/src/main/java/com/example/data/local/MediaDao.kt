@@ -38,17 +38,14 @@ interface MediaDao {
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMediaItemById(id: Long)
 
-    @Query("SELECT * FROM media_items WHERE LOWER(title) = LOWER(:title) LIMIT 1")
-    suspend fun getMediaItemByTitle(title: String): MediaItem?
-
-    @Query("SELECT * FROM media_items WHERE status = 'WATCHED' ORDER BY watchedAt DESC")
-    suspend fun getWatchedMediaItemsList(): List<MediaItem>
-
-    @Query("SELECT * FROM media_items WHERE syncedToSheet = 0")
-    suspend fun getUnsyncedMediaItems(): List<MediaItem>
+    @Query("SELECT COUNT(*) FROM media_items")
+    suspend fun getMediaItemCount(): Int
 
     @Query("SELECT COUNT(*) FROM media_items WHERE status = 'WATCHED'")
     suspend fun getWatchedCount(): Int
+
+    @Query("SELECT COUNT(*) FROM media_items WHERE status = 'WATCHLIST'")
+    suspend fun getWatchlistCount(): Int
 
     @Query("SELECT title FROM media_items")
     suspend fun getAllTitles(): List<String>
@@ -77,9 +74,6 @@ interface MediaDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertStreamingProvider(provider: StreamingProvider)
 
-    @Query("DELETE FROM streaming_providers WHERE id = :id")
-    suspend fun deleteStreamingProviderById(id: String)
-
 
     // --- Watch Sessions Queries ---
 
@@ -104,9 +98,6 @@ interface MediaDao {
             sp.id AS providerId, 
             sp.name AS providerName, 
             sp.costPerMonth AS costPerMonth, 
-            sp.userCostPerMonth AS userCostPerMonth,
-            sp.subscriptionStartDate AS subscriptionStartDate,
-            sp.trialEndDate AS trialEndDate,
             sp.isActive AS isActive,
             COALESCE(SUM(ws.durationMinutes), 0) AS totalMinutes
         FROM streaming_providers sp
@@ -127,19 +118,13 @@ data class ProviderUsageStats(
     val providerId: String,
     val providerName: String,
     val costPerMonth: Double,
-    val userCostPerMonth: Double?,
-    val subscriptionStartDate: Long?,
-    val trialEndDate: Long?,
     val isActive: Boolean,
     val totalMinutes: Long
 ) {
     val totalHours: Double
         get() = totalMinutes / 60.0
 
-    val effectiveCostPerMonth: Double
-        get() = userCostPerMonth ?: costPerMonth
-
     // Financial ROI: Higher ratio = better. Lower hours watched = high cost per hour = prime cancel candidate!
     val costPerHour: Double
-        get() = if (totalHours > 0.0) effectiveCostPerMonth / totalHours else effectiveCostPerMonth
+        get() = if (totalHours > 0.0) costPerMonth / totalHours else costPerMonth
 }

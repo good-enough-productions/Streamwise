@@ -6,7 +6,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -15,10 +14,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,23 +31,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import com.example.data.local.ProviderUsageStats
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
 import com.example.data.model.StreamingProvider
-import com.example.data.model.SubscriptionRenewalManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,169 +62,87 @@ fun HomeScreen(
     val checkInItem by viewModel.activeCheckInItem.collectAsState()
     val statusMessage by viewModel.statusMessage.collectAsState()
     val tmdbApiKey by viewModel.tmdbApiKey.collectAsState()
-    val googleSheetWebhookUrl by viewModel.googleSheetWebhookUrl.collectAsState()
-    val fireTvIp by viewModel.fireTvIp.collectAsState()
-    val githubToken by viewModel.githubToken.collectAsState()
-    val geminiApiKey by viewModel.geminiApiKey.collectAsState()
-    val letterboxdUsername by viewModel.letterboxdUsername.collectAsState()
-    val aiEngine by viewModel.aiEngine.collectAsState()
-    val isLetterboxdSyncing by viewModel.isLetterboxdSyncing.collectAsState()
-    val recentlyDeletedItem by viewModel.recentlyDeletedItem.collectAsState()
-    val isProUser by viewModel.isProUser.collectAsState()
-    val isFirstLaunchCompleted by viewModel.isFirstLaunchCompleted.collectAsState()
-    val notifyNewAvailability by viewModel.notifyNewAvailability.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
-
-    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Agent
-    var filterOnlyMyServices by remember { mutableStateOf(viewModel.filterOnlyMyServicesDefault) }
+    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Explore
+    var filterOnlyMyServices by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
-    var showQuickLogDialog by remember { mutableStateOf(false) }
-    var quickLogInitialMovie by remember { mutableStateOf<MediaItem?>(null) }
-    var watchActionItem by remember { mutableStateOf<MediaItem?>(null) }
-    var showFeedbackDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
-    var showGuideDialog by remember { mutableStateOf(false) }
-    var showLetterboxdImportDialog by remember { mutableStateOf(false) }
-    var showPaywallSheet by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
-    var editingProvider by remember { mutableStateOf<StreamingProvider?>(null) }
-    var showAddServiceDialog by remember { mutableStateOf(false) }
+    val isDark by viewModel.isDarkMode.collectAsState()
 
-    // Clear and display Toast/Status banners beautifully with UNDO support
+    // Clear and display Toast/Status banners beautifully
     LaunchedEffect(statusMessage) {
-        statusMessage?.let { msg ->
-            if (recentlyDeletedItem != null) {
-                val result = snackbarHostState.showSnackbar(
-                    message = msg,
-                    actionLabel = "UNDO",
-                    duration = SnackbarDuration.Short
-                )
-                if (result == SnackbarResult.ActionPerformed) {
-                    viewModel.undoDelete()
-                }
-            } else {
-                snackbarHostState.showSnackbar(msg)
-            }
+        statusMessage?.let {
+            snackbarHostState.showSnackbar(it)
             viewModel.clearStatusMessage()
         }
     }
 
-    val enableBetaFeedback by viewModel.enableBetaFeedback.collectAsState()
-    val isDarkMode by viewModel.isDarkMode.collectAsState()
-    val showcaseState = remember { ShowcaseState() }
-
-    CompositionLocalProvider(LocalShowcaseState provides showcaseState) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Scaffold(
-                modifier = modifier.testTag("home_scaffold"),
-                snackbarHost = { SnackbarHost(snackbarHostState) },
+    Scaffold(
+        modifier = modifier.testTag("home_scaffold"),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            var showTopBarOverflow by remember { mutableStateOf(false) }
             TopAppBar(
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.wrapContentWidth()
-                    ) {
+                    Column {
                         Text(
                             "Streamwise",
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            softWrap = false
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isProUser) Color(0xFFFFD700) else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .clickable { showPaywallSheet = true }
-                                .testTag("pro_badge_topbar")
-                        ) {
-                            Text(
-                                text = if (isProUser) "★ PRO" else "FREE",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Black,
-                                color = if (isProUser) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
+                        Text(
+                            when (selectedTab) {
+                                0 -> "Watchlist"
+                                1 -> "Watched History"
+                                2 -> "ROI Analytics"
+                                3 -> "Explore & Cinema AI"
+                                else -> ""
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
                 },
                 actions = {
                     IconButton(
-                        onClick = { viewModel.syncWithGoogleSheet() },
-                        modifier = Modifier.testTag("sync_sheet_button")
+                        onClick = { viewModel.toggleDarkMode() },
+                        modifier = Modifier.testTag("theme_toggle_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Sync with Google Sheet",
+                            imageVector = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = if (isDark) "Switch to Light Theme" else "Switch to Dark Theme",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
-                    Box {
-                        IconButton(
-                            onClick = { showTopBarOverflow = true },
-                            modifier = Modifier.testTag("topbar_overflow_menu")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "More Options",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showTopBarOverflow,
-                            onDismissRequest = { showTopBarOverflow = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("User Guide") },
-                                leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
-                                onClick = {
-                                    showTopBarOverflow = false
-                                    showGuideDialog = true
-                                },
-                                modifier = Modifier.testTag("guide_button")
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Import from Letterboxd") },
-                                leadingIcon = { Icon(Icons.Default.AddCircle, contentDescription = null) },
-                                onClick = {
-                                    showTopBarOverflow = false
-                                    showLetterboxdImportDialog = true
-                                },
-                                modifier = Modifier.testTag("import_letterboxd_button")
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Export Letterboxd CSV") },
-                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null) },
-                                onClick = {
-                                    showTopBarOverflow = false
-                                    viewModel.exportToLetterboxdCsv()
-                                },
-                                modifier = Modifier.testTag("export_letterboxd_button")
-                            )
-                        }
+                    IconButton(
+                        onClick = { viewModel.exportToObsidian() },
+                        modifier = Modifier.testTag("export_obsidian_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Export to Obsidian",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
                     }
                     IconButton(
                         onClick = { showSettingsDialog = true },
-                        modifier = Modifier
-                            .testTag("settings_gear_button")
-                            .showcaseTarget(
-                                "settings_gear", 
-                                "Settings & Subscriptions", 
-                                "Opens the settings menu where you can manage your active streaming services, set custom trial pricing, and configure API keys.",
-                                "Use this whenever you start a new free trial, cancel a service, or need to connect your local AI."
-                            )
+                        modifier = Modifier.testTag("settings_gear_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
                             contentDescription = "Settings",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    IconButton(
+                        onClick = simulateForegroundReturn,
+                        modifier = Modifier.testTag("simulate_foreground_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Simulate App Resume (Foreground Check)",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -233,49 +152,52 @@ fun HomeScreen(
                 )
             )
         },
-        floatingActionButton = {
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.navigationBarsPadding()
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
+                modifier = Modifier.testTag("main_navigation_bar")
             ) {
-                // Floating Feedback Button (Do-It-Now pipeline)
-                if (enableBetaFeedback) {
-                    FloatingFeedbackButton(
-                        onClick = { showFeedbackDialog = true },
-                        modifier = if (selectedTab == 3) Modifier.padding(bottom = 76.dp) else Modifier
-                    )
-                }
-
-                if (selectedTab == 0) {
-                    ExtendedFloatingActionButton(
-                        text = { Text("Add to Queue") },
-                        icon = { Icon(Icons.Default.Add, contentDescription = "Add media item") },
-                        onClick = { showAddDialog = true },
-                        modifier = Modifier
-                            .testTag("add_item_fab")
-                            .showcaseTarget(
-                                "fab_add", 
-                                "Add Movies & Shows", 
-                                "Opens a search window connected to TMDB where you can find and add any movie or TV show to your Watchlist.",
-                                "Use this whenever you hear a recommendation from a friend or see a trailer for something you want to watch later."
-                            ),
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                } else if (selectedTab == 1) {
-                    ExtendedFloatingActionButton(
-                        text = { Text("Quick Log Film") },
-                        icon = { Icon(Icons.Default.Check, contentDescription = "Log watched film") },
-                        onClick = {
-                            quickLogInitialMovie = null
-                            showQuickLogDialog = true
-                        },
-                        modifier = Modifier.testTag("quick_log_fab"),
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                }
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist") },
+                    label = { Text("Watchlist") },
+                    modifier = Modifier.testTag("tab_watchlist")
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.Default.Check, contentDescription = "Watched") },
+                    label = { Text("Watched") },
+                    modifier = Modifier.testTag("tab_watched")
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Default.Star, contentDescription = "ROI Stats") },
+                    label = { Text("ROI Stats") },
+                    modifier = Modifier.testTag("tab_budget")
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Explore") },
+                    label = { Text("Explore") },
+                    modifier = Modifier.testTag("tab_agent")
+                )
+            }
+        },
+        floatingActionButton = {
+            if (selectedTab == 0 || selectedTab == 1) {
+                ExtendedFloatingActionButton(
+                    text = { Text("Add Title") },
+                    icon = { Icon(Icons.Default.Add, contentDescription = "Add media item") },
+                    onClick = { showAddDialog = true },
+                    modifier = Modifier
+                        .testTag("add_item_fab"),
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
         }
     ) { innerPadding ->
@@ -284,63 +206,6 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Main navigation tabs for modular layout
-            ScrollableTabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-                edgePadding = 0.dp
-            ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Watchlist", fontSize = 11.sp) },
-                    icon = { Icon(Icons.Default.List, contentDescription = "Watchlist tab") },
-                    modifier = Modifier
-                        .testTag("tab_watchlist")
-                        .showcaseTarget(
-                            "watchlist_tab", 
-                            "The Watchlist", 
-                            "Your central queue. It pulls live availability data from Watchmode so you know exactly which of your services has the movie right now.",
-                            "Use this as your primary dashboard to see what's ready to watch tonight."
-                        )
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Watched", fontSize = 11.sp) },
-                    icon = { Icon(Icons.Default.Check, contentDescription = "Watched history tab") },
-                    modifier = Modifier.testTag("tab_watched")
-                )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    text = { Text("My Services", fontSize = 11.sp) },
-                    icon = { Icon(Icons.Default.Subscriptions, contentDescription = "My Services tab") },
-                    modifier = Modifier
-                        .testTag("tab_budget")
-                        .showcaseTarget(
-                            "roi_tab", 
-                            "Services & Spend", 
-                            "Displays your active streaming subscriptions, monthly spend, and hours watched.",
-                            "Use this to manage active channels, monitor renewal dates, and optimize your monthly streaming costs."
-                        )
-                )
-                Tab(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    text = { Text("Olivia AI", fontSize = 11.sp) },
-                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Olivia AI tab") },
-                    modifier = Modifier
-                        .testTag("tab_agent")
-                        .showcaseTarget(
-                            "agent_tab", 
-                            "Olivia AI Concierge", 
-                            "Your personal streaming concierge powered by Gemini 2.0 Flash or local Ollama.",
-                            "Ask hyper-specific questions like 'What should I watch tonight on Criterion?'"
-                        )
-                )
-            }
-
             AnimatedContent(
                 targetState = selectedTab,
                 transitionSpec = {
@@ -354,17 +219,12 @@ fun HomeScreen(
                         allProviders = allProviders,
                         filterOnlyMyServices = filterOnlyMyServices,
                         onFilterToggle = { filterOnlyMyServices = it },
-                        onWatchClick = { watchActionItem = it },
+                        onWatchClick = { viewModel.startIntendingToWatch(it) },
                         onDeleteClick = { viewModel.deleteItem(it) },
-                        onSyncClick = { viewModel.syncWithGoogleSheet() },
-                        onOpenLetterboxdImport = { showLetterboxdImportDialog = true },
-                        isLetterboxdSyncing = isLetterboxdSyncing,
+                        onSyncClick = { viewModel.triggerImmediateSync() },
                         tmdbApiKey = tmdbApiKey,
                         onOpenSettings = { showSettingsDialog = true },
-                        onMovieClick = { detailMovieItem = it },
-                        recentlyDeletedItem = recentlyDeletedItem,
-                        onUndoDelete = { viewModel.undoDelete() },
-                        onDismissUndo = { viewModel.dismissUndo() }
+                        onMovieClick = { detailMovieItem = it }
                     )
                     1 -> {
                         val watchedItems by viewModel.watchedItems.collectAsState()
@@ -373,31 +233,27 @@ fun HomeScreen(
                             allProviders = allProviders,
                             onMovieClick = { detailMovieItem = it },
                             onDeleteClick = { viewModel.deleteItem(it) },
-                            onSyncClick = { viewModel.syncWithGoogleSheet() },
-                            onQuickLogClick = {
-                                quickLogInitialMovie = null
-                                showQuickLogDialog = true
-                            },
-                            onExportLetterboxdClick = { viewModel.exportToLetterboxdCsv() }
+                            onSyncClick = { viewModel.triggerImmediateSync() }
                         )
                     }
                     2 -> MonthlyRoiContent(
                         monthlyStats = monthlyStats,
-                        allProviders = allProviders,
-                        watchlistItems = watchlistItems,
-                        onToggleProvider = { id, active -> viewModel.toggleStreamingProvider(id, active) },
-                        onEditProvider = { editingProvider = it },
-                        onAddServiceClick = { showAddServiceDialog = true },
-                        onMovieClick = { detailMovieItem = it },
-                        onOpenCancellation = { id -> viewModel.openProviderCancellation(context, id) }
+                        allProviders = allProviders
                     )
                     3 -> {
                         val chatMessages by viewModel.chatMessages.collectAsState()
                         val isChatLoading by viewModel.isChatLoading.collectAsState()
-                        AgentChatTabContent(
+                        val geminiAnalysis by viewModel.geminiAnalysis.collectAsState()
+                        val isGeminiAnalyzing by viewModel.isAnalyzingWithGemini.collectAsState()
+                        ExploreTabContent(
                             chatMessages = chatMessages,
                             isLoading = isChatLoading,
-                            onSendMessage = { viewModel.sendChatMessage(it) }
+                            onSendMessage = { viewModel.sendChatMessage(it) },
+                            geminiAnalysis = geminiAnalysis,
+                            isGeminiAnalyzing = isGeminiAnalyzing,
+                            onRefreshGeminiAnalysis = { viewModel.runGeminiProAnalysis() },
+                            podcastEpisodes = viewModel.podcastEpisodes,
+                            movieNews = viewModel.movieNews
                         )
                     }
                 }
@@ -409,8 +265,8 @@ fun HomeScreen(
             AddMediaDialog(
                 allProviders = allProviders,
                 onDismiss = { showAddDialog = false },
-                onAdd = { titlesInput, selectedProviderIds, notes, source, mediaType ->
-                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source, mediaType)
+                onAdd = { titlesInput, selectedProviderIds, notes, source ->
+                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source)
                     showAddDialog = false
                 }
             )
@@ -444,69 +300,16 @@ fun HomeScreen(
             val watchmodeApiKey by viewModel.watchmodeApiKey.collectAsState()
             SettingsDialog(
                 allProviders = allProviders,
-                onProviderUpdate = { id, active, cost, start, end -> viewModel.updateStreamingProviderSettings(id, active, cost, start, end) },
+                onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
                 tmdbApiKey = tmdbApiKey,
                 onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
                 watchmodeApiKey = watchmodeApiKey,
                 onSaveWatchmodeApiKey = { viewModel.saveWatchmodeApiKey(it) },
                 ollamaHost = ollamaHost,
                 onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
-                geminiApiKey = geminiApiKey,
-                onSaveGeminiApiKey = { viewModel.saveGeminiApiKey(it) },
-                letterboxdUsername = letterboxdUsername,
-                onSaveLetterboxdUsername = { viewModel.saveLetterboxdUsername(it) },
-                aiEngine = aiEngine,
-                onSaveAiEngine = { viewModel.saveAiEngine(it) },
-                onSyncLetterboxd = { viewModel.syncLetterboxdWatchlist() },
-                isLetterboxdSyncing = isLetterboxdSyncing,
                 githubToken = githubToken,
                 onSaveGithubToken = { viewModel.saveGithubToken(it) },
-                googleSheetWebhookUrl = googleSheetWebhookUrl,
-                onSaveGoogleSheetWebhookUrl = { viewModel.saveGoogleSheetWebhookUrl(it) },
-                fireTvIp = fireTvIp,
-                onSaveFireTvIp = { viewModel.saveFireTvIp(it) },
-                onSyncGoogleSheet = { viewModel.syncWithGoogleSheet() },
-                onExportLetterboxd = { viewModel.exportToLetterboxdCsv() },
-                onSimulateResume = simulateForegroundReturn,
-                isProUser = isProUser,
-                onOpenPaywall = {
-                    showSettingsDialog = false
-                    showPaywallSheet = true
-                },
-                notifyNewAvailability = notifyNewAvailability,
-                onToggleAvailabilityAlerts = { viewModel.setNotifyNewAvailability(it) },
-                onTestAvailabilityAlert = { viewModel.testAvailabilityNotification() },
-                onResetOnboarding = {
-                    viewModel.resetOnboarding()
-                    showSettingsDialog = false
-                },
-                enableBetaFeedback = enableBetaFeedback,
-                onToggleBetaFeedback = { viewModel.setEnableBetaFeedback(it) },
-                isDarkMode = isDarkMode,
-                onToggleDarkMode = { viewModel.setDarkMode(it) },
                 onDismiss = { showSettingsDialog = false }
-            )
-        }
-
-        // Letterboxd Import Dialog
-        if (showLetterboxdImportDialog) {
-            LetterboxdImportDialog(
-                username = letterboxdUsername,
-                isSyncing = isLetterboxdSyncing,
-                onSaveUsername = { viewModel.saveLetterboxdUsername(it) },
-                onSyncWeb = { viewModel.syncLetterboxdWatchlist(it) },
-                onImportCsv = { viewModel.importLetterboxdCsv(it) },
-                onDismiss = { showLetterboxdImportDialog = false }
-            )
-        }
-        
-        // Guide Dialog
-        if (showGuideDialog) {
-            GuideDialog(
-                onDismiss = { showGuideDialog = false },
-                onStartTour = {
-                    showcaseState.enableGuideMode()
-                }
             )
         }
 
@@ -520,9 +323,8 @@ fun HomeScreen(
                 onCastClick = { device, item -> viewModel.castToDevice(device, item) },
                 onDismiss = { detailMovieItem = null },
                 onWatchClick = {
-                    val target = detailMovieItem
+                    viewModel.startIntendingToWatch(detailMovieItem!!)
                     detailMovieItem = null
-                    watchActionItem = target
                 },
                 onDeleteClick = {
                     viewModel.deleteItem(detailMovieItem!!)
@@ -530,136 +332,137 @@ fun HomeScreen(
                 }
             )
         }
+    }
+}
 
-        // Watch Action Sheet (Reworked "Watch Now" action hub)
-        if (watchActionItem != null) {
-            val discoveredDevices by viewModel.discoveredDevices.collectAsState()
-            val isScanningDevices by viewModel.isScanningDevices.collectAsState()
-            WatchActionSheet(
-                item = watchActionItem!!,
-                allProviders = allProviders,
-                fireTvIp = fireTvIp,
-                discoveredDevices = discoveredDevices,
-                isScanning = isScanningDevices,
-                onDismiss = { watchActionItem = null },
-                onLaunchFireTv = { item, providerId, targetIp ->
-                    viewModel.launchOnFireTv(item, providerId, targetIp)
-                    watchActionItem = null
-                },
-                onLaunchPhone = { item, providerId ->
-                    viewModel.launchOnPhone(context, item, providerId)
-                    watchActionItem = null
-                },
-                onUniversalCast = { item, providerId ->
-                    viewModel.launchUniversalCast(context, item, providerId)
-                    watchActionItem = null
-                },
-                onQuickLog = { item ->
-                    val target = item
-                    watchActionItem = null
-                    quickLogInitialMovie = target
-                    showQuickLogDialog = true
-                },
-                onPinTonight = { item ->
-                    viewModel.pinTonight(item)
-                    watchActionItem = null
-                },
-                onSaveFireTvIp = { viewModel.saveFireTvIp(it) },
-                onScanDevices = { viewModel.startDeviceDiscovery() }
-            )
-        }
+// ==========================================
+// COMPOSABLE: Spotlight Discovery Card
+// ==========================================
+@Composable
+fun SpotlightCard(
+    item: MediaItem,
+    allProviders: List<StreamingProvider>,
+    onWatchClick: () -> Unit,
+    onMovieClick: () -> Unit
+) {
+    val activeProvider = remember(item, allProviders) {
+        item.providersList.mapNotNull { pId -> allProviders.find { it.id == pId } }
+            .firstOrNull { it.isActive || it.costPerMonth == 0.0 }
+    }
 
-        // Quick Log Dialog
-        if (showQuickLogDialog) {
-            QuickLogDialog(
-                initialMovie = quickLogInitialMovie,
-                allProviders = allProviders,
-                onDismiss = {
-                    showQuickLogDialog = false
-                    quickLogInitialMovie = null
-                },
-                onSave = { title, year, rating, isRewatch, providerId, durationMinutes, notes ->
-                    viewModel.logWatchedMovie(title, year, rating, isRewatch, providerId, durationMinutes, notes)
-                    showQuickLogDialog = false
-                    quickLogInitialMovie = null
+    Card(
+        modifier = Modifier
+            .width(135.dp)
+            .clickable { onMovieClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        ),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            // Inset-bordered artwork with concentric radius: 16 - 8 = 8.dp
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(130.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+            ) {
+                if (!item.imageUrl.isNullOrEmpty()) {
+                    coil.compose.AsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = "Spotlight poster",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
                 }
-            )
-        }
 
-        // Autonomous Feedback Dialog (Do-It-Now pipeline)
-        if (showFeedbackDialog) {
-            val currentTabName = when (selectedTab) {
-                0 -> "Watchlist"
-                1 -> "Watched History"
-                2 -> "My Services"
-                3 -> "Olivia AI Chat"
-                else -> "Main"
+                // Top floating rating badge with tabular numerals
+                if (item.rating != null && item.rating > 0.0) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.75f),
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .align(Alignment.TopEnd)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(10.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = String.format(Locale.US, "%.1f", item.rating),
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+                }
             }
-            FeedbackDialog(
-                githubToken = githubToken,
-                webhookUrl = googleSheetWebhookUrl,
-                currentTabName = currentTabName,
-                watchlistCount = watchlistItems.count { it.status != MediaStatus.WATCHED.name },
-                watchedCount = watchlistItems.count { it.status == MediaStatus.WATCHED.name },
-                onDismiss = { showFeedbackDialog = false },
-                onSubmitSuccess = { /* toast handled */ }
-            )
-        }
 
-        // Edit Subscription / Pricing / Trial Sheet
-        if (editingProvider != null) {
-            SubscriptionEditSheet(
-                provider = editingProvider!!,
-                onDismiss = { editingProvider = null },
-                onSave = { id, isActive, cost, start, trial ->
-                    viewModel.updateStreamingProviderSettings(id, isActive, cost, start, trial)
-                    editingProvider = null
-                },
-                onDelete = { id ->
-                    viewModel.deleteStreamingProvider(id)
-                    editingProvider = null
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            // Streaming provider tag
+            if (activeProvider != null) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(vertical = 3.dp)
+                ) {
+                    Text(
+                        text = activeProvider.name,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
-            )
-        }
-
-        // Add Custom / Preset Service Dialog
-        if (showAddServiceDialog) {
-            AddServiceDialog(
-                existingProviderNames = allProviders.map { it.name },
-                onDismiss = { showAddServiceDialog = false },
-                onAdd = { name, cost, isTrial, trialDays ->
-                    viewModel.addCustomProvider(name, cost, isTrial, trialDays)
-                    showAddServiceDialog = false
-                }
-            )
-        }
-
-        // First-Launch Onboarding Wizard
-        if (!isFirstLaunchCompleted) {
-            OnboardingDialog(
-                availableProviders = allProviders,
-                onComplete = { selectedProviderIds, letterboxdUser ->
-                    viewModel.completeOnboarding(selectedProviderIds, letterboxdUser)
-                }
-            )
-        }
-
-        // Streamwise Pro Upgrade Paywall Sheet
-        if (showPaywallSheet) {
-            UpgradePaywallSheet(
-                isCurrentPro = isProUser,
-                onDismiss = { showPaywallSheet = false },
-                onUpgrade = { viewModel.setProUser(true) },
-                onDowngrade = { viewModel.setProUser(false) }
-            )
-        }
-    } // End Scaffold
-
-            if (showcaseState.isGuideModeActive) {
-                ShowcaseOverlay()
+            } else {
+                Spacer(modifier = Modifier.height(18.dp))
             }
-        } // End Box
-    } // End CompositionLocalProvider
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Quick watch intent button with optically-centered play arrow
+            Button(
+                onClick = onWatchClick,
+                shape = RoundedCornerShape(6.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(30.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(14.dp)
+                            .offset(x = 1.dp) // Optical centroid alignment
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Watch", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
 }
 
 // ==========================================
@@ -674,14 +477,9 @@ fun WatchlistTabContent(
     onWatchClick: (MediaItem) -> Unit,
     onDeleteClick: (MediaItem) -> Unit,
     onSyncClick: () -> Unit = {},
-    onOpenLetterboxdImport: () -> Unit = {},
-    isLetterboxdSyncing: Boolean = false,
     tmdbApiKey: String,
     onOpenSettings: () -> Unit,
-    onMovieClick: (MediaItem) -> Unit,
-    recentlyDeletedItem: MediaItem? = null,
-    onUndoDelete: () -> Unit = {},
-    onDismissUndo: () -> Unit = {}
+    onMovieClick: (MediaItem) -> Unit
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -694,10 +492,8 @@ fun WatchlistTabContent(
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("added") } // "added", "alpha", "rating"
     var showFreeOnly by remember { mutableStateOf(false) }
+    var showTopRatedOnly by remember { mutableStateOf(false) }
     var selectedGenre by remember { mutableStateOf<String?>(null) }
-    var runtimeFilter by remember { mutableStateOf<Int?>(null) } // null: All, 90: <90m, 120: <120m
-    var mediaTypeFilter by remember { mutableStateOf("ALL") } // "ALL", "MOVIES", "TV", "PODCASTS"
-    var showAdvancedFilters by remember { mutableStateOf(false) }
 
     val allGenres = remember(watchlistItems) {
         watchlistItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
@@ -706,16 +502,19 @@ fun WatchlistTabContent(
             .sorted()
     }
 
+    // Curated Spotlight items available on active or free platforms
+    val spotlightItems = remember(watchlistItems, activeProviderIds, freeProviderIds) {
+        watchlistItems.filter { item ->
+            item.status != MediaStatus.WATCHED.name &&
+            item.providersList.any { activeProviderIds.contains(it) || freeProviderIds.contains(it) }
+        }.sortedByDescending { it.rating ?: 0.0 }.take(8)
+    }
+
     // Filter items according to state
-    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, selectedGenre, runtimeFilter, mediaTypeFilter) {
+    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, showTopRatedOnly, selectedGenre) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
-
-            if (mediaTypeFilter == "MOVIES" && (item.isTvShow || item.isPodcastRec)) return@filter false
-            if (mediaTypeFilter == "TV" && !item.isTvShow) return@filter false
-            if (mediaTypeFilter == "PODCASTS" && !item.isPodcastRec) return@filter false
-            if (mediaTypeFilter == "RADAR" && !item.hasUpcomingRelease) return@filter false
 
             if (selectedPlatformId != null) {
                 if (item.providersList.contains(selectedPlatformId) != true) return@filter false
@@ -725,20 +524,19 @@ fun WatchlistTabContent(
                 if (item.genres?.contains(selectedGenre!!, ignoreCase = true) != true) return@filter false
             }
 
-            if (runtimeFilter != null) {
-                val mins = item.runtimeMinutes
-                if (mins == null || mins > runtimeFilter!!) return@filter false
-            }
-
             if (showFreeOnly) {
                 val provs = item.providersList
                 if (provs.none { freeProviderIds.contains(it) }) return@filter false
             }
 
-            if (filterOnlyMyServices && mediaTypeFilter != "RADAR") {
+            if (showTopRatedOnly) {
+                if ((item.rating ?: 0.0) < 7.5) return@filter false
+            }
+
+            if (filterOnlyMyServices) {
                 // Return items having at least one of their available platforms as locally active/subscribed
                 val provs = item.providersList
-                provs.isNotEmpty() && provs.any { activeProviderIds.contains(it) }
+                provs.isEmpty() || provs.any { activeProviderIds.contains(it) }
             } else {
                 true
             }
@@ -753,89 +551,86 @@ fun WatchlistTabContent(
         when (sortBy) {
             "alpha" -> items.sortedBy { it.title.lowercase() }
             "rating" -> items.sortedByDescending { it.rating ?: 0.0 }
-            "runtime" -> items.sortedBy { it.runtimeMinutes ?: 999 }
             else -> items.sortedByDescending { it.addedAt }
         }
     }
 
+    val filterProviders = remember(allProviders) { allProviders.filter { it.isActive || it.costPerMonth == 0.0 } }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Undo Banner for recently deleted items
-        AnimatedVisibility(
-            visible = recentlyDeletedItem != null,
-            enter = fadeIn() + expandVertically(),
-            exit = fadeOut() + shrinkVertically()
-        ) {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = MaterialTheme.colorScheme.inverseSurface,
-                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        // Horizontal Curated Discovery Lane: Spotlight Ready to Stream
+        if (searchQuery.isBlank() && spotlightItems.isNotEmpty()) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.inversePrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
                         Text(
-                            text = "Deleted \"${recentlyDeletedItem?.title}\"",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            "Spotlight: Ready to Stream",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(
-                            onClick = onUndoDelete,
-                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.inversePrimary)
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
                         ) {
-                            Text("UNDO", fontWeight = FontWeight.Black)
-                        }
-                        IconButton(
-                            onClick = onDismissUndo,
-                            modifier = Modifier.size(28.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Dismiss",
-                                modifier = Modifier.size(16.dp)
+                            Text(
+                                "${spotlightItems.size}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
                     }
                 }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    spotlightItems.forEach { item ->
+                        SpotlightCard(
+                            item = item,
+                            allProviders = allProviders,
+                            onWatchClick = { onWatchClick(item) },
+                            onMovieClick = { onMovieClick(item) }
+                        )
+                    }
+                }
             }
         }
-        // ... (TMDB Key Warning Box)
 
-        // 1. Search, Sort, and Filter Panel Toggle Row
+        // Directed Search & Sort Controls
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 10.dp),
+                .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                label = { Text("Search watchlist...") },
+                placeholder = { Text("Search watchlist...") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
@@ -847,7 +642,7 @@ fun WatchlistTabContent(
                 },
                 modifier = Modifier
                     .weight(1.5f)
-                    .height(52.dp),
+                    .height(50.dp),
                 textStyle = MaterialTheme.typography.bodyMedium,
                 shape = RoundedCornerShape(12.dp)
             )
@@ -859,17 +654,16 @@ fun WatchlistTabContent(
                     onClick = { sortExpanded = true },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp),
+                        .height(50.dp),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(horizontal = 8.dp)
                 ) {
                     val sortLabel = when (sortBy) {
                         "alpha" -> "A-Z"
                         "rating" -> "Rating"
-                        "runtime" -> "Duration"
                         else -> "Recent"
                     }
-                    Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(sortLabel, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -898,51 +692,27 @@ fun WatchlistTabContent(
                             sortExpanded = false
                         }
                     )
-                    DropdownMenuItem(
-                        text = { Text("Shortest Duration") },
-                        onClick = {
-                            sortBy = "runtime"
-                            sortExpanded = false
-                        }
-                    )
                 }
-            }
-
-            // Filter Drawer Toggle Button
-            val isCustomFilterActive = selectedPlatformId != null || selectedGenre != null
-            FilledTonalIconButton(
-                onClick = { showAdvancedFilters = !showAdvancedFilters },
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (isCustomFilterActive || showAdvancedFilters) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                ),
-                modifier = Modifier
-                    .size(52.dp)
-                    .testTag("toggle_filters_button")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.List,
-                    contentDescription = "Toggle extra filters",
-                    tint = if (isCustomFilterActive || showAdvancedFilters) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
 
-        // 2. Unified Quick Filter Ribbon (Single Horizontal Scrollable Row - NO squishing!)
+        // Single Streamlined Faceted Filter Ribbon
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 8.dp)
+                .padding(bottom = 10.dp)
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             FilterChip(
-                selected = !filterOnlyMyServices && !showFreeOnly && runtimeFilter == null && mediaTypeFilter == "ALL",
-                onClick = { 
+                selected = !filterOnlyMyServices && !showFreeOnly && !showTopRatedOnly && selectedPlatformId == null && selectedGenre == null,
+                onClick = {
                     onFilterToggle(false)
                     showFreeOnly = false
-                    runtimeFilter = null
-                    mediaTypeFilter = "ALL"
+                    showTopRatedOnly = false
+                    selectedPlatformId = null
+                    selectedGenre = null
                 },
                 label = { Text("All", fontSize = 11.sp) },
                 modifier = Modifier.testTag("filter_all_chip")
@@ -950,7 +720,7 @@ fun WatchlistTabContent(
 
             FilterChip(
                 selected = filterOnlyMyServices,
-                onClick = { 
+                onClick = {
                     onFilterToggle(!filterOnlyMyServices)
                     if (!filterOnlyMyServices) showFreeOnly = false
                 },
@@ -961,7 +731,7 @@ fun WatchlistTabContent(
 
             FilterChip(
                 selected = showFreeOnly,
-                onClick = { 
+                onClick = {
                     showFreeOnly = !showFreeOnly
                     if (showFreeOnly) onFilterToggle(false)
                 },
@@ -971,205 +741,46 @@ fun WatchlistTabContent(
             )
 
             FilterChip(
-                selected = mediaTypeFilter == "MOVIES",
-                onClick = { mediaTypeFilter = if (mediaTypeFilter == "MOVIES") "ALL" else "MOVIES" },
-                label = { Text("🎬 Movies", fontSize = 11.sp) },
-                modifier = Modifier.testTag("filter_media_movies")
+                selected = showTopRatedOnly,
+                onClick = { showTopRatedOnly = !showTopRatedOnly },
+                label = { Text("★ 7.5+", fontSize = 11.sp) },
+                leadingIcon = { Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp)) }
             )
 
-            FilterChip(
-                selected = mediaTypeFilter == "TV",
-                onClick = { mediaTypeFilter = if (mediaTypeFilter == "TV") "ALL" else "TV" },
-                label = { Text("📺 TV", fontSize = 11.sp) },
-                modifier = Modifier.testTag("filter_media_tv")
-            )
+            // Platform Filter Chips
+            filterProviders.forEach { provider ->
+                FilterChip(
+                    selected = selectedPlatformId == provider.id,
+                    onClick = {
+                        selectedPlatformId = if (selectedPlatformId == provider.id) null else provider.id
+                    },
+                    label = { Text(provider.name, fontSize = 11.sp) }
+                )
+            }
 
-            FilterChip(
-                selected = mediaTypeFilter == "PODCASTS",
-                onClick = { mediaTypeFilter = if (mediaTypeFilter == "PODCASTS") "ALL" else "PODCASTS" },
-                label = { Text("🎙️ Podcasts", fontSize = 11.sp) },
-                modifier = Modifier.testTag("filter_media_podcasts")
-            )
-
-            FilterChip(
-                selected = mediaTypeFilter == "RADAR",
-                onClick = { mediaTypeFilter = if (mediaTypeFilter == "RADAR") "ALL" else "RADAR" },
-                label = { Text("🗓️ Radar", fontSize = 11.sp) },
-                modifier = Modifier.testTag("filter_media_radar")
-            )
-
-            FilterChip(
-                selected = runtimeFilter == 90,
-                onClick = { runtimeFilter = if (runtimeFilter == 90) null else 90 },
-                label = { Text("< 90m", fontSize = 11.sp, fontWeight = if (runtimeFilter == 90) FontWeight.Bold else FontWeight.Normal) },
-                leadingIcon = {
-                    if (runtimeFilter == 90) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                    }
-                },
-                modifier = Modifier.testTag("filter_runtime_90_chip")
-            )
-
-            FilterChip(
-                selected = runtimeFilter == 120,
-                onClick = { runtimeFilter = if (runtimeFilter == 120) null else 120 },
-                label = { Text("< 120m", fontSize = 11.sp, fontWeight = if (runtimeFilter == 120) FontWeight.Bold else FontWeight.Normal) },
-                leadingIcon = {
-                    if (runtimeFilter == 120) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp))
-                    }
-                },
-                modifier = Modifier.testTag("filter_runtime_120_chip")
-            )
-
-            AssistChip(
-                onClick = {
-                    if (processedItems.isNotEmpty()) {
-                        onMovieClick(processedItems.random())
-                    }
-                },
-                label = { Text("🎲 Surprise Me", fontSize = 11.sp) },
-                modifier = Modifier.testTag("surprise_me_button")
-            )
-
-            AssistChip(
-                onClick = onOpenLetterboxdImport,
-                label = { Text("Letterboxd", fontSize = 11.sp) },
-                leadingIcon = {
-                    if (isLetterboxdSyncing) {
-                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(14.dp))
-                    }
-                },
-                modifier = Modifier.testTag("watchlist_import_letterboxd_chip")
-            )
+            // Genre Filter Chips
+            allGenres.take(6).forEach { genre ->
+                FilterChip(
+                    selected = selectedGenre == genre,
+                    onClick = {
+                        selectedGenre = if (selectedGenre == genre) null else genre
+                    },
+                    label = { Text(genre, fontSize = 11.sp) }
+                )
+            }
 
             IconButton(
                 onClick = onSyncClick,
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(36.dp)
                     .testTag("sync_providers_button")
             ) {
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Sync streaming availability from TMDB",
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(20.dp)
                 )
-            }
-        }
-
-        // 3. Expandable Advanced Filter Panel (Services & Genres)
-        val filterProviders = remember(allProviders) { allProviders.filter { it.isActive || it.costPerMonth == 0.0 } }
-        AnimatedVisibility(
-            visible = showAdvancedFilters,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (filterProviders.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Services:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(end = 4.dp)
-                            )
-                            FilterChip(
-                                selected = selectedPlatformId == null,
-                                onClick = { selectedPlatformId = null },
-                                label = { Text("All Platforms", fontSize = 11.sp) }
-                            )
-                            filterProviders.forEach { provider ->
-                                FilterChip(
-                                    selected = selectedPlatformId == provider.id,
-                                    onClick = { selectedPlatformId = if (selectedPlatformId == provider.id) null else provider.id },
-                                    label = { Text(provider.name, fontSize = 11.sp) }
-                                )
-                            }
-                        }
-                    }
-
-                    if (allGenres.isNotEmpty()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Genres:",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(end = 4.dp)
-                            )
-                            FilterChip(
-                                selected = selectedGenre == null,
-                                onClick = { selectedGenre = null },
-                                label = { Text("All Genres", fontSize = 11.sp) }
-                            )
-                            allGenres.forEach { genre ->
-                                FilterChip(
-                                    selected = selectedGenre == genre,
-                                    onClick = { selectedGenre = if (selectedGenre == genre) null else genre },
-                                    label = { Text(genre, fontSize = 11.sp) }
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 4. Active Filters Summary and Reset Bar
-        val isAnyFilterActive = runtimeFilter != null || filterOnlyMyServices || showFreeOnly || selectedPlatformId != null || selectedGenre != null || mediaTypeFilter != "ALL"
-        if (isAnyFilterActive) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "${processedItems.size} ${if (processedItems.size == 1) "title" else "titles"} matching filters",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
-                )
-                TextButton(
-                    onClick = {
-                        runtimeFilter = null
-                        showFreeOnly = false
-                        selectedPlatformId = null
-                        selectedGenre = null
-                        mediaTypeFilter = "ALL"
-                        onFilterToggle(false)
-                    },
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
-                ) {
-                    Text("Clear all filters", fontSize = 11.sp)
-                }
             }
         }
 
@@ -1180,78 +791,30 @@ fun WatchlistTabContent(
                     .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                    ),
-                    shape = RoundedCornerShape(18.dp)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (mediaTypeFilter == "RADAR") Icons.Default.DateRange else Icons.Default.List,
-                            contentDescription = "Empty list",
-                            modifier = Modifier.size(56.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = if (watchlistItems.isEmpty()) "Your Watchlist is Empty"
-                                   else if (mediaTypeFilter == "RADAR") "No Upcoming Releases Tracked Yet"
-                                   else if (filterOnlyMyServices) "No Titles Available on Your Subscriptions"
-                                   else "No titles matching your filter",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (watchlistItems.isEmpty()) "Add movies or TV shows using the '+' button, or import your Letterboxd watchlist."
-                                   else if (mediaTypeFilter == "RADAR") "As returning series premiere dates and digital movie drops are scheduled, they'll appear here automatically."
-                                   else if (filterOnlyMyServices) "Try turning off 'My Services' to view all queued titles, or activate suggested services in the My Services tab."
-                                   else "Try adjusting your filters or search query.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        if (watchlistItems.isEmpty()) {
-                            Button(
-                                onClick = onOpenLetterboxdImport,
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.AddCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Import Letterboxd Watchlist")
-                            }
-                        } else if (filterOnlyMyServices && mediaTypeFilter != "RADAR") {
-                            Button(
-                                onClick = { onFilterToggle(false) },
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text("Show All Watchlist Titles")
-                            }
-                        } else if (isAnyFilterActive) {
-                            OutlinedButton(
-                                onClick = {
-                                    runtimeFilter = null
-                                    showFreeOnly = false
-                                    selectedPlatformId = null
-                                    selectedGenre = null
-                                    mediaTypeFilter = "ALL"
-                                    onFilterToggle(false)
-                                },
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Text("Reset All Filters")
-                            }
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.List,
+                        contentDescription = "Empty list",
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "No titles found",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        if (filterOnlyMyServices) "Try enabling more subscriptions or clear filters to view catalog."
+                        else "Use the Add button or share titles to populate your vault.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
         } else {
@@ -1286,7 +849,6 @@ fun MediaItemCard(
     val activeSubscribedIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
     }
-    var isExpanded by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier
@@ -1294,9 +856,10 @@ fun MediaItemCard(
             .clickable { onMovieClick() }
             .testTag("media_item_${item.id}"),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
         ),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
     ) {
         Column(
             modifier = Modifier.padding(12.dp)
@@ -1305,15 +868,16 @@ fun MediaItemCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
             ) {
-                // TMDB Poster image display
+                // TMDB Poster artwork with inset border to prevent perimeter bleeding
                 if (!item.imageUrl.isNullOrEmpty()) {
                     coil.compose.AsyncImage(
                         model = item.imageUrl,
                         contentDescription = "Poster artwork",
                         modifier = Modifier
-                            .size(width = 65.dp, height = 95.dp)
+                            .size(width = 68.dp, height = 98.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
                         contentScale = androidx.compose.ui.layout.ContentScale.Crop
                     )
                     Spacer(modifier = Modifier.width(12.dp))
@@ -1329,6 +893,7 @@ fun MediaItemCard(
                             text = item.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
@@ -1344,119 +909,114 @@ fun MediaItemCard(
                         }
                     }
 
-                    // Consolidated Horizontal Metadata Ribbon
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    ) {
-                        if (item.userRating != null) {
-                            Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFF8C00), modifier = Modifier.size(12.dp))
-                            Text("★ ${String.format("%.1f", item.userRating)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                        } else if (item.rating != null && item.rating > 0.0) {
-                            Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp))
-                            Text(String.format("%.1f", item.rating), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-                        }
+                    // TMDB Rating Display with Tabular Figures
+                    if (item.rating != null && item.rating > 0.0) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "Rating",
+                                tint = Color(0xFFFFD700), // Gold
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = String.format(Locale.US, "%.1f", item.rating),
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
 
-                        if (item.releaseYear != null) {
-                            Text(item.releaseYear, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                            if (!item.genres.isNullOrEmpty()) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "•",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = item.genres,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
+                    } else if (!item.genres.isNullOrEmpty()) {
+                        Text(
+                            text = item.genres,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
 
-                        if (item.runtimeMinutes != null && item.runtimeMinutes > 0) {
-                            Text("${item.runtimeMinutes}m", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                        }
-
-                        if (item.isRewatch) {
-                            Text("↻ Rewatch", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, fontWeight = FontWeight.Bold)
+                    if (item.status == MediaStatus.PENDING_METADATA.name) {
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(10.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("matching", fontSize = 9.sp)
+                            }
                         }
                     }
 
-                    // Badges Ribbon: Format, TV Season, and Release Radar
+                    // Vibe Match & Source Badges
                     Row(
-                        modifier = Modifier.padding(vertical = 2.dp),
+                        modifier = Modifier.padding(vertical = 4.dp),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (item.isTvShow) {
+                        val relevanceScore = remember(item.trivia) {
+                            item.trivia?.lines()
+                                ?.find { it.contains("personal_relevance_score:") }
+                                ?.substringAfter(":")
+                                ?.trim()
+                                ?.replace("\"", "")
+                                ?.replace("'", "")
+                                ?.replace("[", "")
+                                ?.replace("]", "")
+                        }
+
+                        if (!relevanceScore.isNullOrEmpty()) {
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
                                 modifier = Modifier.padding(vertical = 2.dp)
                             ) {
-                                val seasonText = if (item.totalSeasons != null) "${item.totalSeasons} Seasons" else "TV Series"
-                                val epText = if (item.lastWatchedEpisode != null) " · S${item.lastWatchedSeason ?: 1}E${item.lastWatchedEpisode}" else ""
-                                Text(
-                                    text = "📺 $seasonText$epText",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
+                                Row(
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Favorite, null, modifier = Modifier.size(10.dp), tint = MaterialTheme.colorScheme.primary)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        "Match: $relevanceScore/10",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                }
                             }
                         }
 
-                        // Release Radar Badges
-                        if (!item.nextAirDate.isNullOrBlank()) {
+                        if (!item.importSource.isNullOrEmpty()) {
                             Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "🗓️ Next: ${item.nextEpisodeTitle ?: "New Episode"} (${item.nextAirDate})",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        } else if (item.releaseStatus?.equals("RETURNING_SERIES", ignoreCase = true) == true) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f),
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "⏳ Next Season in Production",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        } else if (item.releaseStatus?.equals("IN_THEATERS", ignoreCase = true) == true) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = Color(0xFF8B2500).copy(alpha = 0.2f),
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "🎟️ In Theaters · Streaming Soon",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color(0xFFFF7043),
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        } else if (!item.digitalReleaseDate.isNullOrBlank()) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "🎬 Streaming: ${item.digitalReleaseDate}",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-
-                        if (!item.importSource.isNullOrEmpty() && !item.isPodcastRec) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
                                 modifier = Modifier.padding(vertical = 2.dp)
                             ) {
@@ -1473,40 +1033,14 @@ fun MediaItemCard(
                         }
                     }
 
-                    if (item.isPodcastRec && !item.userNotes.isNullOrBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "🎙️ \"${item.userNotes}\"",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontSize = 11.sp,
-                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-
                     if (!item.overview.isNullOrEmpty()) {
-                        Spacer(modifier = Modifier.height(3.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = item.overview,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                            maxLines = if (isExpanded) 8 else 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.clickable { isExpanded = !isExpanded }
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -1540,13 +1074,13 @@ fun MediaItemCard(
                             )
                         }
                     } else {
-                        // Limit display of providers to 3 to avoid overflow/wrapping bugs
+                        // Limit display of providers to 3 to avoid overflow
                         providers.take(3).forEach { pId ->
                             val fullProvider = allProviders.find { it.id == pId }
                             val isSubscribed = activeSubscribedIds.contains(pId)
 
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(6.dp),
                                 color = if (isSubscribed) {
                                     MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f)
                                 } else {
@@ -1566,7 +1100,9 @@ fun MediaItemCard(
                                     Icon(
                                         imageVector = if (isSubscribed) Icons.Default.CheckCircle else Icons.Default.PlayArrow,
                                         contentDescription = null,
-                                        modifier = Modifier.size(10.dp),
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .then(if (!isSubscribed) Modifier.offset(x = 1.dp) else Modifier),
                                         tint = if (isSubscribed) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -1575,9 +1111,9 @@ fun MediaItemCard(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (isSubscribed) {
                                             MaterialTheme.colorScheme.onPrimaryContainer
-                                         } else {
+                                        } else {
                                             MaterialTheme.colorScheme.outline
-                                         },
+                                        },
                                         fontWeight = if (isSubscribed) FontWeight.Bold else FontWeight.Normal
                                     )
                                 }
@@ -1586,7 +1122,7 @@ fun MediaItemCard(
                         if (providers.size > 3) {
                             Text(
                                 text = "+${providers.size - 3} more",
-                                style = MaterialTheme.typography.labelSmall,
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                                 color = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.padding(start = 4.dp)
                             )
@@ -1594,10 +1130,10 @@ fun MediaItemCard(
                     }
                 }
 
-                // INTENT TRIGGER: Watch now button
+                // INTENT TRIGGER: Watch now button with concentric radius (20 - 12 = 8dp) and optical centroid alignment
                 Button(
                     onClick = onWatchClick,
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     ),
@@ -1608,7 +1144,9 @@ fun MediaItemCard(
                         Icon(
                             imageVector = Icons.Default.PlayArrow,
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier
+                                .size(16.dp)
+                                .offset(x = 1.dp) // Optical centroid alignment
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Watch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1625,9 +1163,7 @@ fun WatchedTabContent(
     allProviders: List<StreamingProvider>,
     onMovieClick: (MediaItem) -> Unit,
     onDeleteClick: (MediaItem) -> Unit,
-    onSyncClick: () -> Unit,
-    onQuickLogClick: () -> Unit,
-    onExportLetterboxdClick: () -> Unit
+    onSyncClick: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("timeline") } // "timeline", "alpha", "rating"
@@ -1732,26 +1268,18 @@ fun WatchedTabContent(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 text = "${processedItems.size} Titles Logged",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
+                color = MaterialTheme.colorScheme.outline,
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.weight(1f))
-            if (selectedGenre != null || searchQuery.isNotBlank()) {
-                TextButton(
-                    onClick = {
-                        selectedGenre = null
-                        searchQuery = ""
-                    },
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
-                ) {
-                    Text("Clear filter", fontSize = 11.sp)
-                }
+            IconButton(onClick = onSyncClick) {
+                Icon(Icons.Default.Refresh, contentDescription = "Enrich metadata", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
         }
 
@@ -1778,92 +1306,18 @@ fun WatchedTabContent(
     }
 }
 // ==========================================
-enum class RoiViewTab {
-    WATCHLIST_OPTIMIZER,
-    SPEND_ANALYTICS
-}
-
-data class ProviderWatchlistCoverage(
-    val provider: StreamingProvider,
-    val matchingItems: List<MediaItem>,
-    val count: Int,
-    val costPerTitle: Double?
-)
-
 @Composable
 fun MonthlyRoiContent(
     monthlyStats: List<ProviderUsageStats>,
-    allProviders: List<StreamingProvider>,
-    watchlistItems: List<MediaItem>,
-    onToggleProvider: (String, Boolean) -> Unit,
-    onEditProvider: (StreamingProvider) -> Unit,
-    onAddServiceClick: () -> Unit,
-    onMovieClick: (MediaItem) -> Unit,
-    onOpenCancellation: (String) -> Unit = {}
+    allProviders: List<StreamingProvider>
 ) {
-    var selectedViewTab by remember { mutableStateOf(RoiViewTab.WATCHLIST_OPTIMIZER) }
-    var filterMode by remember { mutableStateOf("ALL") } // ALL, ACTIVE, INACTIVE
-
     val activeSubscribed = remember(allProviders) { allProviders.filter { it.isActive } }
-    val inactiveProviders = remember(allProviders) { allProviders.filter { !it.isActive } }
-    val totalCost = remember(activeSubscribed) { activeSubscribed.sumOf { it.userCostPerMonth ?: it.costPerMonth } }
+    val totalCost = remember(activeSubscribed) { activeSubscribed.sumOf { it.costPerMonth } }
     
-    // Sort active channels by costPerHour descending (worst value!)
+    // Sort active channels by costPerHour descending (worst value!) to bubble up prime pausing candidates.
     val worstValueProviders = remember(monthlyStats) {
         monthlyStats.sortedByDescending { it.costPerHour }
     }
-    
-    val potentialSavings = remember(worstValueProviders) {
-        worstValueProviders.filter { it.totalHours < 3.0 && it.isActive }.sumOf { it.effectiveCostPerMonth }
-    }
-
-    // Calculate Watchlist matches per provider for recommendation engine
-    val activeWatchlist = remember(watchlistItems) {
-        watchlistItems.filter { it.status == MediaStatus.WATCHLIST.name }
-    }
-
-    val providerCoverages = remember(allProviders, activeWatchlist) {
-        allProviders.map { provider ->
-            val matchingItems = activeWatchlist.filter { item ->
-                item.providersList.contains(provider.id) ||
-                item.providersList.any { it.contains(provider.id, ignoreCase = true) || provider.name.contains(it, ignoreCase = true) }
-            }
-            val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
-            val costPerTitle = if (matchingItems.isNotEmpty() && effectiveCost > 0) effectiveCost / matchingItems.size else if (effectiveCost == 0.0) 0.0 else null
-            ProviderWatchlistCoverage(
-                provider = provider,
-                matchingItems = matchingItems,
-                count = matchingItems.size,
-                costPerTitle = costPerTitle
-            )
-        }.sortedWith(
-            compareByDescending<ProviderWatchlistCoverage> { it.count }
-                .thenBy { it.costPerTitle ?: Double.MAX_VALUE }
-        )
-    }
-
-    // Identify strategic recommendations:
-    val topInactiveOpportunity = remember(providerCoverages) {
-        providerCoverages.firstOrNull { !it.provider.isActive && it.count > 0 }
-    }
-
-    val topSafeToPause = remember(providerCoverages) {
-        providerCoverages.firstOrNull { coverage ->
-            coverage.provider.isActive && 
-            (coverage.provider.userCostPerMonth ?: coverage.provider.costPerMonth) > 0.0 &&
-            coverage.count <= 1
-        }
-    }
-
-    val filteredCoverages = remember(providerCoverages, filterMode) {
-        when (filterMode) {
-            "ACTIVE" -> providerCoverages.filter { it.provider.isActive }
-            "INACTIVE" -> providerCoverages.filter { !it.provider.isActive }
-            else -> providerCoverages
-        }
-    }
-
-    var showInactiveSection by remember { mutableStateOf(true) }
 
     LazyColumn(
         modifier = Modifier
@@ -1871,791 +1325,146 @@ fun MonthlyRoiContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // 1. Top View Mode Switcher
         item {
-            Row(
+            // Summary Budget card
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
             ) {
-                FilterChip(
-                    selected = selectedViewTab == RoiViewTab.WATCHLIST_OPTIMIZER,
-                    onClick = { selectedViewTab = RoiViewTab.WATCHLIST_OPTIMIZER },
-                    label = { 
-                        Text(
-                            "🎯 Watchlist Match (${activeWatchlist.size})",
-                            fontWeight = if (selectedViewTab == RoiViewTab.WATCHLIST_OPTIMIZER) FontWeight.Bold else FontWeight.Normal
-                        ) 
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                FilterChip(
-                    selected = selectedViewTab == RoiViewTab.SPEND_ANALYTICS,
-                    onClick = { selectedViewTab = RoiViewTab.SPEND_ANALYTICS },
-                    label = { 
-                        Text(
-                            "📊 Spend & Usage",
-                            fontWeight = if (selectedViewTab == RoiViewTab.SPEND_ANALYTICS) FontWeight.Bold else FontWeight.Normal
-                        ) 
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        // ==========================================
-        // TAB A: WATCHLIST COVERAGE & CHURN OPTIMIZER
-        // ==========================================
-        if (selectedViewTab == RoiViewTab.WATCHLIST_OPTIMIZER) {
-            // Recommendation Banners
-            if (topInactiveOpportunity != null && topInactiveOpportunity.count >= 2) {
-                item {
-                    val price = topInactiveOpportunity.provider.userCostPerMonth ?: topInactiveOpportunity.provider.costPerMonth
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f))
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.tertiary,
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text("★", color = MaterialTheme.colorScheme.onTertiary, fontSize = 14.sp)
-                                    }
-                                }
-                                Text(
-                                    "Best Opportunity: ${topInactiveOpportunity.provider.name}",
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                                )
-                            }
-                            Text(
-                                "${topInactiveOpportunity.count} movies on your watchlist are available on ${topInactiveOpportunity.provider.name} right now! Subscribe for 1 month at $${String.format("%.2f", price)} ($${String.format("%.2f", topInactiveOpportunity.costPerTitle ?: 0.0)}/movie) to binge them.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                Button(
-                                    onClick = { onToggleProvider(topInactiveOpportunity.provider.id, true) },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-                                ) {
-                                    Text("Activate ${topInactiveOpportunity.provider.name}", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (topSafeToPause != null) {
-                item {
-                    val price = topSafeToPause.provider.userCostPerMonth ?: topSafeToPause.provider.costPerMonth
-                    val renewalDays = SubscriptionRenewalManager.getDaysUntilRenewal(topSafeToPause.provider)
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
-                        ),
-                        shape = RoundedCornerShape(20.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(28.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text("↓", color = MaterialTheme.colorScheme.onError, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                                Column {
-                                    Text(
-                                        "Safe to Pause: ${topSafeToPause.provider.name}",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                    if (renewalDays != null) {
-                                        Text(
-                                            "Renews in $renewalDays days · Pause before next charge!",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.error,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                            Text(
-                                "Only ${topSafeToPause.count} movie on your watchlist is on ${topSafeToPause.provider.name}. Pause this subscription to save $${String.format("%.2f", price)}/mo.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.85f)
-                            )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                OutlinedButton(
-                                    onClick = { onToggleProvider(topSafeToPause.provider.id, false) },
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text("Mark Paused", fontWeight = FontWeight.SemiBold)
-                                }
-                                Button(
-                                    onClick = { onOpenCancellation(topSafeToPause.provider.id) },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                                ) {
-                                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Pause 1-Click (Official)", fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Filter Chips Header
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "Providers by Watchlist Match",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+                        "MONTHLY STREAMING BURN RATE",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
                     )
-                    TextButton(onClick = onAddServiceClick) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Service", fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    FilterChip(
-                        selected = filterMode == "ALL",
-                        onClick = { filterMode = "ALL" },
-                        label = { Text("All (${providerCoverages.size})") }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "$${String.format(Locale.US, "%.2f", totalCost)}",
+                        style = MaterialTheme.typography.headlineLarge.copy(fontFeatureSettings = "tnum"),
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
-                    FilterChip(
-                        selected = filterMode == "ACTIVE",
-                        onClick = { filterMode = "ACTIVE" },
-                        label = { Text("Active (${providerCoverages.count { it.provider.isActive }})") }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Tracked across ${activeSubscribed.size} active services. Threshold: ≥3h/mo per subscription for positive value.",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
-                    FilterChip(
-                        selected = filterMode == "INACTIVE",
-                        onClick = { filterMode = "INACTIVE" },
-                        label = { Text("Inactive (${providerCoverages.count { !it.provider.isActive }})") }
-                    )
-                }
-            }
-
-            // List of Providers Ranked by Watchlist Match
-            if (filteredCoverages.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
-                    ) {
-                        Text(
-                            "No services match this filter.",
-                            modifier = Modifier.padding(24.dp),
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-            } else {
-                items(filteredCoverages, key = { it.provider.id }) { coverage ->
-                    val provider = coverage.provider
-                    val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
-                    val isTrial = provider.trialEndDate != null && provider.trialEndDate > System.currentTimeMillis()
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onEditProvider(provider) },
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (provider.isActive) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                        ),
-                        shape = RoundedCornerShape(18.dp),
-                        border = if (provider.isActive) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)) else null
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            // Header Row
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            provider.name,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = if (provider.isActive) MaterialTheme.colorScheme.primary
-                                                    else MaterialTheme.colorScheme.surfaceVariant,
-                                            contentColor = if (provider.isActive) MaterialTheme.colorScheme.onPrimary
-                                                           else MaterialTheme.colorScheme.onSurfaceVariant
-                                        ) {
-                                            Text(
-                                                text = if (isTrial) "TRIAL" else if (provider.isActive) "ACTIVE" else "PAUSED",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Black,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                    val renewalDays = if (provider.isActive) SubscriptionRenewalManager.getDaysUntilRenewal(provider) else null
-                                    val isImminentRenewal = renewalDays != null && renewalDays <= 3
-                                    Text(
-                                        text = if (effectiveCost == 0.0) "Free with ads"
-                                               else "$${String.format("%.2f", effectiveCost)}/mo" +
-                                                    (coverage.costPerTitle?.let { " · $${String.format("%.2f", it)} / movie" } ?: "") +
-                                                    (renewalDays?.let { " · Renews in ${it}d" } ?: ""),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (isImminentRenewal) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
-                                        fontWeight = if (isImminentRenewal) FontWeight.Bold else FontWeight.Normal
-                                    )
-                                }
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = { onEditProvider(provider) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Settings,
-                                            contentDescription = "Settings",
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.outline
-                                        )
-                                    }
-
-                                    if (provider.isActive) {
-                                        IconButton(
-                                            onClick = { onOpenCancellation(provider.id) },
-                                            modifier = Modifier.size(32.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Close,
-                                                contentDescription = "Official Cancellation Page",
-                                                modifier = Modifier.size(16.dp),
-                                                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f)
-                                            )
-                                        }
-
-                                        Switch(
-                                            checked = true,
-                                            onCheckedChange = { onToggleProvider(provider.id, false) }
-                                        )
-                                    } else {
-                                        Button(
-                                            onClick = { onToggleProvider(provider.id, true) },
-                                            shape = RoundedCornerShape(10.dp),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                            modifier = Modifier.height(34.dp)
-                                        ) {
-                                            Text("Activate", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Watchlist Count Banner
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = if (coverage.count > 0) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
-                                        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = if (coverage.count > 0) "${coverage.count} Watchlist Movies Available"
-                                               else "No Watchlist Movies Currently Available",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                }
-                            }
-
-                            // Horizontal preview of matching watchlist titles
-                            if (coverage.matchingItems.isNotEmpty()) {
-                                Text(
-                                    text = "Available on your Watchlist:",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    items(coverage.matchingItems.take(8)) { movie ->
-                                        AssistChip(
-                                            onClick = { onMovieClick(movie) },
-                                            label = {
-                                                Text(
-                                                    text = movie.title,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    style = MaterialTheme.typography.labelSmall
-                                                )
-                                            }
-                                        )
-                                    }
-                                    if (coverage.matchingItems.size > 8) {
-                                        item {
-                                            AssistChip(
-                                                onClick = { /* No-op */ },
-                                                label = { Text("+${coverage.matchingItems.size - 8} more") }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
             }
         }
 
-        // ==========================================
-        // TAB B: SPEND & COST-PER-HOUR ANALYTICS
-        // ==========================================
-        if (selectedViewTab == RoiViewTab.SPEND_ANALYTICS) {
-            // Summary Budget Card
+        item {
+            Text(
+                "Subscription Value Analytics (This Month)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        if (worstValueProviders.isEmpty()) {
             item {
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .showcaseTarget(
-                            "roi_summary_card",
-                            "Burn Rate & Potential Savings",
-                            "This card aggregates the total custom pricing for all your active services. The 'Potential Savings' metric totals up any service where you've watched less than 3 hours this month.",
-                            "Use this dashboard to confidently cancel services before they bill you again."
-                        ),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                    )
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                 ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Text(
+                        "To analyze ROI, please configure your active streaming services in Settings.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(24.dp),
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+        } else {
+            items(worstValueProviders, key = { it.providerId }) { stats ->
+                val isPrimeCancelCandidate = stats.totalHours < 3.0
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isPrimeCancelCandidate) {
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
+                        else Color.White.copy(alpha = 0.08f)
+                    ),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "Monthly Streaming Burn Rate",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "$${String.format("%.2f", totalCost)}",
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            "${activeSubscribed.size} active subscriptions",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                        )
-                        
-                        if (potentialSavings > 0) {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
-                                contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    stats.providerName,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                if (isPrimeCancelCandidate) {
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Badge(
+                                        containerColor = MaterialTheme.colorScheme.error,
+                                        contentColor = MaterialTheme.colorScheme.onError
+                                    ) {
+                                        Text("UNJUSTIFIED", fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 Text(
-                                    "Potential Savings: $${String.format("%.2f", potentialSavings)}/mo on underutilized channels",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                    textAlign = TextAlign.Center
+                                    "Watched: ${String.format(Locale.US, "%.1f", stats.totalHours)}h",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                Text(
+                                    "Cost: $${String.format(Locale.US, "%.2f", stats.costPerMonth)}/mo",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+                                    color = MaterialTheme.colorScheme.outline
                                 )
                             }
                         }
-                    }
-                }
-            }
 
-            // Quick Services Ribbon & Add Service Button
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "Quick Subscriptions",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        TextButton(
-                            onClick = onAddServiceClick,
-                            modifier = Modifier.testTag("add_service_btn")
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Add Service", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-
-                    // Horizontal quick toggle chips
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        items(allProviders, key = { it.id }) { provider ->
-                            val effectivePrice = provider.userCostPerMonth ?: provider.costPerMonth
-                            FilterChip(
-                                selected = provider.isActive,
-                                onClick = { onToggleProvider(provider.id, !provider.isActive) },
-                                label = {
-                                    Text(
-                                        text = if (provider.isActive) "${provider.name} ($${String.format("%.2f", effectivePrice)})"
-                                               else "+ ${provider.name}"
-                                    )
-                                },
-                                leadingIcon = if (provider.isActive) {
-                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                                } else null
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Active Subscriptions Section Header
-            item {
-                Text(
-                    "Active Subscriptions & Cost/Hour",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            if (activeSubscribed.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
+                        Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                "No active subscriptions selected",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
+                                "$${String.format(Locale.US, "%.2f", stats.costPerHour)}",
+                                style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+                                fontWeight = FontWeight.Black,
+                                color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                "Tap any service chip above or click 'Add Service' to start tracking your streaming burn rate and cost per hour.",
-                                style = MaterialTheme.typography.bodySmall,
-                                textAlign = TextAlign.Center,
+                                "per hour",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
-                        }
-                    }
-                }
-            } else {
-                items(activeSubscribed, key = { it.id }) { provider ->
-                    val stats = monthlyStats.find { it.providerId == provider.id }
-                    val totalHours = stats?.totalHours ?: 0.0
-                    val costPerHour = stats?.costPerHour ?: (provider.userCostPerMonth ?: provider.costPerMonth)
-                    val isPrimeCancelCandidate = totalHours < 3.0
-                    val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
-                    val isTrial = provider.trialEndDate != null && provider.trialEndDate > System.currentTimeMillis()
-                    val daysLeft = provider.trialEndDate?.let { ((it - System.currentTimeMillis()) / 86400000L).coerceAtLeast(0) }
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onEditProvider(provider) },
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isPrimeCancelCandidate) {
-                                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                            }
-                        ),
-                        border = if (isPrimeCancelCandidate) {
-                            BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
-                        } else null,
-                        shape = RoundedCornerShape(18.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            // Title row with Status & Actions
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text(
-                                            provider.name,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        if (isTrial) {
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                                            ) {
-                                                Text(
-                                                    "TRIAL: ${daysLeft}d left",
-                                                    fontSize = 9.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                )
-                                            }
-                                        } else if (isPrimeCancelCandidate) {
-                                            Badge(
-                                                containerColor = MaterialTheme.colorScheme.error,
-                                                contentColor = MaterialTheme.colorScheme.onError
-                                            ) {
-                                                Text(
-                                                    "CANCEL CANDIDATE",
-                                                    fontSize = 9.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier = Modifier.padding(horizontal = 4.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = { onEditProvider(provider) },
-                                        modifier = Modifier.size(36.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Settings,
-                                            contentDescription = "Edit Price/Trial",
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    Switch(
-                                        checked = provider.isActive,
-                                        onCheckedChange = { onToggleProvider(provider.id, it) },
-                                        modifier = Modifier.padding(start = 4.dp)
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-
-                            // Usage and Financial Metrics
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    Column {
-                                        Text(
-                                            "Watched",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline
-                                        )
-                                        Text(
-                                            "${String.format("%.1f", totalHours)}h this mo",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                    Column {
-                                        Text(
-                                            "Monthly Cost",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline
-                                        )
-                                        Text(
-                                            "$${String.format("%.2f", effectiveCost)}/mo",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                }
-
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(
-                                        "$${String.format("%.2f", costPerHour)}",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Black,
-                                        color = if (isPrimeCancelCandidate) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        "cost per hour",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Inactive / Paused Services Section
-            if (inactiveProviders.isNotEmpty()) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showInactiveSection = !showInactiveSection }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "Paused / Inactive Services (${inactiveProviders.size})",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                        Text(
-                            if (showInactiveSection) "Hide" else "Show",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-
-                if (showInactiveSection) {
-                    items(inactiveProviders, key = { it.id }) { provider ->
-                        val effectiveCost = provider.userCostPerMonth ?: provider.costPerMonth
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onEditProvider(provider) },
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
-                            shape = RoundedCornerShape(14.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        provider.name,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        "Paused · $${String.format("%.2f", effectiveCost)}/mo when active",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = { onEditProvider(provider) },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Settings,
-                                            contentDescription = "Edit",
-                                            modifier = Modifier.size(16.dp),
-                                            tint = MaterialTheme.colorScheme.outline
-                                        )
-                                    }
-                                    Button(
-                                        onClick = { onToggleProvider(provider.id, true) },
-                                        shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(34.dp)
-                                    ) {
-                                        Text("Reactivate", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
                         }
                     }
                 }
@@ -2771,10 +1580,9 @@ fun ManageServicesTabContent(
 fun AddMediaDialog(
     allProviders: List<StreamingProvider>,
     onDismiss: () -> Unit,
-    onAdd: (String, List<String>, String?, String?, String) -> Unit
+    onAdd: (String, List<String>, String?, String?) -> Unit
 ) {
     var titlesInput by remember { mutableStateOf("") }
-    var selectedMediaType by remember { mutableStateOf("MOVIE") }
     var userNotes by remember { mutableStateOf("") }
     var importSource by remember { mutableStateOf("") }
     val selectedProviders = remember { mutableStateListOf<String>() }
@@ -2794,85 +1602,23 @@ fun AddMediaDialog(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Media Type Selector Ribbon
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    FilterChip(
-                        selected = selectedMediaType == "MOVIE",
-                        onClick = { selectedMediaType = "MOVIE" },
-                        label = { Text("🎬 Movie", fontSize = 11.sp) }
-                    )
-                    FilterChip(
-                        selected = selectedMediaType == "TV",
-                        onClick = { selectedMediaType = "TV" },
-                        label = { Text("📺 TV Show", fontSize = 11.sp) }
-                    )
-                    FilterChip(
-                        selected = selectedMediaType == "PODCAST",
-                        onClick = { 
-                            selectedMediaType = "PODCAST"
-                            if (importSource.isBlank()) {
-                                importSource = "Podcast Recommendation"
-                            }
-                        },
-                        label = { Text("🎙️ Podcast Rec", fontSize = 11.sp) }
-                    )
-                }
-
                 OutlinedTextField(
                     value = titlesInput,
                     onValueChange = { titlesInput = it },
-                    label = { 
-                        Text(
-                            when (selectedMediaType) {
-                                "TV" -> "TV Series Title(s)"
-                                "PODCAST" -> "Recommended Title(s)"
-                                else -> "Movie / Show Title(s)"
-                            }
-                        ) 
-                    },
-                    placeholder = { 
-                        Text(
-                            when (selectedMediaType) {
-                                "TV" -> "One title per line\nSeverance\nThe Bear\nShōgun"
-                                "PODCAST" -> "One title per line\nCure\nHeat\nBlow Out"
-                                else -> "One title per line\nSeverance\nDune: Part Two\nThe Godfather"
-                            }
-                        ) 
-                    },
+                    label = { Text("Movie / Show Titles") },
+                    placeholder = { Text("One title per line\nSeverance\nDune: Part Two\nThe Godfather") },
                     singleLine = false,
                     minLines = 3,
                     maxLines = 6,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("add_input_title")
-                        .showcaseTarget(
-                            "add_search_bar",
-                            "Search TMDB",
-                            "Type in any movie or show title. Streamwise will fetch its poster, description, and figure out where you can stream it using the Watchmode API.",
-                            "You can paste a list of titles (one per line) to bulk-add them!"
-                        ),
+                    modifier = Modifier.fillMaxWidth().testTag("add_input_title"),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
                 )
 
                 OutlinedTextField(
                     value = userNotes,
                     onValueChange = { userNotes = it },
-                    label = { 
-                        Text(
-                            if (selectedMediaType == "PODCAST") "Host Quote / Episode Context" 
-                            else "Personal Notes (Optional)"
-                        ) 
-                    },
-                    placeholder = { 
-                        Text(
-                            if (selectedMediaType == "PODCAST") "e.g. \"Kurosawa's modern masterwork\" - The Big Picture" 
-                            else "e.g. Danny recommended this"
-                        ) 
-                    },
+                    label = { Text("Personal Notes (Optional)") },
+                    placeholder = { Text("e.g. Danny recommended this") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2881,12 +1627,7 @@ fun AddMediaDialog(
                     value = importSource,
                     onValueChange = { importSource = it },
                     label = { Text("Source / Origins (Optional)") },
-                    placeholder = { 
-                        Text(
-                            if (selectedMediaType == "PODCAST") "Podcast: The Big Picture" 
-                            else "e.g. Podcast: The Big Picture, Letterboxd, Friend"
-                        ) 
-                    },
+                    placeholder = { Text("e.g. Podcast: The Big Picture") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2954,7 +1695,7 @@ fun AddMediaDialog(
             Button(
                 onClick = {
                     if (parsedTitles.isNotEmpty()) {
-                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource, selectedMediaType)
+                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource)
                     }
                 },
                 enabled = parsedTitles.isNotEmpty(),
@@ -3295,210 +2036,23 @@ fun ProviderSelector(
 }
 
 // ==========================================
-// COMPOSABLE: Letterboxd Import Dialog
-// ==========================================
-@Composable
-fun LetterboxdImportDialog(
-    username: String,
-    isSyncing: Boolean,
-    onSaveUsername: (String) -> Unit,
-    onSyncWeb: (String) -> Unit,
-    onImportCsv: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var inputUsername by remember(username) { mutableStateOf(username) }
-    val context = LocalContext.current
-    val csvLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            try {
-                val text = context.contentResolver.openInputStream(it)?.bufferedReader().use { reader ->
-                    reader?.readText()
-                }
-                if (!text.isNullOrBlank()) {
-                    onImportCsv(text)
-                    onDismiss()
-                }
-            } catch (e: Exception) {
-                // Handled in ViewModel
-            }
-        }
-    }
-
-    AlertDialog(
-        onDismissRequest = { if (!isSyncing) onDismiss() },
-        title = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(Icons.Default.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Text("Import from Letterboxd", fontWeight = FontWeight.Bold)
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Text(
-                    "Import your public Letterboxd watchlist directly with 1 tap, or upload an exported CSV file.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-
-                // Option 1: Live Web Sync
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                    ),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            "Option 1: 1-Tap Public Sync (No Key Required)",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Enter your Letterboxd username to crawl your public watchlist pages automatically.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-
-                        OutlinedTextField(
-                            value = inputUsername,
-                            onValueChange = { inputUsername = it },
-                            label = { Text("Letterboxd Username") },
-                            placeholder = { Text("e.g. your_username") },
-                            singleLine = true,
-                            enabled = !isSyncing,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        Button(
-                            onClick = {
-                                val clean = inputUsername.trim().removePrefix("@")
-                                if (clean.isNotBlank()) {
-                                    onSaveUsername(clean)
-                                    onSyncWeb(clean)
-                                }
-                            },
-                            enabled = !isSyncing && inputUsername.isNotBlank(),
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            if (isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onPrimary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Syncing Watchlist...")
-                            } else {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Sync Live Watchlist", fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-
-                // Option 2: CSV File Import
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                    ),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text(
-                            "Option 2: Import CSV File",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "Upload a watchlist.csv or watched.csv exported from your Letterboxd account settings.",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-
-                        OutlinedButton(
-                            onClick = { csvLauncher.launch("*/*") },
-                            enabled = !isSyncing,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Select CSV File", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isSyncing
-            ) {
-                Text("Close")
-            }
-        }
-    )
-}
-
-// ==========================================
 // COMPOSABLE: Settings Dialog
 // ==========================================
 @Composable
 fun SettingsDialog(
     allProviders: List<StreamingProvider>,
-    onProviderUpdate: (String, Boolean, Double?, Long?, Long?) -> Unit,
+    onProviderToggle: (String, Boolean) -> Unit,
     tmdbApiKey: String,
     onSaveTmdbApiKey: (String) -> Unit,
     watchmodeApiKey: String,
     onSaveWatchmodeApiKey: (String) -> Unit,
     ollamaHost: String,
     onSaveOllamaHost: (String) -> Unit,
-    geminiApiKey: String,
-    onSaveGeminiApiKey: (String) -> Unit,
-    letterboxdUsername: String,
-    onSaveLetterboxdUsername: (String) -> Unit,
-    aiEngine: String,
-    onSaveAiEngine: (String) -> Unit,
-    onSyncLetterboxd: () -> Unit = {},
-    isLetterboxdSyncing: Boolean = false,
     githubToken: String,
     onSaveGithubToken: (String) -> Unit,
-    googleSheetWebhookUrl: String,
-    onSaveGoogleSheetWebhookUrl: (String) -> Unit,
-    fireTvIp: String,
-    onSaveFireTvIp: (String) -> Unit,
-    onSyncGoogleSheet: () -> Unit,
-    onExportLetterboxd: () -> Unit,
-    onSimulateResume: () -> Unit,
-    isProUser: Boolean = false,
-    onOpenPaywall: () -> Unit = {},
-    notifyNewAvailability: Boolean = true,
-    onToggleAvailabilityAlerts: (Boolean) -> Unit = {},
-    onTestAvailabilityAlert: () -> Unit = {},
-    onResetOnboarding: () -> Unit = {},
-    enableBetaFeedback: Boolean = true,
-    onToggleBetaFeedback: (Boolean) -> Unit = {},
-    isDarkMode: Boolean = true,
-    onToggleDarkMode: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
 ) {
-    var activeSubTab by remember { mutableStateOf(0) } // 0: Subs, 1: Cloud/Sheet, 2: Fire TV, 3: APIs, 4: AI/Local, 5: Dev
+    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: APIs (TMDB/Watchmode), 2: AI (Ollama) & About
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -3518,12 +2072,11 @@ fun SettingsDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 520.dp)
+                    .heightIn(max = 500.dp)
             ) {
-                ScrollableTabRow(
+                TabRow(
                     selectedTabIndex = activeSubTab,
                     containerColor = Color.Transparent,
-                    edgePadding = 0.dp,
                     modifier = Modifier.padding(bottom = 16.dp)
                 ) {
                     Tab(
@@ -3534,27 +2087,12 @@ fun SettingsDialog(
                     Tab(
                         selected = activeSubTab == 1,
                         onClick = { activeSubTab = 1 },
-                        text = { Text("Cloud/Sheet", fontSize = 11.sp) }
+                        text = { Text("APIs", fontSize = 11.sp) }
                     )
                     Tab(
                         selected = activeSubTab == 2,
                         onClick = { activeSubTab = 2 },
-                        text = { Text("Fire TV", fontSize = 11.sp) }
-                    )
-                    Tab(
-                        selected = activeSubTab == 3,
-                        onClick = { activeSubTab = 3 },
-                        text = { Text("APIs", fontSize = 11.sp) }
-                    )
-                    Tab(
-                        selected = activeSubTab == 4,
-                        onClick = { activeSubTab = 4 },
                         text = { Text("AI/Local", fontSize = 11.sp) }
-                    )
-                    Tab(
-                        selected = activeSubTab == 5,
-                        onClick = { activeSubTab = 5 },
-                        text = { Text("Dev", fontSize = 11.sp) }
                     )
                 }
 
@@ -3562,243 +2100,61 @@ fun SettingsDialog(
                     0 -> {
                         val scrollState = rememberScrollState()
                         Column(
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .verticalScroll(scrollState)
                         ) {
-                            // Pro Subscription Tier Card
-                            Card(
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (isProUser) Color(0xFFFFD700).copy(alpha = 0.2f)
-                                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(14.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Icon(
-                                                imageVector = Icons.Default.Star,
-                                                contentDescription = null,
-                                                tint = if (isProUser) Color(0xFFFF8C00) else MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Text(
-                                                text = if (isProUser) "Streamwise Pro Active" else "Free Tier (Max 2 Services)",
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                        Text(
-                                            text = if (isProUser) "Unlimited services, TV shows, and alerts active." else "Upgrade for unlimited streaming & auto-alerts.",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-
-                                    Button(
-                                        onClick = onOpenPaywall,
-                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        Text(if (isProUser) "Manage" else "Upgrade", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    }
-                                }
-                            }
-
-                            // Availability Alerts Card
-                            Card(
-                                shape = RoundedCornerShape(14.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Availability Alerts",
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                            Text(
-                                                text = "Alerts when watchlist titles become streamable.",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        Switch(
-                                            checked = notifyNewAvailability,
-                                            onCheckedChange = onToggleAvailabilityAlerts
-                                        )
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = onTestAvailabilityAlert,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Test Availability Notification", fontSize = 12.sp)
-                                    }
-                                }
-                            }
-
-                            // Replay Onboarding Button
-                            OutlinedButton(
-                                onClick = onResetOnboarding,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Re-run First-Time Setup Wizard", fontSize = 12.sp)
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
                             Text(
                                 "Manage Subscriptions",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Toggle active services and configure custom trial pricing to improve ROI calculations.",
+                                "Toggle active services you currently pay for. Free services (Tubi, Freevee, Pluto TV) are free and enabled by default.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             
                             allProviders.forEach { provider ->
-                                ProviderSettingsCard(
-                                    provider = provider,
-                                    onUpdate = { active, cost, start, end -> 
-                                        if (!isProUser && active && allProviders.count { it.isActive && it.id != provider.id } >= 2) {
-                                            onOpenPaywall()
-                                        } else {
-                                            onProviderUpdate(provider.id, active, cost, start, end)
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = provider.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = if (provider.costPerMonth > 0) "$${provider.costPerMonth}/mo" else "Free Platform ($0.0)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
                                         }
+                                        Switch(
+                                            checked = provider.isActive,
+                                            onCheckedChange = { onProviderToggle(provider.id, it) },
+                                            modifier = Modifier.testTag("dialog_switch_${provider.id}")
+                                        )
                                     }
-                                )
+                                }
                             }
                         }
                     }
                     1 -> {
-                        var sheetUrlInput by remember(googleSheetWebhookUrl) { mutableStateOf(googleSheetWebhookUrl) }
-                        val scrollState = rememberScrollState()
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(scrollState)
-                        ) {
-                            Text("Google Sheets & Letterboxd", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text(
-                                "Two-way sync with your Google Sheet Master Ledger (\$0/mo). Enables Gemini scheduled tasks to ingest podcast recommendations directly into your Watchlist.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-
-                            OutlinedTextField(
-                                value = sheetUrlInput,
-                                onValueChange = { sheetUrlInput = it },
-                                label = { Text("Google Apps Script Webhook URL") },
-                                placeholder = { Text("https://script.google.com/macros/s/.../exec") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Button(
-                                onClick = { onSaveGoogleSheetWebhookUrl(sheetUrlInput) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Save Webhook URL")
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                            Button(
-                                onClick = onSyncGoogleSheet,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Sync Watchlist & Watched Now")
-                            }
-
-                            Button(
-                                onClick = onExportLetterboxd,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary)
-                            ) {
-                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Export Letterboxd CSV to Downloads")
-                            }
-                        }
-                    }
-                    2 -> {
-                        var fireIpInput by remember(fireTvIp) { mutableStateOf(fireTvIp) }
-                        val scrollState = rememberScrollState()
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(scrollState)
-                        ) {
-                            Text("Amazon Fire TV Wi-Fi Trigger", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                            Text(
-                                "Configure your Fire TV IP address. When you tap 'Watch' on any movie, Streamwise wakes your Fire TV over Wi-Fi and launches the film natively inside Netflix, Prime, Hulu, or Max in 4K HDR.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-
-                            OutlinedTextField(
-                                value = fireIpInput,
-                                onValueChange = { fireIpInput = it },
-                                label = { Text("Fire TV IP Address") },
-                                placeholder = { Text("e.g. 192.168.1.150") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-
-                            Button(
-                                onClick = { onSaveFireTvIp(fireIpInput) },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Save Fire TV IP")
-                            }
-                        }
-                    }
-                    3 -> {
                         var tmdbInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
                         var wmInput by remember(watchmodeApiKey) { mutableStateOf(watchmodeApiKey) }
                         var showTmdb by remember { mutableStateOf(false) }
@@ -3890,65 +2246,14 @@ fun SettingsDialog(
                                     }
                                 }
                             }
-
-                            // Letterboxd Section
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Letterboxd Watchlist Sync", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("No API key required. Streamwise crawls public Letterboxd watchlists with 1 tap.", style = MaterialTheme.typography.bodySmall)
-
-                                    var lbInput by remember(letterboxdUsername) { mutableStateOf(letterboxdUsername) }
-                                    OutlinedTextField(
-                                        value = lbInput,
-                                        onValueChange = { lbInput = it },
-                                        label = { Text("Letterboxd Username") },
-                                        placeholder = { Text("e.g. username") },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Button(
-                                            onClick = { onSaveLetterboxdUsername(lbInput) },
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text("Save Profile", fontSize = 12.sp)
-                                        }
-
-                                        FilledTonalButton(
-                                            onClick = onSyncLetterboxd,
-                                            enabled = !isLetterboxdSyncing && lbInput.isNotBlank(),
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            if (isLetterboxdSyncing) {
-                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                            } else {
-                                                Text("Sync Watchlist", fontSize = 12.sp)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
-                    4 -> {
+                    2 -> {
                         val context = LocalContext.current
                         var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
-                        var geminiInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
-                        var showGeminiKey by remember { mutableStateOf(false) }
                         var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
                         var showToken by remember { mutableStateOf(false) }
                         val scrollState = rememberScrollState()
-                        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                         
                         // Founder's Manual Loader
                         val manualHtml = remember {
@@ -3966,120 +2271,33 @@ fun SettingsDialog(
                                 .verticalScroll(scrollState)
                         ) {
                             Text(
-                                "AI Intelligence Engine (Olivia)",
+                                "Local AI Synthesis (Ollama)",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                "Choose between ultra-fast Cloud AI (Gemini 2.0 Flash) or local private AI (Ollama).",
+                                "Synthesis 2.0 uses your local Ollama instance (Gemma 4) to analyze watch history for personalized research.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            Row(
+                            OutlinedTextField(
+                                value = hostInput,
+                                onValueChange = { hostInput = it },
+                                label = { Text("Ollama Host IP") },
+                                placeholder = { Text("e.g. 192.168.1.100") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+
+                            Button(
+                                onClick = { onSaveOllamaHost(hostInput) },
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ) {
-                                FilterChip(
-                                    selected = aiEngine != "OLLAMA",
-                                    onClick = { onSaveAiEngine("GEMINI") },
-                                    label = { Text("Gemini 2.0 Flash", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                    leadingIcon = { if (aiEngine != "OLLAMA") Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                                FilterChip(
-                                    selected = aiEngine == "OLLAMA",
-                                    onClick = { onSaveAiEngine("OLLAMA") },
-                                    label = { Text("Local Ollama", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                                    leadingIcon = { if (aiEngine == "OLLAMA") Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) },
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            if (aiEngine != "OLLAMA") {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("Google Gemini 2.0 Flash (Cloud-Native)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                        Text(
-                                            "Cloud streaming advisor & conversational recommendations. Instant response times with no local server required (~$0.01/mo unit economics).",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-
-                                        OutlinedTextField(
-                                            value = geminiInput,
-                                            onValueChange = { geminiInput = it },
-                                            label = { Text("Gemini API Key (BYOK)") },
-                                            placeholder = { Text("AIzaSy...") },
-                                            singleLine = true,
-                                            visualTransformation = if (showGeminiKey) VisualTransformation.None else PasswordVisualTransformation(),
-                                            trailingIcon = {
-                                                IconButton(onClick = { showGeminiKey = !showGeminiKey }) {
-                                                    Icon(
-                                                        imageVector = if (showGeminiKey) Icons.Default.Clear else Icons.Default.Search,
-                                                        contentDescription = null
-                                                    )
-                                                }
-                                            },
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Button(
-                                            onClick = { onSaveGeminiApiKey(geminiInput) },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Save Gemini Key", fontSize = 12.sp)
-                                        }
-
-                                        TextButton(
-                                            onClick = { uriHandler.openUri("https://aistudio.google.com/apikey") },
-                                            modifier = Modifier.align(Alignment.CenterHorizontally)
-                                        ) {
-                                            Text("Get free API Key at Google AI Studio ↗", style = MaterialTheme.typography.labelSmall)
-                                        }
-                                    }
-                                }
-                            } else {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Text("Local Ollama Server", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                        Text(
-                                            "Private, offline AI running on your local home network (e.g. Gemma 4).",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-
-                                        OutlinedTextField(
-                                            value = hostInput,
-                                            onValueChange = { hostInput = it },
-                                            label = { Text("Ollama Host IP") },
-                                            placeholder = { Text("e.g. 192.168.1.100") },
-                                            singleLine = true,
-                                            modifier = Modifier.fillMaxWidth()
-                                        )
-
-                                        Button(
-                                            onClick = { onSaveOllamaHost(hostInput) },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Save Ollama Host", fontSize = 12.sp)
-                                        }
-                                    }
-                                }
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Save Ollama Host")
                             }
 
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
@@ -4132,6 +2350,8 @@ fun SettingsDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             
+                            // Basic HTML renderer (strips tags for standard Text view, 
+                            // though full WebView would be better for complex styles)
                             val cleanText = remember(manualHtml) {
                                 manualHtml.replace(Regex("<[^>]*>"), "")
                                     .replace("&nbsp;", " ")
@@ -4144,86 +2364,6 @@ fun SettingsDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                             )
-                        }
-                    }
-                    5 -> {
-                        val scrollState = rememberScrollState()
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(scrollState)
-                        ) {
-                            Text(
-                                "Developer & Simulation",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Test lifecycle background transitions, check-in sheets, and diagnostic reporting.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                                    Text(
-                                        "Enable Beta Feedback",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        "Display floating feedback button on all screens to report issues directly to Jules & Antigravity.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                                Switch(
-                                    checked = enableBetaFeedback,
-                                    onCheckedChange = onToggleBetaFeedback,
-                                    modifier = Modifier.testTag("enable_feedback_switch")
-                                )
-                            }
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                                    Text(
-                                        "Cinematic Dark Mode",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        "OLED theater dark theme optimized for streaming cinephiles.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                                Switch(
-                                    checked = isDarkMode,
-                                    onCheckedChange = onToggleDarkMode,
-                                    modifier = Modifier.testTag("dark_mode_switch")
-                                )
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-
-                            OutlinedButton(
-                                onClick = onSimulateResume,
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Simulate App Resume (Foreground Check)")
-                            }
                         }
                     }
                 }
@@ -4289,21 +2429,6 @@ fun MovieDetailsBottomSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     
-                    val yearRuntimeText = buildString {
-                        if (!item.releaseYear.isNullOrBlank()) append(item.releaseYear)
-                        if (item.runtimeMinutes != null && item.runtimeMinutes > 0) {
-                            if (isNotEmpty()) append(" · ")
-                            append("${item.runtimeMinutes} min")
-                        }
-                    }
-                    if (yearRuntimeText.isNotBlank()) {
-                        Text(
-                            text = yearRuntimeText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-
                     Spacer(modifier = Modifier.height(8.dp))
 
                     if (item.rating != null && item.rating > 0.0) {
@@ -4580,6 +2705,610 @@ fun MovieDetailsBottomSheet(
 }
 
 // ==========================================
+// COMPOSABLE: Explore Tab (AI & Cinematic Culture)
+// ==========================================
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ExploreTabContent(
+    chatMessages: List<com.example.data.remote.OllamaChatMessage>,
+    isLoading: Boolean,
+    onSendMessage: (String) -> Unit,
+    geminiAnalysis: com.example.data.model.GeminiAnalysisResult?,
+    isGeminiAnalyzing: Boolean,
+    onRefreshGeminiAnalysis: () -> Unit,
+    podcastEpisodes: List<com.example.data.model.PodcastEpisode>,
+    movieNews: List<com.example.data.model.MovieNewsItem>
+) {
+    var selectedSubTab by remember { mutableStateOf(0) } // 0: Discover & Insights, 1: Chat with Olivia
+    val uriHandler = LocalUriHandler.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("explore_tab_content")
+    ) {
+        // Sub-Navigation Selector: "Discover & Insights" vs "Chat with Olivia"
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedSubTab == 0,
+                    onClick = { selectedSubTab = 0 },
+                    label = { Text("Discover & Insights", fontWeight = FontWeight.Bold) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f).testTag("subtab_discover"),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+                FilterChip(
+                    selected = selectedSubTab == 1,
+                    onClick = { selectedSubTab = 1 },
+                    label = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Chat with Olivia", fontWeight = FontWeight.Bold)
+                            if (chatMessages.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            "${chatMessages.size}",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f).testTag("subtab_chat"),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+            }
+        }
+
+        if (selectedSubTab == 0) {
+            // Discover & Insights Content
+            val scrollState = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // 1. GEMINI PRO INTELLIGENCE CARD (Custom content driven by Gemini Pro API analysis)
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("gemini_pro_card"),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Card Header
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.AutoAwesome,
+                                            contentDescription = "Gemini Pro",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Column {
+                                    Text(
+                                        "CINEPHILE SYNTHESIS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        "Powered by Gemini 3.1 Pro",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+
+                            // Refresh Analysis Button
+                            IconButton(
+                                onClick = onRefreshGeminiAnalysis,
+                                enabled = !isGeminiAnalyzing,
+                                modifier = Modifier.size(36.dp).testTag("refresh_gemini_button")
+                            ) {
+                                if (isGeminiAnalyzing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh Gemini Pro Analysis",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+
+                        if (geminiAnalysis != null) {
+                            // Headline
+                            Text(
+                                text = geminiAnalysis.headline,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            // Narrative synthesis
+                            Text(
+                                text = geminiAnalysis.narrative,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 20.sp
+                            )
+
+                            // Detected Core Themes Chips
+                            if (geminiAnalysis.themes.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        "VAULT THEMES",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        geminiAnalysis.themes.forEach { theme ->
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                            ) {
+                                                Text(
+                                                    text = theme,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Auteur & Cinematographer Ties
+                            if (geminiAnalysis.auteurConnections.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        "AUTEUR & STYLISTIC LINKS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    geminiAnalysis.auteurConnections.forEach { connection ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Star,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Text(
+                                                text = connection,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Curated Recommendations
+                            if (geminiAnalysis.recommendations.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        "GEMINI PRO TAILORED PICKS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    geminiAnalysis.recommendations.forEach { (title, reason) ->
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.surface,
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(10.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.Top
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.PlayArrow,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(18.dp).padding(top = 2.dp)
+                                                )
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = title,
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = reason,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Action button: Chat about this analysis
+                            OutlinedButton(
+                                onClick = {
+                                    selectedSubTab = 1
+                                    onSendMessage("Tell me more about the cinema analysis of my vault: ${geminiAnalysis.headline}")
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Discuss Analysis with Olivia", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else if (isGeminiAnalyzing) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Synthesizing vault profile with Gemini Pro...", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+
+                // 2. PODCAST EPISODES (Matched to User's Saved Content)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Headphones,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "CINEMA PODCASTS",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Text(
+                            text = "Vault Aligned",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    podcastEpisodes.forEach { pod ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = pod.showTitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = pod.duration,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+
+                                Text(
+                                    text = pod.episodeTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Text(
+                                    text = pod.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                uriHandler.openUri(pod.podcastUrl)
+                                            } catch (e: Exception) {
+                                                // Fallback safely
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f).height(34.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Listen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            selectedSubTab = 1
+                                            onSendMessage("What do you think about the discussion in this episode: '${pod.showTitle} - ${pod.episodeTitle}'?")
+                                        },
+                                        modifier = Modifier.weight(1f).height(34.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Ask Olivia", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. MOVIE NEWS & FILM CULTURE
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Article,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "INDUSTRY DISPATCHES",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Text(
+                            text = "Live Cinephile Feed",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    movieNews.forEach { news ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                    ) {
+                                        Text(
+                                            text = news.category,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "${news.source} • ${news.date}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+
+                                Text(
+                                    text = news.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Text(
+                                    text = news.summary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(
+                                        onClick = {
+                                            selectedSubTab = 1
+                                            onSendMessage("Tell me more about this news item: '${news.title}'")
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Discuss with Olivia", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 4. QUICK CONVERSATION STARTERS (Jump to Chat)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "PROMPT OLIVIA DIRECTLY",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.outline,
+                        letterSpacing = 0.5.sp
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val prompts = listOf(
+                            "What should I watch tonight?",
+                            "Recommend a 70s neo-noir",
+                            "Explain Denis Villeneuve's style",
+                            "Which service should I cancel?"
+                        )
+                        prompts.forEach { p ->
+                            SuggestionChip(
+                                onClick = {
+                                    selectedSubTab = 1
+                                    onSendMessage(p)
+                                },
+                                label = { Text(p, fontSize = 11.sp) },
+                                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        } else {
+            // SubTab 1: Chat with Olivia
+            AgentChatTabContent(
+                chatMessages = chatMessages,
+                isLoading = isLoading,
+                onSendMessage = onSendMessage
+            )
+        }
+    }
+}
+
+// ==========================================
 // COMPOSABLE: Agent Chat Tab
 // ==========================================
 @Composable
@@ -4670,34 +3399,6 @@ fun AgentChatTabContent(
             }
         }
 
-        // Quick Action Prompt Chips
-        val quickPrompts = listOf(
-            "🎬 What to watch tonight?",
-            "💡 Which subscription to cancel?",
-            "⏱️ Shortest movie on list",
-            "🗓️ When does Severance return?",
-            "🍿 High-rated thriller"
-        )
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(quickPrompts) { prompt ->
-                SuggestionChip(
-                    onClick = { onSendMessage(prompt) },
-                    label = { Text(prompt, style = MaterialTheme.typography.bodySmall) },
-                    colors = SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(12.dp)
-                )
-            }
-        }
-
         // Input Field
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -4708,21 +3409,16 @@ fun AgentChatTabContent(
                 value = inputMessage,
                 onValueChange = { inputMessage = it },
                 placeholder = { Text("What should I watch tonight?") },
-                modifier = Modifier
-                    .weight(1f)
-                    .showcaseTarget(
-                        "agent_input",
-                        "AI Assistant Prompt",
-                        "Ask the AI for personalized recommendations based on your mood. It's completely private.",
-                        "Use natural language like 'I want a sci-fi movie from the 80s'."
-                    ),
+                modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(24.dp),
                 maxLines = 4
             )
             FloatingActionButton(
                 onClick = {
-                    onSendMessage(inputMessage)
-                    inputMessage = ""
+                    if (inputMessage.isNotBlank()) {
+                        onSendMessage(inputMessage)
+                        inputMessage = ""
+                    }
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -4730,139 +3426,7 @@ fun AgentChatTabContent(
                 shape = CircleShape,
                 elevation = FloatingActionButtonDefaults.elevation(0.dp)
             ) {
-                Icon(Icons.Default.Send, contentDescription = "Send message")
-            }
-        }
-    }
-}
-
-@Composable
-fun ProviderSettingsCard(
-    provider: StreamingProvider,
-    onUpdate: (Boolean, Double?, Long?, Long?) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val isTrialWarning = remember(provider.trialEndDate) {
-        if (provider.trialEndDate != null) {
-            val daysLeft = (provider.trialEndDate - System.currentTimeMillis()) / (1000 * 60 * 60 * 24)
-            daysLeft in 0..3
-        } else false
-    }
-    val isExpired = remember(provider.trialEndDate) {
-        if (provider.trialEndDate != null) {
-            System.currentTimeMillis() > provider.trialEndDate
-        } else false
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
-        colors = CardDefaults.cardColors(
-            containerColor = if (isExpired) MaterialTheme.colorScheme.errorContainer.copy(alpha=0.2f) 
-                             else if (isTrialWarning) MaterialTheme.colorScheme.tertiaryContainer.copy(alpha=0.4f)
-                             else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        ),
-        shape = RoundedCornerShape(10.dp)
-    ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = provider.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    val costLabel = if (provider.costPerMonth == 0.0) "Free Platform ($0.0)"
-                        else if (provider.userCostPerMonth != null) "Custom: $${provider.userCostPerMonth}/mo"
-                        else "$${provider.costPerMonth}/mo"
-                    Text(
-                        text = costLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    if (isExpired) {
-                        Text(
-                            text = "TRIAL EXPIRED",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else if (isTrialWarning) {
-                        Text(
-                            text = "TRIAL ENDING SOON",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-                Switch(
-                    checked = provider.isActive,
-                    onCheckedChange = { onUpdate(it, provider.userCostPerMonth, provider.subscriptionStartDate, provider.trialEndDate) },
-                    modifier = Modifier.testTag("dialog_switch_${provider.id}")
-                )
-            }
-            
-            if (expanded && provider.costPerMonth > 0) {
-                Spacer(modifier = Modifier.height(12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                var customCostInput by remember { mutableStateOf(provider.userCostPerMonth?.toString() ?: "") }
-                OutlinedTextField(
-                    value = customCostInput,
-                    onValueChange = { customCostInput = it },
-                    label = { Text("Custom Monthly Price (e.g. 0.99 for trial)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .showcaseTarget(
-                            "custom_price_input",
-                            "Custom Subscription Pricing",
-                            "Enter exactly what you are paying right now for this service. If you're on a promo rate, type it in here.",
-                            "Use this to keep your ROI calculations exact. When the promo ends, change it back!"
-                        )
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                // For simplicity we use a text input for days until trial ends to compute the timestamp
-                var trialDaysInput by remember { mutableStateOf("") }
-                OutlinedTextField(
-                    value = trialDaysInput,
-                    onValueChange = { trialDaysInput = it },
-                    label = { Text("Days until trial ends (leave blank if none)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .showcaseTarget(
-                            "trial_days_input",
-                            "Trial Expiration Tracker",
-                            "Set a countdown for free trials. Streamwise will show a warning when it's almost up, and automatically disable the service in your app when it expires.",
-                            "Use this whenever you start a free week or month on a service so you don't forget to cancel!"
-                        )
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = { expanded = false }) { Text("Cancel") }
-                    Button(onClick = {
-                        val parsedCost = customCostInput.toDoubleOrNull()
-                        val parsedDays = trialDaysInput.toLongOrNull()
-                        val newEndDate = if (parsedDays != null) System.currentTimeMillis() + (parsedDays * 24 * 60 * 60 * 1000) else provider.trialEndDate
-                        
-                        onUpdate(provider.isActive, parsedCost, provider.subscriptionStartDate, newEndDate)
-                        expanded = false
-                    }) {
-                        Text("Save Details")
-                    }
-                }
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send message")
             }
         }
     }
