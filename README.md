@@ -53,13 +53,17 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 
 ### The 4 Main Tabs
 1. **Watchlist:** Your upcoming queue with dynamic live title counts (`Watchlist • X Titles`, sticky summary `Showing X of Y titles`, and Bottom Nav badge counters). Features natural scrolling **Spotlight** carousel ("Ready to Stream") with a sticky Search bar, and an **Advanced Filters** modal sheet supporting multi-genre selection, 19 streaming platforms, minimum rating thresholds (6.0+ to 8.5+), release eras, and **Cinema Podcasts & Media Mentions** (*What Went Wrong*, *The Rewatchables*, *The Big Picture*, *Blank Check*, *How Did This Get Made?*) with main film vs any mention sub-filtering.
-2. **Watched:** The **Cinephile Vault & Diary** (live count badge `Badge { 1104 }`). Tracks total films logged, estimated watch hours, average rating, and top genres. Displays a chronological month-by-month diary timeline with formatted watch dates (`Watched Sep 4, 2026`), user notes, and a toggleable Poster Wall Grid. Includes **Live Letterboxd RSS Sync** and **1-tap Letterboxd Google Sheet Sync** via Apps Script.
+2. **Watched:** The **Cinephile Vault & Diary** (live count badge `Badge { 1104 }`). Tracks total films logged, estimated watch hours, average rating, and top genres. Displays a chronological month-by-month diary timeline with formatted watch dates (`Watched Sep 4, 2026`), user notes, and a toggleable Poster Wall Grid. Includes **Live Letterboxd RSS Sync**, **Local CSV & ZIP File Import** (`watchlist.csv`, `watched.csv`, `diary.csv`, `ratings.csv`, and full account ZIP archives), **Two-Way Letterboxd Export** (`Title,Year,Rating10,WatchedDate`), and **1-tap Letterboxd Google Sheet Sync** via Apps Script ($0/mo).
 3. **My Services:** Track which streaming providers you actively pay for, your monthly spend, and real-world hourly return on investment. Tap any provider card to open the **Service Detail Bottom Sheet**: edit pricing/tier, set renewal day, track subscription tenure (months, days, start date), view watch time vs ROI $/hr, and launch 1-tap live deal searches on *The Streamable Deals*, *Slickdeals*, *Doctor of Credit*, and *Google Deals*.
-4. **Explore:** Deep taste analytics featuring the Cinephile Taste Matrix, interactive synthesized film insights, and live chat with Olivia powered by local Ollama or Gemini Pro.
+4. **Explore:** Modular 4-subtab cinematic culture hub designed to eliminate excessive scrolling:
+   - `✨ AI & Taste`: Dynamic Cinephile Taste Matrix, Gemini 3.1 Pro Cinephile Synthesis with core themes and auteur ties, tailored picks with 1-tap `+ Watchlist`, and quick conversation prompts.
+   - `💬 Olivia AI`: Dedicated fullscreen conversational cinema assistant with message badge counter.
+   - `🎙️ Podcasts Hub`: Filterable podcast directory (*What Went Wrong*, *The Rewatchables*, *The Big Picture*, *Blank Check*, *How Did This Get Made?*) with episode counts, `▶️ Listen` and `💬 Ask Olivia`.
+   - `📰 Film News Hub`: Live cinephile dispatches categorized by *Box Office*, *Festivals*, *Auteurs*, and *Streaming* with 1-tap `💬 Discuss with Olivia`.
 
 ### ⚙️ Unified 4-Tab Settings Hub
 Access all configuration options from the Top App Bar gear icon:
-- **Profile & Letterboxd:** User display name, Letterboxd username, live RSS sync trigger, and Google Sheet webhook.
+- **Profile & Letterboxd:** User display name, Letterboxd username (`scriptedmind`), live RSS sync trigger, local CSV/ZIP file picker, export for Letterboxd, 1-tap direct web links (`watchlist/export/`, `settings/data/`, `import/`), and Google Sheet webhook.
 - **Services (19):** Toggle active subscriptions and customize monthly pricing across all 19 providers.
 - **Guides & Docs:** Instant offline viewers for the in-app User Guide and Changelog.
 - **Updates & System:** Built-in **GitHub OTA Auto-Updater** (checking releases, downloading APKs, and launching Android Package Installer) plus API secrets management.
