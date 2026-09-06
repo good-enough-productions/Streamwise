@@ -3,6 +3,7 @@ package com.example.ui
 import android.app.Application
 import android.net.Uri
 import org.json.JSONObject
+import org.json.JSONArray
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -97,6 +98,131 @@ class StreamViewModel(
     // Beta Feedback FAB Setting
     private val _enableBetaFeedback = MutableStateFlow(userPreferences.enableBetaFeedback)
     val enableBetaFeedback: StateFlow<Boolean> = _enableBetaFeedback.asStateFlow()
+
+    // Spotlight Collapsed Setting
+    private val _isSpotlightCollapsed = MutableStateFlow(userPreferences.isSpotlightCollapsed)
+    val isSpotlightCollapsed: StateFlow<Boolean> = _isSpotlightCollapsed.asStateFlow()
+
+    fun toggleSpotlightCollapsed() {
+        val newVal = !_isSpotlightCollapsed.value
+        _isSpotlightCollapsed.value = newVal
+        userPreferences.isSpotlightCollapsed = newVal
+    }
+
+    // Google Sheet Webhook Setting
+    private val _googleSheetWebhookUrl = MutableStateFlow(userPreferences.googleSheetWebhookUrl)
+    val googleSheetWebhookUrl: StateFlow<String> = _googleSheetWebhookUrl.asStateFlow()
+
+    fun saveGoogleSheetWebhookUrl(url: String) {
+        val trimmed = url.trim()
+        userPreferences.googleSheetWebhookUrl = trimmed
+        _googleSheetWebhookUrl.value = trimmed
+        _statusMessage.value = "Google Sheet webhook URL saved."
+    }
+
+    // Google Sheet Sync in Progress State
+    private val _isSyncingToSheet = MutableStateFlow(false)
+    val isSyncingToSheet: StateFlow<Boolean> = _isSyncingToSheet.asStateFlow()
+
+    /**
+     * 1-Tap Letterboxd Sync: Sends Watched Vault and Watchlist data directly to the Google Sheet backend.
+     */
+    fun syncLetterboxdToGoogleSheet() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val webhookUrl = userPreferences.googleSheetWebhookUrl
+            if (webhookUrl.isBlank()) {
+                _statusMessage.value = "Please configure Google Sheet Webhook URL in Settings first."
+                return@launch
+            }
+
+            _isSyncingToSheet.value = true
+            _statusMessage.value = "Syncing Letterboxd archive to Google Sheet backend..."
+            try {
+                val allItems = repository.allMediaItems.first()
+                val watched = allItems.filter { it.status == MediaStatus.WATCHED.name }
+                val watchlist = allItems.filter { it.status != MediaStatus.WATCHED.name }
+
+                val watchedArray = JSONArray()
+                watched.take(600).forEach { item ->
+                    val obj = JSONObject().apply {
+                        put("title", item.title)
+                        put("rating", item.rating ?: JSONObject.NULL)
+                        put("watchedAt", item.watchedAt ?: item.addedAt)
+                        put("genres", item.genres ?: "")
+                        put("notes", item.userNotes ?: "")
+                        put("providers", item.providerIds ?: "")
+                    }
+                    watchedArray.put(obj)
+                }
+
+                val watchlistArray = JSONArray()
+                watchlist.take(300).forEach { item ->
+                    val obj = JSONObject().apply {
+                        put("title", item.title)
+                        put("rating", item.rating ?: JSONObject.NULL)
+                        put("addedAt", item.addedAt)
+                        put("genres", item.genres ?: "")
+                        put("providers", item.providerIds ?: "")
+                    }
+                    watchlistArray.put(obj)
+                }
+
+                val payload = JSONObject().apply {
+                    put("action", "syncLetterboxd")
+                    put("app", "Streamwise")
+                    put("timestamp", System.currentTimeMillis())
+                    put("totalWatchedCount", watched.size)
+                    put("totalWatchlistCount", watchlist.size)
+                    put("watched", watchedArray)
+                    put("watchlist", watchlistArray)
+                }
+
+                var currentUrl = webhookUrl
+                var conn: HttpURLConnection? = null
+                var redirects = 0
+                var code = 0
+
+                // Follow potential HTTP 302 redirects commonly returned by Google Apps Script web apps
+                while (redirects < 5) {
+                    val url = URL(currentUrl)
+                    conn = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "POST"
+                        connectTimeout = 15000
+                        readTimeout = 25000
+                        instanceFollowRedirects = false
+                        doOutput = true
+                        setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+                        setRequestProperty("Accept", "application/json")
+                    }
+                    conn.outputStream.use { os ->
+                        os.write(payload.toString().toByteArray(Charsets.UTF_8))
+                    }
+                    code = conn.responseCode
+                    if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == 307 || code == 308) {
+                        val newLocation = conn.getHeaderField("Location")
+                        if (!newLocation.isNullOrBlank()) {
+                            currentUrl = newLocation
+                            redirects++
+                            conn.disconnect()
+                            continue
+                        }
+                    }
+                    break
+                }
+
+                if (code in 200..302) {
+                    _statusMessage.value = "✓ Synced ${watched.size} watched & ${watchlist.size} watchlist titles to Google Sheet!"
+                } else {
+                    _statusMessage.value = "Google Sheet sync finished with code $code"
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Failed to sync to Google Sheet", e)
+                _statusMessage.value = "Sync error: ${e.localizedMessage ?: "Network failed"}"
+            } finally {
+                _isSyncingToSheet.value = false
+            }
+        }
+    }
 
     init {
         // Run database deduplication on startup to eliminate any duplicate entries

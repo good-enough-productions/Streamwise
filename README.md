@@ -52,10 +52,14 @@ Streamwise is built for rapid iteration. Every push to GitHub triggers an automa
 ## 🎬 Master the Interface
 
 ### The 4 Main Tabs
-1. **Watchlist:** Your upcoming queue. Tap **Refresh (↺)** to sync latest metadata and Agent research.
-2. **Watched:** Your historical library. Long-press to see Olivia's insights on why you loved it.
-3. **ROI Stats:** Track how much value you're getting from Netflix, Hulu, etc., based on watch time.
-4. **Agent (Chat):** Speak directly with Olivia. You can ask for recommendations or even **request new app features** (which she will submit to GitHub as real issues!).
+1. **Watchlist:** Your upcoming queue. Features a **Collapsible Spotlight** carousel ("Ready to Stream") and an **Advanced Filters** sheet supporting multi-genre selection, provider filtering, minimum rating thresholds (6.0+ to 8.5+), and release era sorting.
+2. **Watched:** The **Cinephile Vault & Diary**. Tracks total films logged, estimated watch hours, average rating, and top genres. Displays a chronological month-by-month diary timeline with formatted watch dates (`Watched Sep 4, 2026`), user notes, and a toggleable Poster Wall Grid. Includes **1-tap Letterboxd Google Sheet Sync** via Apps Script.
+3. **My Services:** Track which streaming providers you actively pay for, your monthly spend, and real-world hourly return on investment.
+4. **Explore:** Deep taste analytics featuring the Cinephile Taste Matrix, interactive synthesized film insights, and live chat with Olivia powered by local Ollama or Gemini Pro.
+
+### 💡 Beta Feedback & Living Backlog
+- Global floating feedback button captures screen diagnostics.
+- Feedback lands on the GitHub backlog by default; check **Assign to Jules (Autonomous AI)** in the feedback dialog for autonomous AI code fixes.
 
 ---
 

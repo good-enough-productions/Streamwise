@@ -86,6 +86,7 @@ fun FeedbackDialog(
     var description by remember { mutableStateOf("") }
     var includeScreenshot by remember { mutableStateOf(true) }
     var capturedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var delegateToJules by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -128,7 +129,7 @@ fun FeedbackDialog(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Creates GitHub Issue · Auto-triaged by Jules",
+                            text = if (delegateToJules) "Creates GitHub Issue · Auto-triaged by Jules" else "Creates GitHub Issue · Saved to Backlog",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -231,6 +232,38 @@ fun FeedbackDialog(
                         }
                     }
 
+                    // Delegate to Jules AI Switch
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                Text(
+                                    text = "Assign to Jules (Autonomous AI)",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (delegateToJules) "Alerts Jules bot to attempt automated code fix" else "Saved as backlog GitHub Issue for team review",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            Switch(
+                                checked = delegateToJules,
+                                onCheckedChange = { delegateToJules = it }
+                            )
+                        }
+                    }
+
                     // Diagnostic info preview
                     Surface(
                         shape = RoundedCornerShape(10.dp),
@@ -278,7 +311,8 @@ fun FeedbackDialog(
                                     bitmap = if (includeScreenshot) capturedBitmap else null,
                                     tab = currentTabName,
                                     watchlistCount = watchlistCount,
-                                    watchedCount = watchedCount
+                                    watchedCount = watchedCount,
+                                    delegateToJules = delegateToJules
                                 )
                                 isSubmitting = false
                                 if (result.isSuccess) {
@@ -341,13 +375,19 @@ private suspend fun submitIssue(
     bitmap: Bitmap?,
     tab: String,
     watchlistCount: Int,
-    watchedCount: Int
+    watchedCount: Int,
+    delegateToJules: Boolean = false
 ): Result<String> = withContext(Dispatchers.IO) {
     try {
         val labelType = when (type) {
             "Bug Report" -> "bug"
             "Feature Request" -> "enhancement"
             else -> "ui"
+        }
+
+        val labelsList = mutableListOf("feedback", "streamwise", labelType)
+        if (delegateToJules) {
+            labelsList.addAll(listOf("jules", "jules-triage"))
         }
 
         val base64Img = bitmap?.let { bmp ->
@@ -361,6 +401,7 @@ private suspend fun submitIssue(
             - **Active Screen:** $tab
             - **Watchlist Count:** $watchlistCount
             - **Watched Vault Count:** $watchedCount
+            - **Delegate to Jules:** $delegateToJules
             - **Device:** ${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE}, API ${Build.VERSION.SDK_INT})
         """.trimIndent()
 
@@ -375,7 +416,7 @@ private suspend fun submitIssue(
             }
             appendLine()
             appendLine("---")
-            appendLine("*Auto-generated via Streamwise Jules Feedback Loop*")
+            appendLine("*Auto-generated via Streamwise Feedback Loop*")
         }
 
         // 1. Direct GitHub Issue submission if token present
@@ -383,7 +424,7 @@ private suspend fun submitIssue(
             val payload = JSONObject().apply {
                 put("title", "[$type]: $title")
                 put("body", fullBody)
-                put("labels", JSONArray(listOf("feedback", "streamwise", labelType, "jules", "jules-triage")))
+                put("labels", JSONArray(labelsList))
             }
 
             val url = URL("https://api.github.com/repos/good-enough-productions/Streamwise/issues")
@@ -400,7 +441,8 @@ private suspend fun submitIssue(
             conn.outputStream.use { it.write(payload.toString().toByteArray()) }
             val code = conn.responseCode
             if (code in 200..299) {
-                return@withContext Result.success("GitHub Issue created and assigned to Jules!")
+                val msg = if (delegateToJules) "GitHub Issue created and assigned to Jules!" else "GitHub Issue logged to backlog for review!"
+                return@withContext Result.success(msg)
             }
         }
 
@@ -410,6 +452,8 @@ private suspend fun submitIssue(
             put("repo", "Streamwise")
             put("title", "[$type]: $title")
             put("body", fullBody)
+            put("assignToJules", delegateToJules)
+            put("labels", JSONArray(labelsList))
             if (base64Img != null) {
                 put("imageBase64", base64Img)
             }
@@ -429,7 +473,8 @@ private suspend fun submitIssue(
             val responseText = conn.inputStream.bufferedReader().use { it.readText() }
             val json = try { JSONObject(responseText) } catch (e: Exception) { null }
             val issueUrl = json?.optString("issueUrl")
-            val msg = if (!issueUrl.isNullOrBlank()) "Feedback submitted! Jules issue opened." else "Feedback submitted to Jules for triage!"
+            val baseMsg = if (delegateToJules) "Feedback submitted & assigned to Jules!" else "Feedback logged to project backlog!"
+            val msg = if (!issueUrl.isNullOrBlank()) "$baseMsg Issue opened." else baseMsg
             return@withContext Result.success(msg)
         } else {
             val errorText = try { conn.errorStream?.bufferedReader()?.use { it.readText() } } catch (e: Exception) { null }

@@ -2,6 +2,22 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.3.0] - 2026-09-06
+
+### Added
+- **Collapsible & Non-Sticky Spotlight (Issue #7)**: Added persistent collapse/expand toggle on the "Spotlight: Ready to Stream" carousel with animated chevron, freeing up the top 1/3 of the screen for denser watchlist browsing.
+- **Advanced Multi-Dimensional Filters Sheet (Issue #8)**: Replaced cramped horizontal filter chip rows with a clean top ribbon ("My Services", "Free w/ Ads", quick dismiss tags) and an expandable "Filters" modal sheet supporting streaming provider checkboxes, genre chips, minimum rating thresholds (6.0+ to 8.5+), release era filters, and sorting.
+- **Reworked Watched Cinephile Vault & Diary (Issue #9)**:
+  - Added Cinephile Vault statistics card displaying total logged movies, estimated watch hours, average rating, and top 4 favorite genres.
+  - Grouped watch diary entries chronologically by Year-Month (`September 2026`, etc.).
+  - Added dedicated `WatchedMediaCard` featuring formatted watch dates (`Watched Sep 4, 2026`), user notes/Letterboxd excerpts, and 1-tap re-watch intent triggers.
+  - Added view mode toggle between chronological Diary Timeline and visual Poster Wall Grid (`WatchedGridPosterCard`).
+- **1-Tap Letterboxd Google Sheet Sync (Issue #10)**:
+  - Added "Sync to Google Sheet" button in Watched tab that exports watched history and watchlist items into structured JSON payloads sent directly to a Google Apps Script webhook ($0/month architecture).
+  - Configurable Google Sheet Webhook URL in Settings -> APIs tab.
+  - Fallback Letterboxd web search action directly inside Movie Details Bottom Sheet.
+- **Global Backlog & Jules Opt-In Standard**: Feedback issues now land directly on the living GitHub backlog by default, reserving the `jules` / `jules-triage` autonomous AI labels for when the user explicitly checks "Assign to Jules (Autonomous AI)".
+
 ## [1.2.2] - 2026-09-06
 
 ### Fixed
