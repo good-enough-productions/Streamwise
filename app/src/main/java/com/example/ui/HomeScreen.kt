@@ -96,7 +96,7 @@ fun HomeScreen(
                             when (selectedTab) {
                                 0 -> "Watchlist"
                                 1 -> "Watched History"
-                                2 -> "ROI Analytics"
+                                2 -> "My Services"
                                 3 -> "Explore & Cinema AI"
                                 else -> ""
                             },
@@ -174,9 +174,9 @@ fun HomeScreen(
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    icon = { Icon(Icons.Default.Star, contentDescription = "ROI Stats") },
-                    label = { Text("ROI Stats") },
-                    modifier = Modifier.testTag("tab_budget")
+                    icon = { Icon(Icons.Default.Subscriptions, contentDescription = "My Services") },
+                    label = { Text("My Services") },
+                    modifier = Modifier.testTag("tab_services")
                 )
                 NavigationBarItem(
                     selected = selectedTab == 3,
@@ -245,6 +245,7 @@ fun HomeScreen(
                         val isChatLoading by viewModel.isChatLoading.collectAsState()
                         val geminiAnalysis by viewModel.geminiAnalysis.collectAsState()
                         val isGeminiAnalyzing by viewModel.isAnalyzingWithGemini.collectAsState()
+                        val watchedItems by viewModel.watchedItems.collectAsState()
                         ExploreTabContent(
                             chatMessages = chatMessages,
                             isLoading = isChatLoading,
@@ -253,7 +254,9 @@ fun HomeScreen(
                             isGeminiAnalyzing = isGeminiAnalyzing,
                             onRefreshGeminiAnalysis = { viewModel.runGeminiProAnalysis() },
                             podcastEpisodes = viewModel.podcastEpisodes,
-                            movieNews = viewModel.movieNews
+                            movieNews = viewModel.movieNews,
+                            watchedItems = watchedItems,
+                            onAddRecommendation = { title, reason -> viewModel.addRecommendationToWatchlist(title, reason) }
                         )
                     }
                 }
@@ -298,11 +301,14 @@ fun HomeScreen(
             val ollamaHost by viewModel.ollamaHost.collectAsState()
             val githubToken by viewModel.githubToken.collectAsState()
             val watchmodeApiKey by viewModel.watchmodeApiKey.collectAsState()
+            val geminiApiKey by viewModel.geminiApiKey.collectAsState()
             SettingsDialog(
                 allProviders = allProviders,
                 onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
                 tmdbApiKey = tmdbApiKey,
                 onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
+                geminiApiKey = geminiApiKey,
+                onSaveGeminiApiKey = { viewModel.saveGeminiApiKey(it) },
                 watchmodeApiKey = watchmodeApiKey,
                 onSaveWatchmodeApiKey = { viewModel.saveWatchmodeApiKey(it) },
                 ollamaHost = ollamaHost,
@@ -329,6 +335,11 @@ fun HomeScreen(
                 onDeleteClick = {
                     viewModel.deleteItem(detailMovieItem!!)
                     detailMovieItem = null
+                },
+                onDiscussInExplore = { prompt ->
+                    detailMovieItem = null
+                    selectedTab = 3
+                    viewModel.sendChatMessage(prompt)
                 }
             )
         }
@@ -813,7 +824,7 @@ fun WatchlistTabContent(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        if (filterOnlyMyServices) "Try enabling more subscriptions or clear filters to view catalog."
+                        if (filterOnlyMyServices) "Try switching to 'All' or activating services in the My Services tab."
                         else "Use the Add button or share titles to populate your vault.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline,
@@ -1344,7 +1355,7 @@ fun MonthlyRoiContent(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "MONTHLY STREAMING BURN RATE",
+                        "MY SERVICES & MONTHLY SPEND",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.ExtraBold,
@@ -1370,7 +1381,7 @@ fun MonthlyRoiContent(
 
         item {
             Text(
-                "Subscription Value Analytics (This Month)",
+                "Active Subscriptions & Usage (This Month)",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -1386,7 +1397,7 @@ fun MonthlyRoiContent(
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
                 ) {
                     Text(
-                        "To analyze ROI, please configure your active streaming services in Settings.",
+                        "To manage and analyze services, please configure your active streaming subscriptions in Settings.",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(24.dp),
                         textAlign = TextAlign.Center,
@@ -2048,6 +2059,8 @@ fun SettingsDialog(
     onProviderToggle: (String, Boolean) -> Unit,
     tmdbApiKey: String,
     onSaveTmdbApiKey: (String) -> Unit,
+    geminiApiKey: String,
+    onSaveGeminiApiKey: (String) -> Unit,
     watchmodeApiKey: String,
     onSaveWatchmodeApiKey: (String) -> Unit,
     ollamaHost: String,
@@ -2056,7 +2069,7 @@ fun SettingsDialog(
     onSaveGithubToken: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: APIs (TMDB/Watchmode), 2: AI (Ollama) & About
+    var activeSubTab by remember { mutableStateOf(0) } // 0: Subscriptions, 1: APIs (TMDB/Gemini/Watchmode), 2: AI (Ollama) & About
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -2160,8 +2173,10 @@ fun SettingsDialog(
                     }
                     1 -> {
                         var tmdbInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
+                        var geminiInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
                         var wmInput by remember(watchmodeApiKey) { mutableStateOf(watchmodeApiKey) }
                         var showTmdb by remember { mutableStateOf(false) }
+                        var showGemini by remember { mutableStateOf(false) }
                         var showWm by remember { mutableStateOf(false) }
                         val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                         val scrollState = rememberScrollState()
@@ -2208,6 +2223,40 @@ fun SettingsDialog(
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Text("Save TMDB Key", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            // Gemini API Section
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Gemini API (Cinephile AI)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Powers Explore taste analysis and tailored watchlist recommendations.", style = MaterialTheme.typography.bodySmall)
+                                    
+                                    OutlinedTextField(
+                                        value = geminiInput,
+                                        onValueChange = { geminiInput = it },
+                                        label = { Text("Gemini API Key") },
+                                        singleLine = true,
+                                        visualTransformation = if (showGemini) VisualTransformation.None else PasswordVisualTransformation(),
+                                        trailingIcon = {
+                                            IconButton(onClick = { showGemini = !showGemini }) {
+                                                Icon(imageVector = if (showGemini) Icons.Default.Clear else Icons.Default.Search, contentDescription = null)
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    
+                                    Button(
+                                        onClick = { onSaveGeminiApiKey(geminiInput) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("Save Gemini Key", fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -2379,6 +2428,288 @@ fun SettingsDialog(
 
 
 // ==========================================
+// COMPOSABLE: Synthesized Movie Insights
+// ==========================================
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SynthesizedMovieInsights(
+    trivia: String,
+    movieTitle: String,
+    onDiscussInExplore: ((String) -> Unit)? = null
+) {
+    val lines = remember(trivia) { trivia.lines() }
+    
+    val focusTopics = remember(trivia) { mutableListOf<String>() }
+    val featuredCast = remember(trivia) { mutableListOf<String>() }
+    var synthesisDate: String? by remember(trivia) { mutableStateOf(null) }
+    val insightCards = remember(trivia) { mutableListOf<Pair<String, String>>() }
+
+    LaunchedEffect(trivia) {
+        var inYaml = false
+        var afterYaml = false
+
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (trimmed == "---") {
+                if (!inYaml && !afterYaml) {
+                    inYaml = true
+                } else if (inYaml) {
+                    inYaml = false
+                    afterYaml = true
+                }
+                continue
+            }
+
+            if (inYaml) {
+                if (trimmed.startsWith("focus_topics:")) {
+                    val value = trimmed.removePrefix("focus_topics:").trim().trim('"', '\'')
+                    focusTopics.addAll(value.split(",").map { it.trim() }.filter { it.isNotEmpty() })
+                } else if (trimmed.startsWith("featured_cast:")) {
+                    val value = trimmed.removePrefix("featured_cast:").trim().trim('"', '\'')
+                    featuredCast.addAll(value.split(",").map { it.trim() }.filter { it.isNotEmpty() })
+                } else if (trimmed.startsWith("agent_synthesis_date:")) {
+                    synthesisDate = trimmed.removePrefix("agent_synthesis_date:").trim().trim('"', '\'')
+                }
+            } else {
+                if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+                    val bullet = trimmed.substring(2).trim()
+                    if (bullet.contains(":")) {
+                        val split = bullet.split(":", limit = 2)
+                        insightCards.add(split[0].trim() to split[1].trim())
+                    } else {
+                        insightCards.add("Key Insight" to bullet)
+                    }
+                } else if (!trimmed.startsWith("#") && trimmed.isNotBlank() && !trimmed.startsWith("---")) {
+                    if (insightCards.isEmpty() && focusTopics.isEmpty()) {
+                        insightCards.add("Cinephile Overview" to trimmed)
+                    }
+                }
+            }
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Column {
+                    Text(
+                        text = "AGENTIC RESEARCH STRATEGY",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = if (!synthesisDate.isNullOrBlank()) "Curated by Olivia AI • $synthesisDate" else "Synthesized by Olivia AI Concierge",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+        }
+
+        // Focus Topics & Mood
+        if (focusTopics.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "THEMES & CINEMATIC MOOD",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    focusTopics.forEach { topic ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                        ) {
+                            Text(
+                                text = topic,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Featured Cast & Talent
+        if (featuredCast.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "FEATURED CAST & TALENT",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    featuredCast.forEach { castMember ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = castMember,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sectioned Insight Cards
+        if (insightCards.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                insightCards.forEach { (heading, body) ->
+                    val icon = when {
+                        heading.contains("Cultural", ignoreCase = true) || heading.contains("Impact", ignoreCase = true) -> Icons.Default.Public
+                        heading.contains("Talent", ignoreCase = true) || heading.contains("Cast", ignoreCase = true) || heading.contains("Profile", ignoreCase = true) -> Icons.Default.People
+                        heading.contains("Smart", ignoreCase = true) || heading.contains("Sourcing", ignoreCase = true) || heading.contains("Vault", ignoreCase = true) -> Icons.Default.AutoAwesome
+                        else -> Icons.Default.Star
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = heading,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = body,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // Graceful fallback for plain text
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = trivia,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.padding(12.dp)
+                )
+            }
+        }
+
+        // Bridge to Explore Tab
+        if (onDiscussInExplore != null) {
+            OutlinedButton(
+                onClick = {
+                    onDiscussInExplore("Analyze the cinematic themes and director style of '$movieTitle', and recommend 3 similar movies streaming on my active services.")
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Discuss with Olivia & Gemini in Explore",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+// ==========================================
 // COMPOSABLE: Movie Details Bottom Sheet
 // ==========================================
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2390,7 +2721,8 @@ fun MovieDetailsBottomSheet(
     onCastClick: (CastDevice, MediaItem) -> Unit,
     onDismiss: () -> Unit,
     onWatchClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onDeleteClick: () -> Unit,
+    onDiscussInExplore: ((String) -> Unit)? = null
 ) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
@@ -2619,42 +2951,11 @@ fun MovieDetailsBottomSheet(
             // Agent Research / Trivia Section
             if (!item.trivia.isNullOrEmpty()) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Agentic Research Strategy",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Research Notes",
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text(
-                            text = item.trivia,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 18.sp,
-                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
-                        )
-                    }
-                }
+                SynthesizedMovieInsights(
+                    trivia = item.trivia,
+                    movieTitle = item.title,
+                    onDiscussInExplore = onDiscussInExplore
+                )
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
@@ -2721,7 +3022,9 @@ fun ExploreTabContent(
     isGeminiAnalyzing: Boolean,
     onRefreshGeminiAnalysis: () -> Unit,
     podcastEpisodes: List<com.example.data.model.PodcastEpisode>,
-    movieNews: List<com.example.data.model.MovieNewsItem>
+    movieNews: List<com.example.data.model.MovieNewsItem>,
+    watchedItems: List<MediaItem> = emptyList(),
+    onAddRecommendation: ((String, String) -> Unit)? = null
 ) {
     var selectedSubTab by remember { mutableStateOf(0) } // 0: Discover & Insights, 1: Chat with Olivia
     val uriHandler = LocalUriHandler.current
@@ -2810,6 +3113,122 @@ fun ExploreTabContent(
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // 0. CINEPHILE TASTE MATRIX (Dynamic visuals calculated from Watched Vault)
+                if (watchedItems.isNotEmpty()) {
+                    val genreCounts = remember(watchedItems) {
+                        watchedItems.mapNotNull { it.genres }
+                            .flatMap { it.split(",", "/").map { g -> g.trim() } }
+                            .filter { it.isNotEmpty() }
+                            .groupingBy { it }
+                            .eachCount()
+                            .entries
+                            .sortedByDescending { it.value }
+                            .take(4)
+                    }
+                    val topGenreSum = remember(genreCounts) { genreCounts.sumOf { it.value }.toFloat().coerceAtLeast(1f) }
+                    val palette = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.tertiary,
+                        MaterialTheme.colorScheme.secondary,
+                        Color(0xFF00B4D8)
+                    )
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth().testTag("taste_matrix_card"),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.BarChart,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Text(
+                                        "CINEPHILE TASTE MATRIX",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        letterSpacing = 1.sp
+                                    )
+                                }
+                                Text(
+                                    "${watchedItems.size} Titles Analyzed",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            if (genreCounts.isNotEmpty()) {
+                                // Multi-segment taste distribution bar
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(10.dp)
+                                        .clip(RoundedCornerShape(5.dp))
+                                        .background(MaterialTheme.colorScheme.surface)
+                                ) {
+                                    genreCounts.forEachIndexed { index, entry ->
+                                        val weight = (entry.value / topGenreSum).coerceAtLeast(0.05f)
+                                        val color = palette[index % palette.size]
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(weight)
+                                                .fillMaxHeight()
+                                                .background(color)
+                                        )
+                                    }
+                                }
+
+                                // Legend row
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    genreCounts.forEachIndexed { index, entry ->
+                                        val color = palette[index % palette.size]
+                                        val pct = ((entry.value / topGenreSum) * 100).toInt()
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(8.dp)
+                                                    .clip(CircleShape)
+                                                    .background(color)
+                                            )
+                                            Text(
+                                                "${entry.key} ($pct%)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 1. GEMINI PRO INTELLIGENCE CARD (Custom content driven by Gemini Pro API analysis)
                 Card(
                     modifier = Modifier.fillMaxWidth().testTag("gemini_pro_card"),
@@ -2969,6 +3388,8 @@ fun ExploreTabContent(
 
                             // Curated Recommendations
                             if (geminiAnalysis.recommendations.isNotEmpty()) {
+                                var addedRecTitles by remember { mutableStateOf(setOf<String>()) }
+
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
                                         "GEMINI PRO TAILORED PICKS",
@@ -2977,6 +3398,8 @@ fun ExploreTabContent(
                                         color = MaterialTheme.colorScheme.outline
                                     )
                                     geminiAnalysis.recommendations.forEach { (title, reason) ->
+                                        val isAdded = addedRecTitles.contains(title)
+
                                         Surface(
                                             shape = RoundedCornerShape(10.dp),
                                             color = MaterialTheme.colorScheme.surface,
@@ -2986,13 +3409,13 @@ fun ExploreTabContent(
                                             Row(
                                                 modifier = Modifier.padding(10.dp),
                                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                                verticalAlignment = Alignment.Top
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Icon(
                                                     Icons.Default.PlayArrow,
                                                     contentDescription = null,
                                                     tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(18.dp).padding(top = 2.dp)
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(
@@ -3006,6 +3429,30 @@ fun ExploreTabContent(
                                                         style = MaterialTheme.typography.bodySmall,
                                                         color = MaterialTheme.colorScheme.outline
                                                     )
+                                                }
+                                                if (onAddRecommendation != null) {
+                                                    FilledTonalButton(
+                                                        onClick = {
+                                                            onAddRecommendation(title, reason)
+                                                            addedRecTitles = addedRecTitles + title
+                                                        },
+                                                        enabled = !isAdded,
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                        modifier = Modifier.height(34.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = if (isAdded) Icons.Default.Check else Icons.Default.Add,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text(
+                                                            if (isAdded) "Added" else "+ Watchlist",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
