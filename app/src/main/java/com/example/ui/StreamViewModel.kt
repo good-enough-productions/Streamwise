@@ -74,6 +74,14 @@ class StreamViewModel(
     private val _tmdbApiKey = MutableStateFlow(userPreferences.tmdbApiKey)
     val tmdbApiKey: StateFlow<String> = _tmdbApiKey.asStateFlow()
 
+    // Persisted Gemini API key (user-configurable at runtime, falls back to BuildConfig)
+    private val _geminiApiKey = MutableStateFlow(
+        userPreferences.geminiApiKey.ifEmpty {
+            if (BuildConfig.GEMINI_API_KEY != "MY_GEMINI_API_KEY") BuildConfig.GEMINI_API_KEY else ""
+        }
+    )
+    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
+
     // Persisted Watchmode API key
     private val _watchmodeApiKey = MutableStateFlow(userPreferences.watchmodeApiKey)
     val watchmodeApiKey: StateFlow<String> = _watchmodeApiKey.asStateFlow()
@@ -91,6 +99,15 @@ class StreamViewModel(
         viewModelScope.launch {
             kotlinx.coroutines.delay(800)
             syncWatchlistMetadata(forceAll = false)
+        }
+    }
+
+    fun saveGeminiApiKey(key: String) {
+        userPreferences.geminiApiKey = key
+        _geminiApiKey.value = key.trim()
+        _statusMessage.value = if (key.isBlank()) "Gemini API key cleared." else "Gemini API key saved."
+        if (key.isNotBlank()) {
+            runGeminiProAnalysis()
         }
     }
 
@@ -214,13 +231,32 @@ class StreamViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             _isAnalyzingWithGemini.value = true
             try {
-                val watched = watchedItems.value.take(15).map { it.title }
+                val watched = watchedItems.value
+                val sampleWatched = watched.take(25).map { item ->
+                    val genrePart = if (!item.genres.isNullOrEmpty()) " [${item.genres}]" else ""
+                    "${item.title}$genrePart"
+                }
                 val watchlist = allMediaItems.value.filter { it.status == MediaStatus.WATCHLIST.name }.take(15).map { it.title }
                 
+                // Real-time top genres from the user's watched vault
+                val topGenres = watched.mapNotNull { it.genres }
+                    .flatMap { it.split(",", "/").map { g -> g.trim() } }
+                    .filter { it.isNotEmpty() }
+                    .groupingBy { it }
+                    .eachCount()
+                    .entries
+                    .sortedByDescending { it.value }
+                    .take(6)
+                    .joinToString { "${it.key} (${it.value})" }
+
                 val userContext = buildString {
-                    append("Watched titles: ")
-                    append(if (watched.isNotEmpty()) watched.joinToString(", ") else "Inception, Heat, Blade Runner 2049, Arrival, Oppenheimer")
-                    append("\nWatchlist titles: ")
+                    append("Total watched movies in cinephile vault: ${watched.size}\n")
+                    if (topGenres.isNotEmpty()) {
+                        append("Dominant vault genres: $topGenres\n")
+                    }
+                    append("Sample recent titles: ")
+                    append(if (sampleWatched.isNotEmpty()) sampleWatched.joinToString(", ") else "Inception, Heat, Blade Runner 2049, Arrival, Oppenheimer")
+                    append("\nCurrent watchlist queue: ")
                     append(if (watchlist.isNotEmpty()) watchlist.joinToString(", ") else "Dune: Part Two, Chinatown, Memories of Murder, The Master")
                 }
 
@@ -233,17 +269,18 @@ class StreamViewModel(
                     {
                       "headline": "A bold, stylish 3-6 word theme headline capturing their taste profile",
                       "narrative": "A rich 2-3 sentence paragraph analyzing the recurring cinematic aesthetics, themes, existential questions, or visual styles across their titles.",
-                      "themes": ["Theme 1", "Theme 2", "Theme 3"],
+                      "themes": ["Theme 1", "Theme 2", "Theme 3", "Theme 4"],
                       "auteurConnections": ["Connection/Director 1", "Connection/Director 2"],
                       "recommendations": [
                         {"title": "Film Title 1", "reason": "Specific 1-sentence reason why it connects to their vault"},
-                        {"title": "Film Title 2", "reason": "Specific 1-sentence reason why it connects to their vault"}
+                        {"title": "Film Title 2", "reason": "Specific 1-sentence reason why it connects to their vault"},
+                        {"title": "Film Title 3", "reason": "Specific 1-sentence reason why it connects to their vault"}
                       ]
                     }
                     Respond ONLY with the JSON object.
                 """.trimIndent()
 
-                val apiKey = BuildConfig.GEMINI_API_KEY
+                val apiKey = _geminiApiKey.value.ifEmpty { BuildConfig.GEMINI_API_KEY }
                 var analysisResult: GeminiAnalysisResult? = null
 
                 if (apiKey.isNotEmpty() && apiKey != "MY_GEMINI_API_KEY") {
@@ -304,7 +341,7 @@ class StreamViewModel(
                 }
 
                 if (analysisResult == null) {
-                    analysisResult = synthesizeVaultAnalysis(watched, watchlist)
+                    analysisResult = synthesizeVaultAnalysis(watched.map { it.title }, watchlist)
                 }
 
                 _geminiAnalysis.value = analysisResult
@@ -333,6 +370,25 @@ class StreamViewModel(
                 "Solaris (1972)" to "Slow-burn philosophical science fiction expanding on the existential themes in your watchlist."
             )
         )
+    }
+
+    /**
+     * 1-Tap Watchlist addition directly from Gemini / Explore recommendations.
+     * Inserts the title under PENDING_METADATA and immediately triggers TMDB metadata enrichment.
+     */
+    fun addRecommendationToWatchlist(title: String, reason: String = "") {
+        viewModelScope.launch {
+            val cleanTitle = title.replace(Regex("\\s*\\(\\d{4}\\)$"), "").trim()
+            val item = MediaItem(
+                title = cleanTitle,
+                userNotes = if (reason.isNotBlank()) "Gemini Recommendation: $reason" else "Recommended by Gemini Pro",
+                importSource = "Gemini Pro Explore",
+                status = MediaStatus.PENDING_METADATA.name
+            )
+            repository.insertMediaItem(item)
+            _statusMessage.value = "Added \"$cleanTitle\" to your Watchlist!"
+            syncWatchlistMetadata(forceAll = false)
+        }
     }
 
     // Casting State
