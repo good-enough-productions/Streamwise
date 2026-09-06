@@ -106,5 +106,7 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
   - SubTab 3: `📰 Film News Hub` (`NewsExploreView` with category selector chips and `💬 Discuss with Olivia` integration).
 - **Navigation Hoisting**: The active sub-tab is hoisted to `HomeScreen` as `exploreSubTab`, allowing bottom sheets and external triggers (such as `onDiscussInExplore` from `MovieDetailsBottomSheet`) to transition directly into Olivia chat.
 
+## 14. Gemini Spark Podcast Tracker Sync & TMDB Availability Sentinel (v1.5.1)
 
-
+- **Gemini Spark Podcast Tracker**: Real-time synchronization of the living Google Sheet (`Podcast Film & TV Recommendations Tracker`) with Streamwise and the Master Hub General Ledger. Fetches recommendations via Apps Script Web App endpoint (`?action=getPodcastRecs`), enriches the user's Watchlist with origin tags (`importSource: Podcast: [Podcast] - [Episode]`), updates watched titles with podcast notes, and stores in SQLite.
+- **Provider Sentinel Resilience ("none")**: When TMDB returns empty US watch provider results for valid titles, the sync engine records `"none"` as a sentinel instead of leaving `providerIds` null. This differentiates unstreamable/theater-only titles from un-queried titles, terminating redundant startup sync loops while cleanly filtering `"none"` from UI provider lists.

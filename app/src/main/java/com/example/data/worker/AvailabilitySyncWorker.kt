@@ -157,7 +157,7 @@ class AvailabilitySyncWorker(
                                     Log.e(TAG, "Watchmode fallback failed for \"${item.title}\": ${e.message}")
                                 }
                             } else {
-                                syncedProviders = null
+                                syncedProviders = "none"
                             }
                         }
                         
@@ -347,7 +347,7 @@ class AvailabilitySyncWorker(
             }
         }
         val result = localIds.distinct().joinToString(",")
-        return if (result.isEmpty()) null else result
+        return result.ifEmpty { "none" }
     }
 
     private fun mapTmdbProvidersToLocal(providers: List<com.example.data.remote.TmdbProvider>): String? {
@@ -377,6 +377,6 @@ class AvailabilitySyncWorker(
             }
         }
         val result = localIds.distinct().joinToString(",")
-        return if (result.isEmpty()) null else result
+        return result.ifEmpty { "none" }
     }
 }

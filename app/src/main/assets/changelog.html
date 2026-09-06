@@ -20,6 +20,16 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.5.1</span> <span class="date">September 2026</span></h2>
+        <h3>Gemini Spark Podcast Sync & Feedback Polish</h3>
+        <ul>
+            <li><strong>Gemini Spark Podcast Tracker Integration:</strong> Added 1-tap sync button in both Explore (Podcasts sub-tab) and Settings (Profile & Letterboxd) to pull new movie recommendations from your personal Google Sheet tracker. New films are added to your Watchlist tagged with origin details (podcast name, episode, air date, recommender), and previously seen movies in your Watched Vault are enriched with discussion notes.</li>
+            <li><strong>TMDB Sync Loop Fix:</strong> Resolved repetitive "Syncing 7 titles" toast on every app launch. Movies with no US streaming availability now persist a <code>none</code> sentinel, and the sync filter no longer redundantly re-queries already enriched titles.</li>
+            <li><strong>Backlog-First Feedback Polish:</strong> Feedback dialog now defaults to submitting directly to the project backlog, displaying "Submitting to backlog..." with accurate toasts. Jules autonomous AI assignment is strictly opt-in via checkbox.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.5.0</span> <span class="date">September 2026</span></h2>
         <h3>Explore UI/UX Redesign & Comprehensive Letterboxd Pipeline</h3>
         <ul>
@@ -42,6 +52,9 @@
             </li>
         </ul>
     </div>
+
+    <div class="change-section">
+        <h2><span class="version-badge">v1.4.0</span> <span class="date">September 2026</span></h2>
         <h3>Added & Unified Hub</h3>
         <ul>
             <li><strong>Watchlist Title Count Clarity:</strong> Live title counts prominently displayed across the Top App Bar (<code>Watchlist • 12 Titles</code>), Bottom Navigation badges (<code>Badge { 12 }</code>), and Sticky Header summary (<code>Showing 12 of 12 titles</code>).</li>
@@ -90,7 +103,7 @@
         <h3>Restored & Connected</h3>
         <ul>
             <li><strong>Global Beta Feedback FAB:</strong> Restored the floating feedback button across all application screens with screen capture preview and automated device telemetry.</li>
-            <li><strong>Autonomous Jules Triage:</strong> Submits feedback directly to GitHub Issues labeled <code>jules</code> and <code>jules-triage</code> via the shared Cloud Function proxy.</li>
+            <li><strong>Backlog-First Feedback:</strong> Feedback creates GitHub Issues to the project backlog by default. Optionally check "Assign to Jules (Autonomous AI)" for automated AI triage.</li>
             <li><strong>Settings Beta Control:</strong> Added a toggle in Settings -> AI/Local tab to enable or disable the Feedback FAB at will.</li>
         </ul>
     </div>

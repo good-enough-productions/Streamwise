@@ -37,5 +37,5 @@ data class MediaItem(
 ) {
     // Utility to parse provider IDs array
     val providersList: List<String>
-        get() = providerIds?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+        get() = providerIds?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() && it != "none" } ?: emptyList()
 }

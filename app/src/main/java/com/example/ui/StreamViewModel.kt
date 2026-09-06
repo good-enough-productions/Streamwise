@@ -133,6 +133,10 @@ class StreamViewModel(
     private val _isSyncingToSheet = MutableStateFlow(false)
     val isSyncingToSheet: StateFlow<Boolean> = _isSyncingToSheet.asStateFlow()
 
+    // Podcast Recommendations Sync State
+    private val _isSyncingPodcasts = MutableStateFlow(false)
+    val isSyncingPodcasts: StateFlow<Boolean> = _isSyncingPodcasts.asStateFlow()
+
     // Letterboxd Profile Settings
     private val _letterboxdUsername = MutableStateFlow(userPreferences.letterboxdUsername)
     val letterboxdUsername: StateFlow<String> = _letterboxdUsername.asStateFlow()
@@ -309,7 +313,7 @@ class StreamViewModel(
                         put("watchedAt", item.watchedAt ?: item.addedAt)
                         put("genres", item.genres ?: "")
                         put("notes", item.userNotes ?: "")
-                        put("providers", item.providerIds ?: "")
+                        put("providers", (item.providerIds ?: "").let { if (it == "none") "" else it })
                     }
                     watchedArray.put(obj)
                 }
@@ -321,7 +325,7 @@ class StreamViewModel(
                         put("rating", item.rating ?: JSONObject.NULL)
                         put("addedAt", item.addedAt)
                         put("genres", item.genres ?: "")
-                        put("providers", item.providerIds ?: "")
+                        put("providers", (item.providerIds ?: "").let { if (it == "none") "" else it })
                     }
                     watchlistArray.put(obj)
                 }
@@ -379,6 +383,121 @@ class StreamViewModel(
                 _statusMessage.value = "Sync error: ${e.localizedMessage ?: "Network failed"}"
             } finally {
                 _isSyncingToSheet.value = false
+            }
+        }
+    }
+
+    fun syncPodcastRecommendations() {
+        if (_isSyncingPodcasts.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSyncingPodcasts.value = true
+            try {
+                _statusMessage.value = "Fetching Gemini Spark podcast recommendations..."
+                val webhookUrl = userPreferences.googleSheetWebhookUrl
+                var currentUrl = if (webhookUrl.contains("?")) "$webhookUrl&action=getPodcastRecs" else "$webhookUrl?action=getPodcastRecs"
+
+                var conn: HttpURLConnection? = null
+                var redirects = 0
+                var code = 0
+
+                while (redirects < 5) {
+                    val url = URL(currentUrl)
+                    conn = (url.openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 15000
+                        readTimeout = 25000
+                        instanceFollowRedirects = false
+                        setRequestProperty("Accept", "application/json")
+                    }
+                    code = conn.responseCode
+                    if (code == HttpURLConnection.HTTP_MOVED_TEMP || code == HttpURLConnection.HTTP_MOVED_PERM || code == 307 || code == 308) {
+                        val newLocation = conn.getHeaderField("Location")
+                        if (!newLocation.isNullOrBlank()) {
+                            currentUrl = newLocation
+                            redirects++
+                            conn.disconnect()
+                            continue
+                        }
+                    }
+                    break
+                }
+
+                if (code in 200..299 && conn != null) {
+                    val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+                    val json = JSONObject(responseText)
+                    if (json.optBoolean("success", false)) {
+                        val recs = json.optJSONArray("recommendations") ?: JSONArray()
+                        val allItems = repository.allMediaItems.first()
+                        val existingMap = allItems.associateBy { it.title.lowercase().trim() }
+
+                        var addedCount = 0
+                        var updatedCount = 0
+
+                        for (i in 0 until recs.length()) {
+                            val obj = recs.getJSONObject(i)
+                            val title = obj.optString("title").trim()
+                            if (title.isBlank()) continue
+
+                            val podcast = obj.optString("podcast")
+                            val episode = obj.optString("episode")
+                            val airDate = obj.optString("airDate")
+                            val by = obj.optString("recommendedBy")
+                            val isRec = obj.optBoolean("isRecommendation", true)
+                            val verdict = obj.optString("verdict")
+                            val context = obj.optString("context")
+
+                            val sourceTag = if (podcast.isNotBlank()) "Podcast: $podcast" else "Podcast Rec"
+                            val tagNotes = buildString {
+                                if (podcast.isNotBlank()) append("Podcast: $podcast\n")
+                                if (episode.isNotBlank()) append("Episode: $episode\n")
+                                if (airDate.isNotBlank()) append("Air Date: $airDate\n")
+                                if (by.isNotBlank()) append("Discussed By: $by\n")
+                                if (verdict.isNotBlank()) append("Verdict: $verdict\n")
+                                if (context.isNotBlank()) append("Discussion Context: $context")
+                            }.trim()
+
+                            val existing = existingMap[title.lowercase()]
+                            if (existing != null) {
+                                val currentNotes = existing.userNotes ?: ""
+                                if (!currentNotes.contains(podcast) && podcast.isNotBlank()) {
+                                    val newNotes = if (currentNotes.isBlank()) tagNotes else "$currentNotes\n\n$tagNotes"
+                                    val updated = existing.copy(
+                                        importSource = existing.importSource ?: sourceTag,
+                                        userNotes = newNotes,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                    repository.updateMediaItem(updated)
+                                    updatedCount++
+                                }
+                            } else if (isRec) {
+                                val newItem = MediaItem(
+                                    title = title,
+                                    status = MediaStatus.PENDING_METADATA.name,
+                                    importSource = sourceTag,
+                                    userNotes = tagNotes,
+                                    addedAt = System.currentTimeMillis(),
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                                repository.insertMediaItem(newItem)
+                                addedCount++
+                            }
+                        }
+
+                        _statusMessage.value = "✓ Synced ${recs.length()} podcast recs: +$addedCount Watchlist, ~$updatedCount Vault updated!"
+                        if (addedCount > 0) {
+                            syncWatchlistMetadata(forceAll = false)
+                        }
+                    } else {
+                        _statusMessage.value = "Podcast sync error: ${json.optString("error", "Unknown error")}"
+                    }
+                } else {
+                    _statusMessage.value = "Podcast sync returned HTTP $code"
+                }
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "Podcast recommendations sync failed", e)
+                _statusMessage.value = "Podcast sync failed: ${e.localizedMessage ?: "Network error"}"
+            } finally {
+                _isSyncingPodcasts.value = false
             }
         }
     }
@@ -1121,7 +1240,7 @@ class StreamViewModel(
             }
         }
         val result = localIds.distinct().joinToString(",")
-        return if (result.isEmpty()) null else result
+        return result.ifEmpty { "none" }
     }
 
     fun syncWatchlistMetadata(forceAll: Boolean = false) {
@@ -1142,8 +1261,9 @@ class StreamViewModel(
                     allItems.filter { it.status == MediaStatus.WATCHLIST.name || it.status == MediaStatus.PENDING_METADATA.name }
                 } else {
                     allItems.filter { 
-                        (it.status == MediaStatus.WATCHLIST.name || it.status == MediaStatus.PENDING_METADATA.name) &&
-                        (it.providerIds.isNullOrEmpty() || it.imageUrl.isNullOrEmpty() || it.tmdbId.isNullOrEmpty())
+                        (it.status == MediaStatus.PENDING_METADATA.name) ||
+                        ((it.status == MediaStatus.WATCHLIST.name) &&
+                        (it.tmdbId.isNullOrEmpty() || it.imageUrl.isNullOrEmpty()))
                     }
                 }
 
