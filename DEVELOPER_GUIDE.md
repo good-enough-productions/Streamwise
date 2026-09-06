@@ -42,9 +42,28 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 - **Cinephile Taste Matrix**: Multi-segment visual bar in the Explore tab calculating exact genre distributions from the user's offline SQLite watched history.
 - **Gemini Pro Recommendations**: Integrates `GeminiClient` with user-managed API keys in Settings, providing 1-tap `+ Watchlist` addition that triggers immediate TMDB metadata and availability enrichment.
 
-## 5. Autonomous Beta Feedback Pipeline (App -> Jules)
+## 5. Autonomous Beta Feedback Pipeline (App -> Backlog & Jules)
 
 - **FloatingFeedbackButton**: Material 3 floating action button rendered globally across all screens when `enableBetaFeedback` is enabled in `UserPreferencesManager`.
 - **FeedbackDialog**: Captures on-device screenshots via `PixelCopy` alongside device telemetry (device model, Android OS version, active tab, watchlist and vault counts).
-- **Jules Dispatch**: Submits payload to the shared Cloud Function proxy (`https://us-central1-ai-assistant-438903.cloudfunctions.net/submitFeedback`), creating GitHub issues labeled `jules` and `jules-triage` for automated agent pickup and triage.
+- **Backlog First & Jules AI Opt-In**: By default, feedback generates standard GitHub Issues labeled `feedback`, `streamwise`, and `[category]` for backlog tracking. When the user explicitly checks "Assign to Jules (Autonomous AI)", the `jules` and `jules-triage` labels are attached.
+- **Secure Webhook**: Submits payload to the Cloud Run proxy (`https://feedback-proxy-rljydlcchq-uc.a.run.app`), keeping GitHub PATs off client devices.
+
+## 6. Collapsible Spotlight & Advanced Multi-Dimensional Filters (Issues #7 & #8)
+
+- **Collapsible Spotlight**: Persistent top carousel toggleable via animated chevron, freeing up screen real estate while retaining fast access to high-priority streaming titles.
+- **AdvancedFilterBottomSheet**: Modal filter panel supporting:
+  - Streaming Provider grid chips.
+  - Multi-genre selector pills.
+  - Minimum rating threshold chips (6.0+, 7.0+, 7.5+, 8.0+, 8.5+).
+  - Release era filtering (2020s, 2010s, 2000s, 90s, Classic pre-1990).
+  - Dynamic sort orders (Priority, Title A-Z, Rating High-Low, Release Year).
+  - Quick-clear pill and active filter badges on the home screen toolbar.
+
+## 7. Cinephile Vault, Diary Timeline & Letterboxd Sync (Issues #9 & #10)
+
+- **Cinephile Vault Overview**: Real-time stats card displaying total logged films, estimated screen time hours, average rating, and top 4 favorite genres.
+- **Monthly Diary Timeline**: Groups watched entries chronologically by Year-Month (`September 2026`, `August 2026`), displaying formatted watch dates (`Watched Sep 4, 2026`), user notes, and 1-tap re-watch triggers.
+- **Poster Wall Grid**: View mode toggle between structured timeline diary list and compact visual poster grid (`WatchedGridPosterCard`).
+- **1-Tap Letterboxd Google Sheet Sync**: Dispatches watched history and watchlist titles as structured JSON to a Google Apps Script webhook, following HTTP 302 redirects to mirror data into Google Drive / Google Sheets at $0/mo.
 

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -23,15 +23,25 @@
     <div class="section">
         <h2>1. Watchlist & Discovery</h2>
         <ul>
-            <li><strong>Spotlight Carousel:</strong> Featured titles at the top of your watchlist with high-resolution TMDB posters, ratings, and genre tags.</li>
-            <li><strong>Default View ("My Services"):</strong> By default, Streamwise filters your queue to only display movies and TV shows currently available on your subscribed streaming platforms and free-with-ads channels (Tubi, Pluto TV, Freevee).</li>
-            <li><strong>Filter Chips:</strong> Tap "All" to view your complete wishlist regardless of availability, or select individual service chips (Netflix, Max, Hulu, Disney+, Prime Video, Criterion) to filter by a specific catalog.</li>
+            <li><strong>Collapsible Spotlight:</strong> Tap the "Spotlight: Ready to Stream" header or chevron to collapse/expand the carousel, maximizing vertical screen real estate for your queue.</li>
+            <li><strong>Default View ("My Services"):</strong> Streamwise defaults to filtering your queue by movies and TV shows ready to stream on your active subscriptions and free platforms.</li>
+            <li><strong>Advanced Filters:</strong> Tap <strong>Filters</strong> on the home ribbon to open the filter sheet. Filter by specific providers, multiple genres, minimum rating thresholds (e.g. 7.5+), release era (2020s, Classic, etc.), and custom sort orders.</li>
             <li><strong>Immediate Refresh:</strong> Tap the orange refresh icon (<span class="highlight">↺</span>) in the top bar anytime to trigger an immediate live sync with TMDB.</li>
         </ul>
     </div>
 
     <div class="section">
-        <h2>2. Service Management & ROI Analytics</h2>
+        <h2>2. Cinephile Vault & Watch Diary</h2>
+        <ul>
+            <li><strong>Vault Overview:</strong> View your total films watched, estimated screen time hours, average rating, and top 4 favorite genres.</li>
+            <li><strong>Chronological Diary:</strong> Browse past watches organized by month and year (e.g., <em>September 2026</em>), complete with formatted watch dates (<code>Watched Sep 4, 2026</code>) and personal notes.</li>
+            <li><strong>Grid vs. Timeline:</strong> Switch between the detailed diary timeline view and a dense visual poster wall grid using the view toggle icon.</li>
+            <li><strong>1-Tap Letterboxd Google Sheet Sync:</strong> Tap <strong>Sync to Google Sheet</strong> to export your full diary and watchlist directly into a cloud Google Sheet via Google Apps Script ($0/mo).</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>3. Service Management & ROI Analytics</h2>
         <ul>
             <li><strong>Active Subscriptions:</strong> Configure which services you pay for in Settings to ensure "My Services" reflects your real-world household subscriptions.</li>
             <li><strong>Cost Efficiency:</strong> The <em>ROI Stats</em> tab tracks your historical watch hours and calculates your effective hourly value per streaming subscription.</li>
@@ -39,10 +49,10 @@
     </div>
 
     <div class="section">
-        <h2>3. Metadata & Offline Resilience</h2>
+        <h2>4. Beta Feedback & Autonomous AI</h2>
         <ul>
-            <li><strong>Local SQLite / Room Vault:</strong> All titles, ratings, and notes are cached locally on your device for instant launch and offline access.</li>
-            <li><strong>Background Updates:</strong> WorkManager checks provider availability every 4 hours in the background so your queue stays accurate.</li>
+            <li><strong>Floating Feedback FAB:</strong> When enabled in Settings, a global feedback button lets you capture diagnostics and submit issues.</li>
+            <li><strong>Jules AI Opt-In:</strong> Submitted feedback goes directly to the project backlog. Check <em>Assign to Jules (Autonomous AI)</em> when you want the AI developer to autonomously pick up and code a fix.</li>
         </ul>
     </div>
 

@@ -74,6 +74,9 @@ fun HomeScreen(
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
     val isDark by viewModel.isDarkMode.collectAsState()
     val enableBetaFeedback by viewModel.enableBetaFeedback.collectAsState()
+    val isSpotlightCollapsed by viewModel.isSpotlightCollapsed.collectAsState()
+    val isSyncingToSheet by viewModel.isSyncingToSheet.collectAsState()
+    val googleSheetWebhookUrl by viewModel.googleSheetWebhookUrl.collectAsState()
 
     // Clear and display Toast/Status banners beautifully
     LaunchedEffect(statusMessage) {
@@ -241,7 +244,9 @@ fun HomeScreen(
                         onSyncClick = { viewModel.triggerImmediateSync() },
                         tmdbApiKey = tmdbApiKey,
                         onOpenSettings = { showSettingsDialog = true },
-                        onMovieClick = { detailMovieItem = it }
+                        onMovieClick = { detailMovieItem = it },
+                        isSpotlightCollapsed = isSpotlightCollapsed,
+                        onToggleSpotlightCollapsed = { viewModel.toggleSpotlightCollapsed() }
                     )
                     1 -> {
                         val watchedItems by viewModel.watchedItems.collectAsState()
@@ -250,7 +255,10 @@ fun HomeScreen(
                             allProviders = allProviders,
                             onMovieClick = { detailMovieItem = it },
                             onDeleteClick = { viewModel.deleteItem(it) },
-                            onSyncClick = { viewModel.triggerImmediateSync() }
+                            onSyncClick = { viewModel.triggerImmediateSync() },
+                            isSyncingToSheet = isSyncingToSheet,
+                            onSyncLetterboxdToSheet = { viewModel.syncLetterboxdToGoogleSheet() },
+                            onRewatchIntent = { viewModel.startIntendingToWatch(it) }
                         )
                     }
                     2 -> MonthlyRoiContent(
@@ -332,6 +340,8 @@ fun HomeScreen(
                 onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
                 githubToken = githubToken,
                 onSaveGithubToken = { viewModel.saveGithubToken(it) },
+                googleSheetWebhookUrl = googleSheetWebhookUrl,
+                onSaveGoogleSheetWebhookUrl = { viewModel.saveGoogleSheetWebhookUrl(it) },
                 enableBetaFeedback = enableBetaFeedback,
                 onToggleBetaFeedback = { viewModel.setEnableBetaFeedback(it) },
                 onDismiss = { showSettingsDialog = false }
@@ -522,6 +532,7 @@ fun SpotlightCard(
 // ==========================================
 // COMPOSABLE: Watchlist Screen
 // ==========================================
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun WatchlistTabContent(
     watchlistItems: List<MediaItem>,
@@ -533,7 +544,9 @@ fun WatchlistTabContent(
     onSyncClick: () -> Unit = {},
     tmdbApiKey: String,
     onOpenSettings: () -> Unit,
-    onMovieClick: (MediaItem) -> Unit
+    onMovieClick: (MediaItem) -> Unit,
+    isSpotlightCollapsed: Boolean = false,
+    onToggleSpotlightCollapsed: () -> Unit = {}
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -548,6 +561,9 @@ fun WatchlistTabContent(
     var showFreeOnly by remember { mutableStateOf(false) }
     var showTopRatedOnly by remember { mutableStateOf(false) }
     var selectedGenre by remember { mutableStateOf<String?>(null) }
+    var minRating by remember { mutableStateOf(0.0) }
+    var selectedDecade by remember { mutableStateOf<String?>(null) }
+    var showAdvancedFiltersSheet by remember { mutableStateOf(false) }
 
     val allGenres = remember(watchlistItems) {
         watchlistItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
@@ -564,8 +580,13 @@ fun WatchlistTabContent(
         }.distinctBy { it.title.trim().lowercase() }.sortedByDescending { it.rating ?: 0.0 }.take(8)
     }
 
+    val activeAdvancedCount = (if (selectedPlatformId != null) 1 else 0) +
+        (if (selectedGenre != null) 1 else 0) +
+        (if (minRating > 0.0) 1 else 0) +
+        (if (selectedDecade != null) 1 else 0)
+
     // Filter items according to state
-    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, showTopRatedOnly, selectedGenre) {
+    val filteredItems = remember(watchlistItems, filterOnlyMyServices, activeProviderIds, selectedPlatformId, showFreeOnly, showTopRatedOnly, selectedGenre, minRating, selectedDecade) {
         watchlistItems.filter { item ->
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
@@ -583,8 +604,25 @@ fun WatchlistTabContent(
                 if (provs.none { freeProviderIds.contains(it) }) return@filter false
             }
 
-            if (showTopRatedOnly) {
-                if ((item.rating ?: 0.0) < 7.5) return@filter false
+            if (showTopRatedOnly || minRating > 0.0) {
+                val threshold = if (showTopRatedOnly && minRating < 7.5) 7.5 else minRating
+                if ((item.rating ?: 0.0) < threshold) return@filter false
+            }
+
+            if (selectedDecade != null) {
+                val yearMatch = Regex("""\b(19\d\d|20\d\d)\b""").find(item.overview ?: "")?.value?.toIntOrNull()
+                    ?: Regex("""\b(19\d\d|20\d\d)\b""").find(item.title)?.value?.toIntOrNull()
+                if (yearMatch != null) {
+                    val matchesDecade = when (selectedDecade) {
+                        "2020s" -> yearMatch >= 2020
+                        "2010s" -> yearMatch in 2010..2019
+                        "2000s" -> yearMatch in 2000..2009
+                        "90s" -> yearMatch in 1990..1999
+                        "Classic" -> yearMatch < 1990
+                        else -> true
+                    }
+                    if (!matchesDecade) return@filter false
+                }
             }
 
             if (filterOnlyMyServices) {
@@ -620,58 +658,88 @@ fun WatchlistTabContent(
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Horizontal Curated Discovery Lane: Spotlight Ready to Stream
+        // Horizontal Curated Discovery Lane: Collapsible Spotlight Ready to Stream (Issue #7)
         if (searchQuery.isBlank() && spotlightItems.isNotEmpty()) {
-            Column(
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f)),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 10.dp)
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onToggleSpotlightCollapsed() },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            "Spotlight: Ready to Stream",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
                             Text(
-                                "${spotlightItems.size}",
-                                fontSize = 10.sp,
+                                "Spotlight: Ready to Stream",
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                            ) {
+                                Text(
+                                    "${spotlightItems.size}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = onToggleSpotlightCollapsed,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isSpotlightCollapsed) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                                contentDescription = if (isSpotlightCollapsed) "Expand Spotlight" else "Collapse Spotlight",
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
-                }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    spotlightItems.forEach { item ->
-                        SpotlightCard(
-                            item = item,
-                            allProviders = allProviders,
-                            onWatchClick = { onWatchClick(item) },
-                            onMovieClick = { onMovieClick(item) }
-                        )
+                    AnimatedVisibility(
+                        visible = !isSpotlightCollapsed,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            spotlightItems.forEach { item ->
+                                SpotlightCard(
+                                    item = item,
+                                    allProviders = allProviders,
+                                    onWatchClick = { onWatchClick(item) },
+                                    onMovieClick = { onMovieClick(item) }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -754,7 +822,7 @@ fun WatchlistTabContent(
             }
         }
 
-        // Single Streamlined Faceted Filter Ribbon
+        // Minimal Streamlined Filter Ribbon with Advanced Filter Sheet Entry (Issue #8)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -763,19 +831,6 @@ fun WatchlistTabContent(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FilterChip(
-                selected = !filterOnlyMyServices && !showFreeOnly && !showTopRatedOnly && selectedPlatformId == null && selectedGenre == null,
-                onClick = {
-                    onFilterToggle(false)
-                    showFreeOnly = false
-                    showTopRatedOnly = false
-                    selectedPlatformId = null
-                    selectedGenre = null
-                },
-                label = { Text("All", fontSize = 11.sp) },
-                modifier = Modifier.testTag("filter_all_chip")
-            )
-
             FilterChip(
                 selected = filterOnlyMyServices,
                 onClick = {
@@ -798,34 +853,64 @@ fun WatchlistTabContent(
                 modifier = Modifier.testTag("filter_free_chip")
             )
 
-            FilterChip(
-                selected = showTopRatedOnly,
-                onClick = { showTopRatedOnly = !showTopRatedOnly },
-                label = { Text("★ 7.5+", fontSize = 11.sp) },
-                leadingIcon = { Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(12.dp)) }
+            // Active Advanced Filter Pills (1-tap dismiss)
+            if (selectedPlatformId != null) {
+                val provName = allProviders.find { it.id == selectedPlatformId }?.name ?: selectedPlatformId!!
+                InputChip(
+                    selected = true,
+                    onClick = { selectedPlatformId = null },
+                    label = { Text(provName, fontSize = 11.sp) },
+                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                )
+            }
+
+            if (selectedGenre != null) {
+                InputChip(
+                    selected = true,
+                    onClick = { selectedGenre = null },
+                    label = { Text(selectedGenre!!, fontSize = 11.sp) },
+                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                )
+            }
+
+            if (minRating > 0.0) {
+                InputChip(
+                    selected = true,
+                    onClick = { minRating = 0.0 },
+                    label = { Text("★ ${minRating}+", fontSize = 11.sp) },
+                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                )
+            }
+
+            if (selectedDecade != null) {
+                InputChip(
+                    selected = true,
+                    onClick = { selectedDecade = null },
+                    label = { Text(selectedDecade!!, fontSize = 11.sp) },
+                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                )
+            }
+
+            // Advanced Filters Button
+            ElevatedFilterChip(
+                selected = activeAdvancedCount > 0,
+                onClick = { showAdvancedFiltersSheet = true },
+                label = {
+                    Text(
+                        if (activeAdvancedCount > 0) "Filters ($activeAdvancedCount)" else "Filters",
+                        fontSize = 11.sp,
+                        fontWeight = if (activeAdvancedCount > 0) FontWeight.Bold else FontWeight.Normal
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Advanced Filters",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (activeAdvancedCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                    )
+                }
             )
-
-            // Platform Filter Chips
-            filterProviders.forEach { provider ->
-                FilterChip(
-                    selected = selectedPlatformId == provider.id,
-                    onClick = {
-                        selectedPlatformId = if (selectedPlatformId == provider.id) null else provider.id
-                    },
-                    label = { Text(provider.name, fontSize = 11.sp) }
-                )
-            }
-
-            // Genre Filter Chips
-            allGenres.take(6).forEach { genre ->
-                FilterChip(
-                    selected = selectedGenre == genre,
-                    onClick = {
-                        selectedGenre = if (selectedGenre == genre) null else genre
-                    },
-                    label = { Text(genre, fontSize = 11.sp) }
-                )
-            }
 
             IconButton(
                 onClick = onSyncClick,
@@ -892,6 +977,236 @@ fun WatchlistTabContent(
                     )
                 }
             }
+        }
+
+        // Advanced Filter Sheet (Issue #8)
+        if (showAdvancedFiltersSheet) {
+            AdvancedFilterBottomSheet(
+                allProviders = allProviders,
+                allGenres = allGenres,
+                selectedPlatformId = selectedPlatformId,
+                onSelectPlatform = { selectedPlatformId = it },
+                selectedGenre = selectedGenre,
+                onSelectGenre = { selectedGenre = it },
+                minRating = minRating,
+                onSelectMinRating = { minRating = it },
+                selectedDecade = selectedDecade,
+                onSelectDecade = { selectedDecade = it },
+                sortBy = sortBy,
+                onSelectSortBy = { sortBy = it },
+                matchingCount = processedItems.size,
+                onResetAll = {
+                    selectedPlatformId = null
+                    selectedGenre = null
+                    minRating = 0.0
+                    selectedDecade = null
+                    showFreeOnly = false
+                    onFilterToggle(true)
+                },
+                onDismiss = { showAdvancedFiltersSheet = false }
+            )
+        }
+    }
+}
+
+// ==========================================
+// COMPOSABLE: Advanced Filter Bottom Sheet (Issue #8)
+// ==========================================
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun AdvancedFilterBottomSheet(
+    allProviders: List<StreamingProvider>,
+    allGenres: List<String>,
+    selectedPlatformId: String?,
+    onSelectPlatform: (String?) -> Unit,
+    selectedGenre: String?,
+    onSelectGenre: (String?) -> Unit,
+    minRating: Double,
+    onSelectMinRating: (Double) -> Unit,
+    selectedDecade: String?,
+    onSelectDecade: (String?) -> Unit,
+    sortBy: String,
+    onSelectSortBy: (String) -> Unit,
+    matchingCount: Int,
+    onResetAll: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Tune, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "Advanced Filters",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                TextButton(onClick = onResetAll) {
+                    Text("Reset All", color = MaterialTheme.colorScheme.error)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // Section 1: Streaming Platforms
+            Text(
+                "Streaming Platform",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                FilterChip(
+                    selected = selectedPlatformId == null,
+                    onClick = { onSelectPlatform(null) },
+                    label = { Text("Any Platform", fontSize = 11.sp) }
+                )
+                allProviders.filter { it.isActive || it.costPerMonth == 0.0 }.forEach { provider ->
+                    FilterChip(
+                        selected = selectedPlatformId == provider.id,
+                        onClick = { onSelectPlatform(if (selectedPlatformId == provider.id) null else provider.id) },
+                        label = { Text(provider.name, fontSize = 11.sp) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Section 2: Minimum Rating
+            Text(
+                "Minimum TMDB Rating",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+            ) {
+                listOf(0.0 to "Any", 6.0 to "★ 6.0+", 7.0 to "★ 7.0+", 7.5 to "★ 7.5+", 8.0 to "★ 8.0+", 8.5 to "★ 8.5+").forEach { (rating, label) ->
+                    FilterChip(
+                        selected = minRating == rating,
+                        onClick = { onSelectMinRating(rating) },
+                        label = { Text(label, fontSize = 11.sp) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Section 3: Release Era / Decade
+            Text(
+                "Release Era",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+            ) {
+                listOf(null to "All Eras", "2020s" to "2020s", "2010s" to "2010s", "2000s" to "2000s", "90s" to "90s", "Classic" to "Pre-1990").forEach { (decade, label) ->
+                    FilterChip(
+                        selected = selectedDecade == decade,
+                        onClick = { onSelectDecade(if (selectedDecade == decade) null else decade) },
+                        label = { Text(label, fontSize = 11.sp) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Section 4: Genres
+            if (allGenres.isNotEmpty()) {
+                Text(
+                    "Genre",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    FilterChip(
+                        selected = selectedGenre == null,
+                        onClick = { onSelectGenre(null) },
+                        label = { Text("All Genres", fontSize = 11.sp) }
+                    )
+                    allGenres.forEach { genre ->
+                        FilterChip(
+                            selected = selectedGenre == genre,
+                            onClick = { onSelectGenre(if (selectedGenre == genre) null else genre) },
+                            label = { Text(genre, fontSize = 11.sp) }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Section 5: Sort Order
+            Text(
+                "Sort Order",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                listOf("added" to "Recently Added", "rating" to "Highest Rated", "alpha" to "A-Z").forEach { (sortKey, sortLabel) ->
+                    FilterChip(
+                        selected = sortBy == sortKey,
+                        onClick = { onSelectSortBy(sortKey) },
+                        label = { Text(sortLabel, fontSize = 11.sp) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Show $matchingCount Titles", fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
         }
     }
 }
@@ -1215,17 +1530,24 @@ fun MediaItemCard(
     }
 }
 
+// ==========================================
+// COMPOSABLE: Watched History & Cinephile Vault (Issue #9 & #10)
+// ==========================================
 @Composable
 fun WatchedTabContent(
     watchedItems: List<MediaItem>,
     allProviders: List<StreamingProvider>,
     onMovieClick: (MediaItem) -> Unit,
     onDeleteClick: (MediaItem) -> Unit,
-    onSyncClick: () -> Unit
+    onSyncClick: () -> Unit,
+    isSyncingToSheet: Boolean = false,
+    onSyncLetterboxdToSheet: () -> Unit = {},
+    onRewatchIntent: (MediaItem) -> Unit = {}
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("timeline") } // "timeline", "alpha", "rating"
     var selectedGenre by remember { mutableStateOf<String?>(null) }
+    var viewMode by remember { mutableStateOf("timeline") } // "timeline" or "grid"
 
     val allGenres = remember(watchedItems) {
         watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
@@ -1250,16 +1572,203 @@ fun WatchedTabContent(
         }
     }
 
+    // Group items by Year-Month for timeline diary
+    val groupedItems = remember(processedItems) {
+        val sdf = java.text.SimpleDateFormat("MMMM yyyy", Locale.US)
+        processedItems.groupBy { item ->
+            val ts = item.watchedAt ?: item.addedAt
+            if (ts > 0) sdf.format(java.util.Date(ts)) else "Older Logs"
+        }
+    }
+
+    // Cinephile Vault Stats
+    val totalFilms = watchedItems.size
+    val estHours = (totalFilms * 110) / 60
+    val ratedFilms = remember(watchedItems) { watchedItems.filter { (it.rating ?: 0.0) > 0.0 } }
+    val avgRating = remember(ratedFilms) {
+        if (ratedFilms.isNotEmpty()) ratedFilms.map { it.rating!! }.average() else 0.0
+    }
+    val topGenres = remember(watchedItems) {
+        watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+            .toList()
+            .sortedByDescending { it.second }
+            .take(4)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+        // Cinephile Vault & Letterboxd Overview Card (Issue #9 & #10)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            ),
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "CINEMATIC VAULT & DIARY",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            "Letterboxd Sync & Chronological Log",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    // View Mode Switcher: Timeline vs Grid
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                            .padding(2.dp)
+                    ) {
+                        IconButton(
+                            onClick = { viewMode = "timeline" },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.DateRange,
+                                contentDescription = "Timeline View",
+                                tint = if (viewMode == "timeline") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewMode = "grid" },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.GridView,
+                                contentDescription = "Poster Wall Grid",
+                                tint = if (viewMode == "grid") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 3-KPI Stats Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(horizontalAlignment = Alignment.Start) {
+                        Text(
+                            text = "$totalFilms",
+                            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text("Films Watched", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "~${estHours}h",
+                            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text("Screen Time", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "★ ${String.format(Locale.US, "%.1f", avgRating)}",
+                            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFFFD700)
+                        )
+                        Text("Avg Rating", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+
+                // Top Genres Breakdown Chips
+                if (topGenres.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        topGenres.forEach { (genre, count) ->
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = "$genre ($count)",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 1-Tap Letterboxd Google Sheet Sync Action Button (Issue #10)
+                Button(
+                    onClick = onSyncLetterboxdToSheet,
+                    enabled = !isSyncingToSheet,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    contentPadding = PaddingValues(vertical = 8.dp, horizontal = 14.dp)
+                ) {
+                    if (isSyncingToSheet) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Syncing with Google Sheet backend...", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Sync Letterboxd to Google Sheet",
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sync Letterboxd to Google Sheet", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
         // Search & Sorting controls
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 12.dp),
+                .padding(bottom = 10.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1269,6 +1778,13 @@ fun WatchedTabContent(
                 label = { Text("Search history...") },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
                 modifier = Modifier
                     .weight(1.5f)
                     .height(52.dp),
@@ -1291,7 +1807,7 @@ fun WatchedTabContent(
                     }
                     Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(sortLabel, fontSize = 12.sp)
+                    Text(sortLabel, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
                     DropdownMenuItem(text = { Text("Watched Timeline") }, onClick = { sortBy = "timeline"; sortExpanded = false })
@@ -1306,9 +1822,9 @@ fun WatchedTabContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 10.dp)
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 FilterChip(
                     selected = selectedGenre == null,
@@ -1326,11 +1842,11 @@ fun WatchedTabContent(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "${processedItems.size} Titles Logged",
+                text = "${processedItems.size} Titles in History",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.outline,
                 fontWeight = FontWeight.Bold
@@ -1343,22 +1859,338 @@ fun WatchedTabContent(
 
         if (processedItems.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Your cinematic vault is empty.", color = MaterialTheme.colorScheme.outline)
+                Text("No logged titles found.", color = MaterialTheme.colorScheme.outline)
+            }
+        } else if (viewMode == "grid") {
+            // Poster Wall Grid View
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(processedItems, key = { it.id }) { item ->
+                    WatchedGridPosterCard(
+                        item = item,
+                        onMovieClick = { onMovieClick(item) }
+                    )
+                }
             }
         } else {
+            // Timeline Chronological Diary View (Grouped by Month & Year)
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(processedItems, key = { it.id }) { item ->
-                    MediaItemCard(
-                        item = item,
-                        allProviders = allProviders,
-                        onWatchClick = { /* No-op for watched */ },
-                        onDeleteClick = { onDeleteClick(item) },
-                        onMovieClick = { onMovieClick(item) }
+                groupedItems.forEach { (monthYear, itemsInMonth) ->
+                    item(key = "header_$monthYear") {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp, bottom = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = monthYear,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = "${itemsInMonth.size} ${if (itemsInMonth.size == 1) "film" else "films"}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    items(itemsInMonth, key = { it.id }) { item ->
+                        WatchedMediaCard(
+                            item = item,
+                            allProviders = allProviders,
+                            onMovieClick = { onMovieClick(item) },
+                            onDeleteClick = { onDeleteClick(item) },
+                            onRewatchClick = { onRewatchIntent(item) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPOSABLE: Watched Media Item Card (Issue #9)
+// ==========================================
+@Composable
+fun WatchedMediaCard(
+    item: MediaItem,
+    allProviders: List<StreamingProvider>,
+    onMovieClick: () -> Unit,
+    onDeleteClick: () -> Unit,
+    onRewatchClick: () -> Unit
+) {
+    val watchDateStr = remember(item.watchedAt, item.addedAt) {
+        val ts = item.watchedAt ?: item.addedAt
+        if (ts > 0) {
+            val sdf = java.text.SimpleDateFormat("MMM d, yyyy", Locale.US)
+            sdf.format(java.util.Date(ts))
+        } else "Logged"
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onMovieClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Movie Poster artwork
+            if (!item.imageUrl.isNullOrEmpty()) {
+                coil.compose.AsyncImage(
+                    model = item.imageUrl,
+                    contentDescription = "Poster",
+                    modifier = Modifier
+                        .size(width = 62.dp, height = 90.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Remove",
+                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                // Rating & Genres
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                ) {
+                    if (item.rating != null && item.rating > 0.0) {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFD700),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = String.format(Locale.US, "%.1f", item.rating),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (!item.genres.isNullOrEmpty()) {
+                            Text(" • ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                    if (!item.genres.isNullOrEmpty()) {
+                        Text(
+                            text = item.genres,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                // Formatted Watch Date Badge (Issue #9)
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.padding(vertical = 3.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Check,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Watched $watchDateStr",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                }
+
+                // User Notes / Letterboxd excerpt if available
+                if (!item.userNotes.isNullOrBlank()) {
+                    Text(
+                        text = "\"${item.userNotes}\"",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        modifier = Modifier.padding(vertical = 2.dp)
                     )
                 }
+
+                // Quick Action Bar: Re-watch intent
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = onRewatchClick,
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Replay,
+                            contentDescription = "Re-watch",
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Re-watch", fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
+// COMPOSABLE: Poster Wall Grid Card
+// ==========================================
+@Composable
+fun WatchedGridPosterCard(
+    item: MediaItem,
+    onMovieClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.68f)
+            .clickable { onMovieClick() },
+        shape = RoundedCornerShape(10.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (!item.imageUrl.isNullOrEmpty()) {
+                coil.compose.AsyncImage(
+                    model = item.imageUrl,
+                    contentDescription = item.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+            }
+
+            // Top rating badge
+            if (item.rating != null && item.rating > 0.0) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color.Black.copy(alpha = 0.75f),
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .align(Alignment.TopEnd)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(10.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = String.format(Locale.US, "%.1f", item.rating),
+                            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 9.sp
+                        )
+                    }
+                }
+            }
+
+            // Bottom title overlay gradient
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
+                        )
+                    )
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = item.title,
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -2110,6 +2942,8 @@ fun SettingsDialog(
     onSaveOllamaHost: (String) -> Unit,
     githubToken: String,
     onSaveGithubToken: (String) -> Unit,
+    googleSheetWebhookUrl: String = "",
+    onSaveGoogleSheetWebhookUrl: (String) -> Unit = {},
     enableBetaFeedback: Boolean = true,
     onToggleBetaFeedback: (Boolean) -> Unit = {},
     onDismiss: () -> Unit
@@ -2341,6 +3175,39 @@ fun SettingsDialog(
                                     
                                     TextButton(onClick = { uriHandler.openUri("https://api.watchmode.com/") }) {
                                         Text("Get Watchmode API Key", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+
+                            // Google Sheet Webhook Section (Issue #10)
+                            var sheetWebhookInput by remember(googleSheetWebhookUrl) { mutableStateOf(googleSheetWebhookUrl) }
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text("Google Sheet Webhook (Letterboxd Sync)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Google Apps Script Webhook URL to receive watched & watchlist sync payloads directly into your Google Sheet ($0/mo).", style = MaterialTheme.typography.bodySmall)
+                                    
+                                    OutlinedTextField(
+                                        value = sheetWebhookInput,
+                                        onValueChange = { sheetWebhookInput = it },
+                                        label = { Text("Apps Script Webhook URL") },
+                                        placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    
+                                    Button(
+                                        onClick = { onSaveGoogleSheetWebhookUrl(sheetWebhookInput) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)
+                                    ) {
+                                        Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Save Webhook URL", fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -3045,17 +3912,20 @@ fun MovieDetailsBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Letterboxd link if available
-                if (!item.sharedUrl.isNullOrEmpty()) {
-                    OutlinedButton(
-                        onClick = { uriHandler.openUri(item.sharedUrl) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("View Source", fontSize = 12.sp)
-                    }
+                // Letterboxd / Web Source link (Issue #10)
+                val letterboxdUrl = if (!item.sharedUrl.isNullOrEmpty()) {
+                    item.sharedUrl
+                } else {
+                    "https://letterboxd.com/search/${android.net.Uri.encode(item.title)}/"
+                }
+                OutlinedButton(
+                    onClick = { uriHandler.openUri(letterboxdUrl) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Letterboxd", fontSize = 12.sp)
                 }
 
                 Button(
