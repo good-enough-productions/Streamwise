@@ -36,6 +36,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,11 +64,12 @@ fun HomeScreen(
     val tmdbApiKey by viewModel.tmdbApiKey.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Agent
+    var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Explore
     var filterOnlyMyServices by remember { mutableStateOf(false) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
+    val isDark by viewModel.isDarkMode.collectAsState()
 
     // Clear and display Toast/Status banners beautifully
     LaunchedEffect(statusMessage) {
@@ -81,13 +85,37 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Streamwise",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Column {
+                        Text(
+                            "Streamwise",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            when (selectedTab) {
+                                0 -> "Watchlist"
+                                1 -> "Watched History"
+                                2 -> "ROI Analytics"
+                                3 -> "Explore & Cinema AI"
+                                else -> ""
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { viewModel.toggleDarkMode() },
+                        modifier = Modifier.testTag("theme_toggle_button")
+                    ) {
+                        Icon(
+                            imageVector = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
+                            contentDescription = if (isDark) "Switch to Light Theme" else "Switch to Dark Theme",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     IconButton(
                         onClick = { viewModel.exportToObsidian() },
                         modifier = Modifier.testTag("export_obsidian_button")
@@ -124,6 +152,41 @@ fun HomeScreen(
                 )
             )
         },
+        bottomBar = {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
+                modifier = Modifier.testTag("main_navigation_bar")
+            ) {
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist") },
+                    label = { Text("Watchlist") },
+                    modifier = Modifier.testTag("tab_watchlist")
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.Default.Check, contentDescription = "Watched") },
+                    label = { Text("Watched") },
+                    modifier = Modifier.testTag("tab_watched")
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Default.Star, contentDescription = "ROI Stats") },
+                    label = { Text("ROI Stats") },
+                    modifier = Modifier.testTag("tab_budget")
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
+                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Explore") },
+                    label = { Text("Explore") },
+                    modifier = Modifier.testTag("tab_agent")
+                )
+            }
+        },
         floatingActionButton = {
             if (selectedTab == 0 || selectedTab == 1) {
                 ExtendedFloatingActionButton(
@@ -131,7 +194,6 @@ fun HomeScreen(
                     icon = { Icon(Icons.Default.Add, contentDescription = "Add media item") },
                     onClick = { showAddDialog = true },
                     modifier = Modifier
-                        .navigationBarsPadding()
                         .testTag("add_item_fab"),
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -144,42 +206,6 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Main navigation tabs for modular layout
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
-                contentColor = MaterialTheme.colorScheme.primary
-            ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Watchlist", fontSize = 11.sp, fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist tab") },
-                    modifier = Modifier.testTag("tab_watchlist")
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Watched", fontSize = 11.sp, fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
-                    icon = { Icon(Icons.Default.Check, contentDescription = "Watched history tab") },
-                    modifier = Modifier.testTag("tab_watched")
-                )
-                Tab(
-                    selected = selectedTab == 2,
-                    onClick = { selectedTab = 2 },
-                    text = { Text("ROI Stats", fontSize = 11.sp, fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
-                    icon = { Icon(Icons.Default.Star, contentDescription = "ROI stats tab") },
-                    modifier = Modifier.testTag("tab_budget")
-                )
-                Tab(
-                    selected = selectedTab == 3,
-                    onClick = { selectedTab = 3 },
-                    text = { Text("Agent", fontSize = 11.sp, fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
-                    icon = { Icon(Icons.Default.Person, contentDescription = "AI Agent tab") },
-                    modifier = Modifier.testTag("tab_agent")
-                )
-            }
-
             AnimatedContent(
                 targetState = selectedTab,
                 transitionSpec = {
@@ -217,10 +243,17 @@ fun HomeScreen(
                     3 -> {
                         val chatMessages by viewModel.chatMessages.collectAsState()
                         val isChatLoading by viewModel.isChatLoading.collectAsState()
-                        AgentChatTabContent(
+                        val geminiAnalysis by viewModel.geminiAnalysis.collectAsState()
+                        val isGeminiAnalyzing by viewModel.isAnalyzingWithGemini.collectAsState()
+                        ExploreTabContent(
                             chatMessages = chatMessages,
                             isLoading = isChatLoading,
-                            onSendMessage = { viewModel.sendChatMessage(it) }
+                            onSendMessage = { viewModel.sendChatMessage(it) },
+                            geminiAnalysis = geminiAnalysis,
+                            isGeminiAnalyzing = isGeminiAnalyzing,
+                            onRefreshGeminiAnalysis = { viewModel.runGeminiProAnalysis() },
+                            podcastEpisodes = viewModel.podcastEpisodes,
+                            movieNews = viewModel.movieNews
                         )
                     }
                 }
@@ -529,127 +562,6 @@ fun WatchlistTabContent(
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Bento Grid Header (Above-the-fold Information Density)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Bento Card 1: Vault Pulse & Spending Ticker
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(96.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                ),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "VAULT PULSE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "${watchlistItems.size}",
-                            style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"),
-                            fontWeight = FontWeight.Black,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "archived",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
-                    }
-                    Text(
-                        text = "${allProviders.count { it.isActive }} services • $${String.format(Locale.US, "%.2f", allProviders.filter { it.isActive }.sumOf { it.costPerMonth })}/mo",
-                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
-                        color = MaterialTheme.colorScheme.outline,
-                        maxLines = 1
-                    )
-                }
-            }
-
-            // Bento Card 2: Olivia Concierge Intelligence
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(96.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            "OLIVIA AGENT",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp
-                        )
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF10B981))
-                        )
-                    }
-                    Text(
-                        text = "Gemma 4 Brain",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                    Text(
-                        text = "Privacy-First • Local AI",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-
         // Horizontal Curated Discovery Lane: Spotlight Ready to Stream
         if (searchQuery.isBlank() && spotlightItems.isNotEmpty()) {
             Column(
@@ -2793,6 +2705,610 @@ fun MovieDetailsBottomSheet(
 }
 
 // ==========================================
+// COMPOSABLE: Explore Tab (AI & Cinematic Culture)
+// ==========================================
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ExploreTabContent(
+    chatMessages: List<com.example.data.remote.OllamaChatMessage>,
+    isLoading: Boolean,
+    onSendMessage: (String) -> Unit,
+    geminiAnalysis: com.example.data.model.GeminiAnalysisResult?,
+    isGeminiAnalyzing: Boolean,
+    onRefreshGeminiAnalysis: () -> Unit,
+    podcastEpisodes: List<com.example.data.model.PodcastEpisode>,
+    movieNews: List<com.example.data.model.MovieNewsItem>
+) {
+    var selectedSubTab by remember { mutableStateOf(0) } // 0: Discover & Insights, 1: Chat with Olivia
+    val uriHandler = LocalUriHandler.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("explore_tab_content")
+    ) {
+        // Sub-Navigation Selector: "Discover & Insights" vs "Chat with Olivia"
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = selectedSubTab == 0,
+                    onClick = { selectedSubTab = 0 },
+                    label = { Text("Discover & Insights", fontWeight = FontWeight.Bold) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f).testTag("subtab_discover"),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+                FilterChip(
+                    selected = selectedSubTab == 1,
+                    onClick = { selectedSubTab = 1 },
+                    label = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Chat with Olivia", fontWeight = FontWeight.Bold)
+                            if (chatMessages.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            "${chatMessages.size}",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f).testTag("subtab_chat"),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+            }
+        }
+
+        if (selectedSubTab == 0) {
+            // Discover & Insights Content
+            val scrollState = rememberScrollState()
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // 1. GEMINI PRO INTELLIGENCE CARD (Custom content driven by Gemini Pro API analysis)
+                Card(
+                    modifier = Modifier.fillMaxWidth().testTag("gemini_pro_card"),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Card Header
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.AutoAwesome,
+                                            contentDescription = "Gemini Pro",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Column {
+                                    Text(
+                                        "CINEPHILE SYNTHESIS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        "Powered by Gemini 3.1 Pro",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+
+                            // Refresh Analysis Button
+                            IconButton(
+                                onClick = onRefreshGeminiAnalysis,
+                                enabled = !isGeminiAnalyzing,
+                                modifier = Modifier.size(36.dp).testTag("refresh_gemini_button")
+                            ) {
+                                if (isGeminiAnalyzing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh Gemini Pro Analysis",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+
+                        if (geminiAnalysis != null) {
+                            // Headline
+                            Text(
+                                text = geminiAnalysis.headline,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            // Narrative synthesis
+                            Text(
+                                text = geminiAnalysis.narrative,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 20.sp
+                            )
+
+                            // Detected Core Themes Chips
+                            if (geminiAnalysis.themes.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        "VAULT THEMES",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        geminiAnalysis.themes.forEach { theme ->
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
+                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
+                                            ) {
+                                                Text(
+                                                    text = theme,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Auteur & Cinematographer Ties
+                            if (geminiAnalysis.auteurConnections.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        "AUTEUR & STYLISTIC LINKS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    geminiAnalysis.auteurConnections.forEach { connection ->
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Star,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Text(
+                                                text = connection,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Curated Recommendations
+                            if (geminiAnalysis.recommendations.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        "GEMINI PRO TAILORED PICKS",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    geminiAnalysis.recommendations.forEach { (title, reason) ->
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.surface,
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(10.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                verticalAlignment = Alignment.Top
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.PlayArrow,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(18.dp).padding(top = 2.dp)
+                                                )
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = title,
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                    Text(
+                                                        text = reason,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Action button: Chat about this analysis
+                            OutlinedButton(
+                                onClick = {
+                                    selectedSubTab = 1
+                                    onSendMessage("Tell me more about the cinema analysis of my vault: ${geminiAnalysis.headline}")
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Discuss Analysis with Olivia", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else if (isGeminiAnalyzing) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text("Synthesizing vault profile with Gemini Pro...", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    }
+                }
+
+                // 2. PODCAST EPISODES (Matched to User's Saved Content)
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Headphones,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "CINEMA PODCASTS",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Text(
+                            text = "Vault Aligned",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    podcastEpisodes.forEach { pod ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = pod.showTitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = pod.duration,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+
+                                Text(
+                                    text = pod.episodeTitle,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Text(
+                                    text = pod.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                uriHandler.openUri(pod.podcastUrl)
+                                            } catch (e: Exception) {
+                                                // Fallback safely
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f).height(34.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Listen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            selectedSubTab = 1
+                                            onSendMessage("What do you think about the discussion in this episode: '${pod.showTitle} - ${pod.episodeTitle}'?")
+                                        },
+                                        modifier = Modifier.weight(1f).height(34.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Ask Olivia", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 3. MOVIE NEWS & FILM CULTURE
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Article,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "INDUSTRY DISPATCHES",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                        Text(
+                            text = "Live Cinephile Feed",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+
+                    movieNews.forEach { news ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                                    ) {
+                                        Text(
+                                            text = news.category,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "${news.source} • ${news.date}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+
+                                Text(
+                                    text = news.title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Text(
+                                    text = news.summary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    TextButton(
+                                        onClick = {
+                                            selectedSubTab = 1
+                                            onSendMessage("Tell me more about this news item: '${news.title}'")
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Discuss with Olivia", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 4. QUICK CONVERSATION STARTERS (Jump to Chat)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "PROMPT OLIVIA DIRECTLY",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.outline,
+                        letterSpacing = 0.5.sp
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val prompts = listOf(
+                            "What should I watch tonight?",
+                            "Recommend a 70s neo-noir",
+                            "Explain Denis Villeneuve's style",
+                            "Which service should I cancel?"
+                        )
+                        prompts.forEach { p ->
+                            SuggestionChip(
+                                onClick = {
+                                    selectedSubTab = 1
+                                    onSendMessage(p)
+                                },
+                                label = { Text(p, fontSize = 11.sp) },
+                                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+        } else {
+            // SubTab 1: Chat with Olivia
+            AgentChatTabContent(
+                chatMessages = chatMessages,
+                isLoading = isLoading,
+                onSendMessage = onSendMessage
+            )
+        }
+    }
+}
+
+// ==========================================
 // COMPOSABLE: Agent Chat Tab
 // ==========================================
 @Composable
@@ -2899,8 +3415,10 @@ fun AgentChatTabContent(
             )
             FloatingActionButton(
                 onClick = {
-                    onSendMessage(inputMessage)
-                    inputMessage = ""
+                    if (inputMessage.isNotBlank()) {
+                        onSendMessage(inputMessage)
+                        inputMessage = ""
+                    }
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
