@@ -24,7 +24,8 @@
         <h2>1. Watchlist & Discovery</h2>
         <ul>
             <li><strong>Live Title Counts:</strong> Keep track of your queue size at a glance via the Top App Bar (<code>Watchlist • X Titles</code>), Bottom Navigation badge, and the sticky summary bar (<code>Showing X of Y titles</code>).</li>
-            <li><strong>Natural Scrolling Spotlight & Sticky Search:</strong> The "Spotlight: Ready to Stream" carousel scrolls away naturally as you scroll down your watchlist, while the Search bar and Filter ribbon stick firmly to the top for quick access. Scroll back to the top anytime to reveal Spotlight again.</li>
+            <li><strong>Collapsible Spotlight:</strong> Tap the <em>Spotlight: Ready to Stream</em> header or chevron to toggle between the full 8-title carousel and a compact 36dp header bar. Collapsing Spotlight frees up 1/3 of your screen for immediate movie browsing, and your preference is remembered automatically.</li>
+            <li><strong>Streamlined Filter Bar:</strong> Enjoy a clean, uncluttered homepage ribbon featuring <code>[✓ My Services]</code>, <code>[Free w/ Ads]</code>, and a dedicated <code>[Filters]</code> chip with an active count badge. When filters are active, a single <code>[Clear (X) ✕]</code> chip lets you reset with one tap.</li>
             <li><strong>Default View ("My Services"):</strong> Streamwise defaults to filtering your queue by movies and TV shows ready to stream on your active subscriptions and free platforms.</li>
             <li><strong>Podcasts & Media Mentions:</strong> Filter your watchlist to titles covered on your favorite film podcasts, including <em>What Went Wrong</em>, <em>The Rewatchables</em>, <em>The Big Picture</em>, <em>Blank Check</em>, <em>Unspooled</em>, and <em>How Did This Get Made?</em>. When a podcast filter is active, Streamwise automatically displays all covered movies across all providers so you never miss a recommendation. All imported recommendations are strictly validated against TMDB to ensure only feature films and series are queued. Toggle "Featured Discussion Only" to focus exclusively on dedicated deep-dives. Powered by an offline catalog of 2,300+ podcast-discussed titles and real-time Google Sheet synchronization.</li>
             <li><strong>Multi-Select Advanced Filters:</strong> Tap <strong>Filters</strong> on the home ribbon to open the filter sheet. Select multiple streaming platforms, genres, and release eras (2020s, Classic, etc.) to widen your search with OR logic. Active filters appear as 1-tap dismissible tags on the sticky ribbon.</li>
@@ -35,22 +36,20 @@
     <div class="section">
         <h2>2. Cinephile Vault, Viewing Analytics & Letterboxd Sync</h2>
         <ul>
-            <li><strong>Streamlined Vault & Collapsible Summary:</strong> The Watched Vault now puts your movie diary and poster wall first with over 90% vertical space dedicated to browsing. A slim sticky top bar houses the search field, sort dropdown, and view switcher, while the Cinephile Overview card lives right in the scrollable view and can be collapsed into a compact 1-line summary (<code>🎬 1,130 Films • ~2,071h • ★ 7.2 • ~7.0/mo</code>).</li>
+            <li><strong>Streamlined Vault & Decade Trends:</strong> The Watched Vault features visual decade trend capsules (<code>2000s (34%)</code>, <code>2010s (26%)</code>, <code>1990s (19%)</code>, <code>2020s (15%)</code>) right in the header card. Every film in your vault displays its confirmed release year (<code>Title (Year)</code>), extracted star ratings, and watch date badge.</li>
+            <li><strong>1-Tap Letterboxd + Google Sheet Sync:</strong> Tap the prominent <strong>Sync Letterboxd & Google Sheet</strong> button on the Watched page to simultaneously pull your latest live Letterboxd diary entries and back up your vault to Google Sheets with live status feedback.</li>
             <li><strong>Cinephile Viewing Analytics Hub:</strong> Tap the <em>Viewing Analytics & Eras</em> banner or top analytics chart icon to open your personal cinephile dashboard:
                 <ul>
                     <li><strong>Auteurs & Directors:</strong> Ranked film counts across top directors (Coen Brothers, Nolan, Scorsese, Fincher, Tarantino, Spielberg, etc.) with star ratings and sample title tags.</li>
                     <li><strong>Stars & Screen Presence:</strong> Track appearances across leading actors (Tom Cruise, Matt Damon, Leonardo DiCaprio, Brad Pitt, Robert De Niro, etc.).</li>
                     <li><strong>Cinephile Blind Spots & Watchlist Integration:</strong> Detects underrepresented areas in your vault (Pre-1970s Golden Age, 70s New Hollywood, Westerns, Documentaries) and lists matching films from your 1,100+ Watchlist queue ready to stream.</li>
-                    <li><strong>Cinema Eras & Decades Breakdown:</strong> Visual progress bars across 2020s down to Pre-1970s classic cinema with 1-tap filtering.</li>
+                    <li><strong>Cinema Eras & Decades Breakdown:</strong> Visual progress bars across 2020s down to Pre-1970s classic cinema with 0% unknown era and 1-tap filtering.</li>
+                    <li><strong>TMDB Rating Enrichment:</strong> 1-tap action to query TMDB and enrich unrated diary entries with TMDB scores and genres.</li>
                     <li><strong>Rhythm & Velocity:</strong> Displays your rolling 6-month viewing velocity (e.g. <code>~7.0 films/mo</code>) alongside your all-time peak viewing month.</li>
                 </ul>
             </li>
             <li><strong>"Service Used" Logging & Filtering:</strong> Tag the exact streaming service (Netflix, Max, Criterion, etc.) or theater you used to watch any film directly inside Movie Details. Filter your watched vault by service to see your viewing breakdown.</li>
-            <li><strong>Live Letterboxd RSS Sync:</strong> Tap <strong>Sync RSS Diary</strong> to pull your recent diary entries from <code>letterboxd.com</code>. Streamwise parses titles, star ratings, and watch dates, adding missing films straight to your Watched Vault.</li>
-            <li><strong>Local CSV & ZIP File Import:</strong> Tap <strong>Import CSV/ZIP</strong> (in Watched Vault or Settings) to import <code>watchlist.csv</code>, <code>watched.csv</code>, <code>diary.csv</code>, <code>ratings.csv</code>, or full account ZIP exports (<code>letterboxd-*-data.zip</code>) with intelligent deduplication.</li>
-            <li><strong>Two-Way Export for Letterboxd:</strong> Tap <strong>Export for LB</strong> to generate a standard Letterboxd import CSV (<code>Title,Year,Rating10,WatchedDate</code>) via Android share sheet and upload directly to <code>https://letterboxd.com/import/</code>.</li>
-            <li><strong>1-Tap Web Actions:</strong> In Settings, open 1-tap links to Letterboxd watchlist export, account data export, and the web importer.</li>
-            <li><strong>Google Sheet Ledger Sync:</strong> Export your full diary and watchlist directly into a cloud Google Sheet via Google Apps Script ($0/mo).</li>
+            <li><strong>Local CSV & ZIP File Tools:</strong> Expand the CSV file tools drawer in the Watched Vault or Settings to import/export standard Letterboxd archives (<code>Title,Year,Rating10,WatchedDate</code>) with intelligent deduplication.</li>
         </ul>
     </div>
 

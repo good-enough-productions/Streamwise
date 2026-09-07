@@ -18,6 +18,36 @@ class WatchedAnalyticsCalculatorUnitTest {
 
         val item3 = MediaItem(title = "Alien", overview = "Imported from Letterboxd diary: Alien (1979). Logged on 2024-01-01.")
         assertEquals(1979, WatchedAnalyticsCalculator.extractReleaseYear(item3))
+
+        val item4 = MediaItem(title = "Shawshank Redemption", releaseDate = "1994-10-14")
+        assertEquals(1994, WatchedAnalyticsCalculator.extractReleaseYear(item4))
+
+        val item5 = MediaItem(title = "The Babysitter", sharedUrl = "https://letterboxd.com/scriptedmind/film/the-babysitter-2017/")
+        assertEquals(2017, WatchedAnalyticsCalculator.extractReleaseYear(item5))
+
+        val item6 = MediaItem(title = "About Last Night", userNotes = "Podcast: The Rewatchables (1986)")
+        assertEquals(1986, WatchedAnalyticsCalculator.extractReleaseYear(item6))
+    }
+
+    @Test
+    fun testExtractRating() {
+        val item1 = MediaItem(title = "Direct Rating", rating = 8.5)
+        assertEquals(8.5, WatchedAnalyticsCalculator.extractRating(item1)!!, 0.01)
+
+        val item2 = MediaItem(title = "Star Glyphs", userNotes = "Loved this! ★★★★½ masterpiece.")
+        assertEquals(9.0, WatchedAnalyticsCalculator.extractRating(item2)!!, 0.01)
+
+        val item3 = MediaItem(title = "Three Stars", overview = "Letterboxd review: ★★★")
+        assertEquals(6.0, WatchedAnalyticsCalculator.extractRating(item3)!!, 0.01)
+
+        val item4 = MediaItem(title = "Slash 10", userNotes = "Rating: 7.5/10 solid film")
+        assertEquals(7.5, WatchedAnalyticsCalculator.extractRating(item4)!!, 0.01)
+
+        val item5 = MediaItem(title = "Slash 5", userNotes = "Rating: 4/5")
+        assertEquals(8.0, WatchedAnalyticsCalculator.extractRating(item5)!!, 0.01)
+
+        val item6 = MediaItem(title = "No Rating")
+        assertNull(WatchedAnalyticsCalculator.extractRating(item6))
     }
 
     @Test

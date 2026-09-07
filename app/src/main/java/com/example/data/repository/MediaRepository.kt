@@ -55,6 +55,10 @@ class MediaRepository(val mediaDao: MediaDao) {
         mediaDao.updateMediaItem(item)
     }
 
+    suspend fun updateMediaItems(items: List<MediaItem>) {
+        mediaDao.updateMediaItems(items)
+    }
+
     suspend fun deleteMediaItem(item: MediaItem) {
         mediaDao.deleteMediaItem(item)
     }

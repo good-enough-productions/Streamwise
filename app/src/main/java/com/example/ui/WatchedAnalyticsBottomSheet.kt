@@ -33,6 +33,9 @@ fun WatchedAnalyticsBottomSheet(
     onSelectGenre: (String?) -> Unit,
     selectedService: String?,
     onSelectService: (String?) -> Unit,
+    onEnrichVaultRatings: (() -> Unit)? = null,
+    isEnrichingVault: Boolean = false,
+    vaultEnrichProgress: String = "",
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(
@@ -110,8 +113,8 @@ fun WatchedAnalyticsBottomSheet(
                 )
                 AnalyticsKpiCard(
                     title = "Avg Rating",
-                    value = "★ ${String.format(Locale.US, "%.1f", analytics.avgRating)}",
-                    subtitle = "${analytics.ratedCount} rated",
+                    value = if (analytics.ratedCount > 0) "★ ${String.format(Locale.US, "%.1f", analytics.avgRating)}" else "Unrated",
+                    subtitle = "${analytics.ratedCount} of ${analytics.totalFilms} rated",
                     valueColor = Color(0xFFFFD700),
                     modifier = Modifier.weight(1f)
                 )
@@ -751,16 +754,57 @@ fun WatchedAnalyticsBottomSheet(
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        "⭐ Rating Distribution",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "How you rate films across a 10-point scale",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "⭐ Rating Distribution",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                if (analytics.ratedCount < analytics.totalFilms)
+                                    "${analytics.ratedCount} rated of ${analytics.totalFilms} logged films"
+                                else
+                                    "How you rate films across a 10-point scale",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        if (onEnrichVaultRatings != null && analytics.ratedCount < analytics.totalFilms) {
+                            FilledTonalButton(
+                                onClick = onEnrichVaultRatings,
+                                enabled = !isEnrichingVault,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                if (isEnrichingVault) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Enriching...", fontSize = 11.sp)
+                                } else {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Enrich TMDB", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+
+                    if (isEnrichingVault && vaultEnrichProgress.isNotBlank()) {
+                        Text(
+                            text = vaultEnrichProgress,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
 
                     analytics.ratingBins.forEach { bin ->
                         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
