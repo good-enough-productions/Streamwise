@@ -33,9 +33,15 @@ data class MediaItem(
     // Latest timestamp when this movie was watched
     val watchedAt: Long? = null,
     // Comma-separated list of active provider IDs (e.g., "netflix,hulu,max") available for this media item
-    val providerIds: String? = null
+    val providerIds: String? = null,
+    // Official release date from TMDB (e.g., "1989-08-09")
+    val releaseDate: String? = null
 ) {
     // Utility to parse provider IDs array
     val providersList: List<String>
         get() = providerIds?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() && it != "none" } ?: emptyList()
+
+    // 4-digit release year extracted from releaseDate or fallback title
+    val releaseYear: Int?
+        get() = releaseDate?.take(4)?.toIntOrNull()
 }

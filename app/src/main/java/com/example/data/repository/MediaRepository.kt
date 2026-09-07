@@ -63,6 +63,10 @@ class MediaRepository(val mediaDao: MediaDao) {
         mediaDao.deleteMediaItemById(id)
     }
 
+    suspend fun deleteMediaItemsByIdList(ids: List<Long>): Int {
+        return mediaDao.deleteMediaItemsByIdList(ids)
+    }
+
     suspend fun getIntendingToWatchItems(): List<MediaItem> {
         return mediaDao.getIntendingToWatchItems()
     }

@@ -60,6 +60,9 @@ object WatchedAnalyticsCalculator {
      * Extracts the 4-digit release year from title, overview, or notes.
      */
     fun extractReleaseYear(item: MediaItem): Int? {
+        // 0. Direct official release date/year from TMDB if available
+        item.releaseYear?.let { return it }
+
         // 1. Look for (YYYY) in title
         YEAR_PAREN_REGEX.find(item.title)?.let { match ->
             match.groupValues.getOrNull(1)?.toIntOrNull()?.let { return it }
