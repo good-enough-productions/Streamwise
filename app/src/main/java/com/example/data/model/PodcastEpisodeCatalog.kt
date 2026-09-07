@@ -67,8 +67,17 @@ object PodcastEpisodeCatalog {
         if (dynamicTitlesMap.isNotEmpty()) return
         try {
             val jsonString = context.assets.open("podcast_titles.json").bufferedReader().use { it.readText() }
+            initializeWithJson(jsonString)
+        } catch (e: Exception) {
+            android.util.Log.e("PodcastEpisodeCatalog", "Error loading podcast titles asset: ${e.message}")
+        }
+    }
+
+    fun initializeWithJson(jsonString: String) {
+        try {
             val jsonObject = org.json.JSONObject(jsonString)
             val keys = jsonObject.keys()
+            val parsedMap = mutableMapOf<String, Set<String>>()
             while (keys.hasNext()) {
                 val key = keys.next()
                 val array = jsonObject.getJSONArray(key)
@@ -76,11 +85,20 @@ object PodcastEpisodeCatalog {
                 for (i in 0 until array.length()) {
                     set.add(array.getString(i))
                 }
-                dynamicTitlesMap[key] = set
+                parsedMap[key] = set
             }
+            loadCatalog(parsedMap)
         } catch (e: Exception) {
-            android.util.Log.e("PodcastEpisodeCatalog", "Error loading podcast titles asset: ${e.message}")
+            // Graceful fallback for non-Android environments
         }
+    }
+
+    fun loadCatalog(map: Map<String, Set<String>>) {
+        dynamicTitlesMap.putAll(map)
+    }
+
+    fun clearForTesting() {
+        dynamicTitlesMap.clear()
     }
 
     // Catalog mapping lowercase normalized movie titles
@@ -184,9 +202,10 @@ object PodcastEpisodeCatalog {
         PodcastMention("hdtgm", "waterworld", false, "Mentioned in biggest budget flops discussion")
     )
 
-    private fun normalize(str: String): String {
+    internal fun normalize(str: String): String {
         return str.lowercase()
             .replace(Regex("[^a-z0-9 ]"), "")
+            .replace(Regex("\\s+"), " ")
             .trim()
     }
 
