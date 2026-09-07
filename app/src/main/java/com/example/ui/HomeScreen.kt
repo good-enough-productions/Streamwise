@@ -356,6 +356,7 @@ fun HomeScreen(
                     2 -> MonthlyRoiContent(
                         monthlyStats = monthlyStats,
                         allProviders = allProviders,
+                        watchlistItems = watchlistItems,
                         onProviderClick = { showServiceDetailProvider = it }
                     )
                     3 -> {
@@ -471,6 +472,11 @@ fun HomeScreen(
             ServiceDetailBottomSheet(
                 provider = showServiceDetailProvider!!,
                 stats = providerStats,
+                watchlistItems = watchlistItems,
+                onSelectMovie = { movie ->
+                    showServiceDetailProvider = null
+                    detailMovieItem = movie
+                },
                 onUpdateProvider = { updated ->
                     viewModel.updateStreamingProvider(updated)
                     showServiceDetailProvider = null
@@ -2646,6 +2652,7 @@ fun WatchedGridPosterCard(
 fun MonthlyRoiContent(
     monthlyStats: List<ProviderUsageStats>,
     allProviders: List<StreamingProvider>,
+    watchlistItems: List<MediaItem> = emptyList(),
     onProviderClick: (StreamingProvider) -> Unit = {}
 ) {
     val activeSubscribed = remember(allProviders) { allProviders.filter { it.isActive } }
@@ -2703,8 +2710,13 @@ fun MonthlyRoiContent(
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                     Spacer(modifier = Modifier.height(6.dp))
+                    val totalActiveQueued = remember(activeSubscribed, watchlistItems) {
+                        watchlistItems.count { item ->
+                            item.providersList.any { p -> activeSubscribed.any { it.id.equals(p, ignoreCase = true) } }
+                        }
+                    }
                     Text(
-                        "Tracked across ${activeSubscribed.size} active services. Threshold: ≥3h/mo per subscription for positive value.",
+                        "Tracked across ${activeSubscribed.size} active services ($totalActiveQueued watchlist titles ready to stream). Threshold: ≥3h/mo per subscription for positive value.",
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
@@ -2824,6 +2836,23 @@ fun MonthlyRoiContent(
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val queueCount = remember(watchlistItems, provider.id) {
+                                watchlistItems.count { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (queueCount > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            ) {
+                                Text(
+                                    text = if (queueCount > 0) "🎬 $queueCount Watchlist Titles" else "0 in Watchlist",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (queueCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -2865,6 +2894,9 @@ fun MonthlyRoiContent(
             }
 
             items(inactiveProviders, key = { it.id }) { provider ->
+                val queueCount = remember(watchlistItems, provider.id) {
+                    watchlistItems.count { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
+                }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2881,7 +2913,23 @@ fun MonthlyRoiContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text(provider.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(provider.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                if (queueCount > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                    ) {
+                                        Text(
+                                            "🎬 $queueCount Queued",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                            }
                             Text(
                                 if (provider.costPerMonth > 0) "$${provider.costPerMonth}/mo • Inactive" else "Free Platform",
                                 fontSize = 11.sp,
@@ -3473,6 +3521,8 @@ fun ProviderSelector(
 fun ServiceDetailBottomSheet(
     provider: StreamingProvider,
     stats: ProviderUsageStats?,
+    watchlistItems: List<MediaItem> = emptyList(),
+    onSelectMovie: (MediaItem) -> Unit = {},
     onUpdateProvider: (StreamingProvider) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -3672,6 +3722,107 @@ fun ServiceDetailBottomSheet(
                                     color = if (roiPerHr <= 2.50) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            // Watchlist Queue on this Service
+            val availableWatchlist = remember(watchlistItems, provider.id) {
+                watchlistItems.filter { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "🎬",
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                text = "Watchlist on ${provider.name}",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "${availableWatchlist.size} Titles",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    if (availableWatchlist.isEmpty()) {
+                        Text(
+                            text = "No movies currently on your watchlist are available to stream on ${provider.name}.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    } else {
+                        availableWatchlist.take(10).forEach { item ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSelectMovie(item) }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (item.rating != null && item.rating > 0.0) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "★ ${String.format(Locale.US, "%.1f", item.rating)}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (availableWatchlist.size > 10) {
+                            Text(
+                                text = "+ ${availableWatchlist.size - 10} more titles on this service",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
                         }
                     }
                 }

@@ -8,6 +8,8 @@ import android.os.Looper
 import android.util.Base64
 import android.view.PixelCopy
 import android.view.View
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -19,12 +21,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -78,6 +82,7 @@ fun FeedbackDialog(
     onSubmitSuccess: (String) -> Unit
 ) {
     val view = LocalView.current
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var feedbackType by remember { mutableStateOf("Bug Report") } // "Bug Report", "Feature Request", "UI / UX"
@@ -181,66 +186,73 @@ fun FeedbackDialog(
                         value = description,
                         onValueChange = { description = it },
                         label = { Text("Details & Context") },
-                        placeholder = { Text("Describe what happened or what you'd like improved...") },
+                        placeholder = { Text("What happened? What were you expecting?") },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(110.dp)
-                            .testTag("feedback_desc_input"),
+                            .heightIn(min = 100.dp)
+                            .testTag("feedback_description_input"),
                         shape = RoundedCornerShape(12.dp)
                     )
 
-                    // Screenshot Preview
-                    if (capturedBitmap != null) {
-                        Column {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Screen Capture",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = if (includeScreenshot) "Attached" else "Excluded",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (includeScreenshot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Switch(
-                                        checked = includeScreenshot,
-                                        onCheckedChange = { includeScreenshot = it }
-                                    )
-                                }
-                            }
+                    // Screenshot inclusion toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Screen Capture",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = if (includeScreenshot) "Attached" else "Omitted",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (includeScreenshot) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            Switch(
+                                checked = includeScreenshot,
+                                onCheckedChange = { includeScreenshot = it }
+                            )
+                        }
+                    }
 
-                            if (includeScreenshot) {
-                                Spacer(modifier = Modifier.height(6.dp))
+                    // Screenshot preview thumbnail
+                    if (includeScreenshot && capturedBitmap != null) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(120.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
                                 Image(
                                     bitmap = capturedBitmap!!.asImageBitmap(),
-                                    contentDescription = "Captured Screen Preview",
+                                    contentDescription = "Screen Preview",
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(120.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(12.dp))
                                 )
                             }
                         }
                     }
 
-                    // Delegate to Jules AI Switch
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        modifier = Modifier.fillMaxWidth()
+                    // Assign to Jules bot toggle
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (delegateToJules) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -283,13 +295,35 @@ fun FeedbackDialog(
                             )
                         }
                     }
+                }
 
-                    if (errorMessage != null) {
-                        Text(
-                            text = errorMessage!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                // Persistent visible error banner (always visible above the submit button if an error occurs)
+                if (errorMessage != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = "Error",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = errorMessage!!,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
 
@@ -315,10 +349,14 @@ fun FeedbackDialog(
                                 )
                                 isSubmitting = false
                                 if (result.isSuccess) {
-                                    onSubmitSuccess(result.getOrNull() ?: "Issue created successfully!")
+                                    val successMsg = result.getOrNull() ?: "Issue created successfully!"
+                                    Toast.makeText(context, successMsg, Toast.LENGTH_SHORT).show()
+                                    onSubmitSuccess(successMsg)
                                     onDismiss()
                                 } else {
-                                    errorMessage = result.exceptionOrNull()?.message ?: "Failed to submit issue"
+                                    val err = result.exceptionOrNull()?.localizedMessage ?: "Failed to submit issue"
+                                    errorMessage = err
+                                    Toast.makeText(context, "Submission failed: $err", Toast.LENGTH_LONG).show()
                                 }
                             }
                         }
@@ -418,34 +456,39 @@ private suspend fun submitIssue(
             appendLine("*Auto-generated via Streamwise Feedback Loop*")
         }
 
-        // 1. Direct GitHub Issue submission if token present
+        // 1. Direct GitHub Issue submission if token present in settings
         if (githubToken.isNotBlank()) {
-            val payload = JSONObject().apply {
-                put("title", "[$type]: $title")
-                put("body", fullBody)
-                put("labels", JSONArray(labelsList))
-            }
+            try {
+                val payload = JSONObject().apply {
+                    put("title", "[$type]: $title")
+                    put("body", fullBody)
+                    put("labels", JSONArray(labelsList))
+                }
 
-            val url = URL("https://api.github.com/repos/good-enough-productions/Streamwise/issues")
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                setRequestProperty("Authorization", "Bearer $githubToken")
-                setRequestProperty("Accept", "application/vnd.github.v3+json")
-                setRequestProperty("Content-Type", "application/json")
-                connectTimeout = 8000
-                readTimeout = 8000
-                doOutput = true
-            }
+                val url = URL("https://api.github.com/repos/good-enough-productions/Streamwise/issues")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    setRequestProperty("Authorization", "Bearer $githubToken")
+                    setRequestProperty("Accept", "application/vnd.github.v3+json")
+                    setRequestProperty("Content-Type", "application/json")
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    doOutput = true
+                }
 
-            conn.outputStream.use { it.write(payload.toString().toByteArray()) }
-            val code = conn.responseCode
-            if (code in 200..299) {
-                val msg = if (delegateToJules) "GitHub Issue created and assigned to Jules!" else "GitHub Issue logged to backlog for review!"
-                return@withContext Result.success(msg)
+                conn.outputStream.use { it.write(payload.toString().toByteArray()) }
+                val code = conn.responseCode
+                if (code in 200..299) {
+                    val msg = if (delegateToJules) "GitHub Issue created and assigned to Jules!" else "GitHub Issue logged to backlog for review!"
+                    return@withContext Result.success(msg)
+                }
+            } catch (e: Exception) {
+                // Fall through to proxies
             }
         }
 
-        // 2. Central Shared Feedback Proxy Cloud Function (No client PAT required)
+        // 2. Central Shared Feedback Proxy Cloud Function (Primary Serverless Tier)
+        var proxyError: String? = null
         val proxyUrl = "https://feedback-proxy-rljydlcchq-uc.a.run.app"
         val proxyPayload = JSONObject().apply {
             put("repo", "Streamwise")
@@ -458,28 +501,74 @@ private suspend fun submitIssue(
             }
         }
 
-        val conn = (URL(proxyUrl).openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            setRequestProperty("Content-Type", "application/json")
-            connectTimeout = 15000
-            readTimeout = 15000
-            doOutput = true
+        try {
+            val conn = (URL(proxyUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                connectTimeout = 12000
+                readTimeout = 12000
+                doOutput = true
+            }
+
+            conn.outputStream.use { it.write(proxyPayload.toString().toByteArray()) }
+            val code = conn.responseCode
+            if (code in 200..299) {
+                val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = try { JSONObject(responseText) } catch (e: Exception) { null }
+                val issueUrl = json?.optString("issueUrl")
+                val baseMsg = if (delegateToJules) "Feedback submitted & assigned to Jules!" else "Feedback logged to project backlog!"
+                val msg = if (!issueUrl.isNullOrBlank()) "$baseMsg Issue opened." else baseMsg
+                return@withContext Result.success(msg)
+            } else {
+                val errorText = try { conn.errorStream?.bufferedReader()?.use { it.readText() } } catch (e: Exception) { null }
+                proxyError = "HTTP $code${if (!errorText.isNullOrBlank()) ": $errorText" else ""}"
+            }
+        } catch (e: Exception) {
+            proxyError = e.localizedMessage ?: "Connection error"
         }
 
-        conn.outputStream.use { it.write(proxyPayload.toString().toByteArray()) }
-        val code = conn.responseCode
-        if (code in 200..299) {
-            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
-            val json = try { JSONObject(responseText) } catch (e: Exception) { null }
-            val issueUrl = json?.optString("issueUrl")
-            val baseMsg = if (delegateToJules) "Feedback submitted & assigned to Jules!" else "Feedback logged to project backlog!"
-            val msg = if (!issueUrl.isNullOrBlank()) "$baseMsg Issue opened." else baseMsg
-            return@withContext Result.success(msg)
-        } else {
-            val errorText = try { conn.errorStream?.bufferedReader()?.use { it.readText() } } catch (e: Exception) { null }
-            val errDetail = if (!errorText.isNullOrBlank()) " ($errorText)" else ""
-            return@withContext Result.failure(Exception("Submission returned HTTP $code$errDetail. Check connection or enter GitHub Token in Settings."))
+        // 3. Fallback: Central Google Apps Script Webhook ($0/mo Serverless Backup)
+        val appsScriptUrl = "https://script.google.com/macros/s/AKfycbzsbZfiDbXXGJunAmJX2xb9OtpnigwVl69M6qbBQ5bNBuyAdj6TtkW-LflbSxSFJJoI0w/exec"
+        try {
+            val asPayload = JSONObject().apply {
+                put("title", "[$type]: $title")
+                put("body", fullBody)
+                put("labels", JSONArray(labelsList))
+                put("app", "Streamwise")
+            }
+            val asConn = (URL(appsScriptUrl).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                connectTimeout = 12000
+                readTimeout = 12000
+                doOutput = true
+            }
+            asConn.outputStream.use { it.write(asPayload.toString().toByteArray()) }
+            var asCode = asConn.responseCode
+            // Follow 302 redirect from Apps Script
+            if (asCode in 300..399) {
+                val redirectUrl = asConn.getHeaderField("Location")
+                if (!redirectUrl.isNullOrBlank()) {
+                    val redConn = (URL(redirectUrl).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 12000
+                        readTimeout = 12000
+                    }
+                    asCode = redConn.responseCode
+                    if (asCode in 200..299) {
+                        val baseMsg = if (delegateToJules) "Feedback submitted & assigned to Jules!" else "Feedback logged to project backlog!"
+                        return@withContext Result.success(baseMsg)
+                    }
+                }
+            } else if (asCode in 200..299) {
+                val baseMsg = if (delegateToJules) "Feedback submitted & assigned to Jules!" else "Feedback logged to project backlog!"
+                return@withContext Result.success(baseMsg)
+            }
+        } catch (e: Exception) {
+            // Fall through to report failure
         }
+
+        Result.failure(Exception("Submission failed (${proxyError ?: "network error"}). Please check connection or verify Settings."))
     } catch (e: Exception) {
         Result.failure(e)
     }

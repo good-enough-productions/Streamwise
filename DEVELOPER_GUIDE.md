@@ -110,3 +110,12 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 
 - **Gemini Spark Podcast Tracker**: Real-time synchronization of the living Google Sheet (`Podcast Film & TV Recommendations Tracker`) with Streamwise and the Master Hub General Ledger. Fetches recommendations via Apps Script Web App endpoint (`?action=getPodcastRecs`), enriches the user's Watchlist with origin tags (`importSource: Podcast: [Podcast] - [Episode]`), updates watched titles with podcast notes, and stores in SQLite.
 - **Provider Sentinel Resilience ("none")**: When TMDB returns empty US watch provider results for valid titles, the sync engine records `"none"` as a sentinel instead of leaving `providerIds` null. This differentiates unstreamable/theater-only titles from un-queried titles, terminating redundant startup sync loops while cleanly filtering `"none"` from UI provider lists.
+
+## 15. My Services Watchlist Volume Tracking & Resilient Multi-Tier Feedback (v1.5.2)
+
+- **Provider Watchlist Volume**: `MonthlyRoiContent` and `ServiceDetailBottomSheet` compute real-time watchlist volume counts per streaming service: `watchlistItems.count { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }`. Active service cards display `🎬 X Watchlist Titles`, inactive cards display `🎬 Y Queued`, and `ServiceDetailBottomSheet` renders a dedicated list of available queued movies on that platform with 1-tap navigation to movie details.
+- **Multi-Tier Resilient Feedback Pipeline**: `submitIssue` implements a 3-tier cascade:
+  1. Direct GitHub API via user PAT (if present in settings).
+  2. Central Cloud Run proxy (`feedback-proxy-rljydlcchq-uc.a.run.app`).
+  3. Google Apps Script Web App fallback with HTTP 302 redirect resolution.
+- **Visible Error Banner & Toasts**: `FeedbackDialog` hoists the error card outside the scrollable column right above the submit button, coupled with native Android Toast alerts on both success and error, preventing silent failures.

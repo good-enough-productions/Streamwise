@@ -2,6 +2,21 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.5.2] - 2026-09-06
+
+### Added
+- **My Services Watchlist Volume & Queue Tracking (Issue #11)**:
+  - Streaming service cards in the *My Services* tab now display live counts of how many titles on your active watchlist are available to stream on that provider (e.g. `🎬 10 Watchlist Titles`).
+  - Inactive streaming services also display queued counts (e.g. `🎬 3 Queued`), providing instant signal on whether an inactive subscription is worth activating.
+  - Overall monthly spend summary card displays total ready-to-stream watchlist titles across all currently active services.
+  - In the `ServiceDetailBottomSheet`, a dedicated **Watchlist on [Service]** card lists all queued titles on that provider with 1-tap navigation to open movie details.
+
+### Fixed & Improved
+- **Multi-Tier Resilient Feedback Pipeline**:
+  - Re-authenticated the Cloud Run `feedback-proxy` service (`https://feedback-proxy-rljydlcchq-uc.a.run.app`) with updated GitHub credentials, resolving HTTP 401 submission failures.
+  - Added automated fallback to Google Apps Script Web App (`https://script.google.com/macros/s/AKfycbzsbZfiDbXXGJunAmJX2xb9OtpnigwVl69M6qbBQ5bNBuyAdj6TtkW-LflbSxSFJJoI0w/exec`) with HTTP 302 redirect following.
+  - Feedback dialog now features a sticky error banner directly above the submit button (outside the scrollable area) with full Android Toast alerts on success and failure.
+
 ## [1.4.0] - 2026-09-06
 
 ### Added

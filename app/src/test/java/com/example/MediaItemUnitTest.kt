@@ -100,4 +100,23 @@ class MediaItemUnitTest {
         assertTrue(csv.contains("\"Inception\""))
         assertTrue(csv.contains("9.0"))
     }
+
+    @Test
+    fun watchlistVolume_perProvider_countsCorrectly() {
+        val items = listOf(
+            MediaItem(title = "Movie 1", providerIds = "netflix, hulu"),
+            MediaItem(title = "Movie 2", providerIds = "netflix, prime"),
+            MediaItem(title = "Movie 3", providerIds = "max"),
+            MediaItem(title = "Movie 4", providerIds = "none")
+        )
+        val netflixCount = items.count { it.providersList.any { p -> p.equals("netflix", ignoreCase = true) } }
+        val huluCount = items.count { it.providersList.any { p -> p.equals("hulu", ignoreCase = true) } }
+        val maxCount = items.count { it.providersList.any { p -> p.equals("max", ignoreCase = true) } }
+        val appleCount = items.count { it.providersList.any { p -> p.equals("apple", ignoreCase = true) } }
+
+        assertEquals(2, netflixCount)
+        assertEquals(1, huluCount)
+        assertEquals(1, maxCount)
+        assertEquals(0, appleCount)
+    }
 }
