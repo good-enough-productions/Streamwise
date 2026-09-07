@@ -185,3 +185,32 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 - **Podcast Filter Precedence (`HomeScreen.kt`)**:
   - Filter logic updated: when `selectedPodcastId != null` or `selectedPlatforms.isNotEmpty()`, the subscription-gating check (`filterOnlyMyServices`) is automatically bypassed so all covered films across all providers are displayed.
 
+## 20. UI Streamlining, Cinephile Auteurs, and Subscription Expected Value (v1.5.6)
+
+### Watched Vault Header Rework (Issue #16)
+- **Problem**: The fixed header chrome in `WatchedTabContent` (3-KPI summary card, viewing analytics banner, genre tags ribbon, Letterboxd sync buttons) occupied over 55% of the vertical viewport on mobile devices, squeezing the diary to only 1-2 visible movie cards.
+- **Solution**:
+  - Re-architected `WatchedTabContent` to feature a slim sticky top bar (48dp height search bar, compact sort dropdown, view mode switcher, and analytics icon button) taking only ~90dp total height.
+  - Encapsulated the heavy metrics and Letterboxd sync buttons into `WatchedVaultOverviewCard`.
+  - Moved `WatchedVaultOverviewCard` inside the scrollable content (`LazyColumn` and `LazyVerticalGrid`), using `GridItemSpan(maxLineSpan)` in grid mode.
+  - Implemented a collapsible state: defaults to a compact 1-line summary (`🎬 1,130 Films • ~2,071h • ★ 7.2 • ~7.0/mo [Insights 📊] [▾]`) that expands to full sync buttons and metrics upon tap. Scrolling down immediately moves the card off screen, dedicating 90%+ vertical space to films.
+
+### "Ah Hah" Cinephile Analytics Engine (Issue #17)
+- **Top Directors & Auteurs**:
+  - Curated filmographies for 20+ prominent auteurs (Coen Brothers, Nolan, Scorsese, Fincher, Tarantino, Ridley Scott, Cameron, Spielberg, PTA, Kubrick, Linklater, Villeneuve).
+  - Exact normalized title matching (`normalizeTitle`) strips punctuation, parentheses, and leading articles, preventing false substring matches (e.g. *"Us"* matching *"Inglourious Basterds"*).
+  - Aggregates film counts, average ratings (e.g. `★ 8.8`), and surfaces distinct sample title chips.
+- **Top Actors & Screen Presence**:
+  - Tracks top Hollywood stars across the user's logged vault (Tom Cruise, Matt Damon, Leonardo DiCaprio, Brad Pitt, Robert De Niro, Christian Bale, Margot Robbie, Al Pacino, Emma Stone, Ryan Gosling).
+- **Cinephile Blind Spots & Watchlist Integration**:
+  - Identifies underrepresented areas in the user's vault (<3% representation across Golden Age Cinema Pre-1970s, 1970s New Hollywood, Westerns, and Documentaries).
+  - Cross-references these gaps against the user's 1,100+ Watchlist queue to surface queued titles ready to stream (e.g. *The Searchers*, *High Noon*, *The Godfather*, *Free Solo*), creating an actionable bridge between past viewing and future discovery.
+
+### Subscription Expected Value & Single-Service Rotation Advisor (Issue #15)
+- **Viewing Velocity**: Analyzes the last 6 active viewing months to compute the user's real-world watch velocity (~7.0 films/month).
+- **Effective Cost Per Film**: Dynamically calculates `totalMonthlySpend / monthlyVelocity` (e.g. \$64.95 / 7 = \$9.28/film).
+- **Single-Service Rotation Advisor**:
+  - Models the expected value of maintaining only 1 active subscription at a time.
+  - Identifies the streaming service with the largest backlog in the user's Watchlist (e.g. Max with 142 queued films) and calculates how many months of continuous entertainment it provides at the user's current velocity (~20 months).
+  - Calculates potential savings (saving ~$49/month or ~$588/year) by pausing idle subscriptions with zero loss of content supply.
+

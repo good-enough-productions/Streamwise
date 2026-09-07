@@ -70,4 +70,71 @@ class WatchedAnalyticsCalculatorUnitTest {
         assertTrue(services.contains("Hulu"))
         assertTrue(services.contains("Other / Theatrical / Physical"))
     }
+
+    @Test
+    fun testNormalizeTitle() {
+        assertEquals("the dark knight", WatchedAnalyticsCalculator.normalizeTitle("The Dark Knight (2008)"))
+        assertEquals("the abyss", WatchedAnalyticsCalculator.normalizeTitle("The Abyss (Special Edition)"))
+        assertEquals("fargo", WatchedAnalyticsCalculator.normalizeTitle("  Fargo (1996)  "))
+    }
+
+    @Test
+    fun testAuteursAndActorsAndBlindSpots() {
+        val watched = listOf(
+            MediaItem(title = "Inception (2010)", rating = 9.0, genres = "Action, Sci-Fi"),
+            MediaItem(title = "Interstellar (2014)", rating = 8.5, genres = "Sci-Fi, Drama"),
+            MediaItem(title = "Oppenheimer (2023)", rating = 9.0, genres = "Biography, Drama"),
+            MediaItem(title = "The Dark Knight (2008)", rating = 9.5, genres = "Action, Crime"),
+            MediaItem(title = "Pulp Fiction (1994)", rating = 9.0, genres = "Crime, Drama"),
+            MediaItem(title = "Kill Bill: Vol. 1 (2003)", rating = 8.0, genres = "Action, Thriller"),
+            MediaItem(title = "Inglourious Basterds (2009)", rating = 8.5, genres = "Adventure, Drama"),
+            MediaItem(title = "Django Unchained (2012)", rating = 8.5, genres = "Drama, Western"),
+            MediaItem(title = "Once Upon a Time in Hollywood (2019)", rating = 8.0, genres = "Comedy, Drama"),
+            MediaItem(title = "Top Gun (1986)", rating = 8.0, genres = "Action"),
+            MediaItem(title = "Top Gun: Maverick (2022)", rating = 8.5, genres = "Action")
+        )
+
+        val watchlist = listOf(
+            MediaItem(title = "The Searchers (1956)", genres = "Western"),
+            MediaItem(title = "Free Solo (2018)", genres = "Documentary"),
+            MediaItem(title = "12 Angry Men (1957)", genres = "Drama"),
+            MediaItem(title = "The Godfather (1972)", genres = "Crime, Drama")
+        )
+
+        val analytics = WatchedAnalyticsCalculator.calculateAnalytics(
+            items = watched,
+            watchlistItems = watchlist
+        )
+
+        // Verify Directors
+        assertTrue(analytics.topDirectors.isNotEmpty())
+        val nolan = analytics.topDirectors.find { it.name == "Christopher Nolan" }
+        assertNotNull("Nolan should be found", nolan)
+        assertEquals(4, nolan!!.count)
+        assertTrue(nolan.avgRating != null && nolan.avgRating!! > 8.0)
+
+        val tarantino = analytics.topDirectors.find { it.name == "Quentin Tarantino" }
+        assertNotNull("Tarantino should be found", tarantino)
+        assertEquals(5, tarantino!!.count)
+
+        // Verify Actors
+        assertTrue(analytics.topActors.isNotEmpty())
+        val cruise = analytics.topActors.find { it.name == "Tom Cruise" }
+        assertNotNull("Tom Cruise should be found", cruise)
+        assertEquals(2, cruise!!.count)
+
+        val dicaprio = analytics.topActors.find { it.name == "Leonardo DiCaprio" }
+        assertNotNull("Leonardo DiCaprio should be found", dicaprio)
+        assertEquals(3, dicaprio!!.count)
+
+        // Verify Blind Spots
+        assertTrue(analytics.blindSpots.isNotEmpty())
+        val pre1970s = analytics.blindSpots.find { it.title.contains("Pre-1970s") }
+        assertNotNull("Pre-1970s blind spot should be identified", pre1970s)
+        assertTrue(pre1970s!!.sampleWatchlistTitles.any { it.contains("The Searchers") || it.contains("12 Angry Men") })
+
+        val docs = analytics.blindSpots.find { it.title.contains("Documentaries") }
+        assertNotNull("Documentary blind spot should be identified", docs)
+        assertTrue(docs!!.sampleWatchlistTitles.contains("Free Solo (2018)"))
+    }
 }
