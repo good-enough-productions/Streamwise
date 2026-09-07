@@ -402,7 +402,7 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
     /**
      * Robust CSV line splitter supporting quoted values and escaped quotes.
      */
-    private fun parseCsvLine(line: String): List<String> {
+    internal fun parseCsvLine(line: String): List<String> {
         val tokens = mutableListOf<String>()
         val sb = StringBuilder()
         var inQuotes = false
