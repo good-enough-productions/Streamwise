@@ -61,11 +61,28 @@ data class TmdbCreditsResponse(
 
 @JsonClass(generateAdapter = true)
 data class TmdbCastMember(
+    @Json(name = "id") val id: Int = 0,
     @Json(name = "name") val name: String,
-    @Json(name = "character") val character: String
+    @Json(name = "character") val character: String,
+    @Json(name = "profile_path") val profilePath: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbPersonDetails(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String,
+    @Json(name = "birthday") val birthday: String? = null,
+    @Json(name = "deathday") val deathday: String? = null,
+    @Json(name = "profile_path") val profilePath: String? = null,
+    @Json(name = "place_of_birth") val placeOfBirth: String? = null
 )
 
 interface TmdbApiService {
+    @GET("person/{person_id}")
+    suspend fun getPersonDetails(
+        @Path("person_id") personId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbPersonDetails
     @GET("search/movie")
     suspend fun searchMovie(
         @Query("api_key") apiKey: String,

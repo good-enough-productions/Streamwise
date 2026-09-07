@@ -61,6 +61,8 @@ import com.example.data.model.StreamingProvider
 import com.example.data.remote.LetterboxdSyncResult
 import com.example.data.remote.LetterboxdFileImportResult
 import com.example.data.remote.UpdateStatus
+import com.example.data.util.CastMemberWithAge
+import com.example.data.util.WatchedAnalyticsCalculator
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -590,10 +592,19 @@ fun HomeScreen(
         // Expanded Movie Details Bottom Sheet
         if (detailMovieItem != null) {
             val discoveredDevices by viewModel.discoveredDevices.collectAsState()
+            val castWithAges by viewModel.selectedMovieCast.collectAsState()
+            val isLoadingCast by viewModel.isLoadingCast.collectAsState()
+
+            LaunchedEffect(detailMovieItem?.id) {
+                viewModel.loadMovieCastWithAges(detailMovieItem!!)
+            }
+
             MovieDetailsBottomSheet(
                 item = detailMovieItem!!,
                 allProviders = allProviders,
                 discoveredDevices = discoveredDevices,
+                castWithAges = castWithAges,
+                isLoadingCast = isLoadingCast,
                 onCastClick = { device, item -> viewModel.castToDevice(device, item) },
                 onDismiss = { detailMovieItem = null },
                 onWatchClick = {
@@ -609,6 +620,14 @@ fun HomeScreen(
                     exploreSubTab = 1
                     selectedTab = 3
                     viewModel.sendChatMessage(prompt)
+                },
+                onSetServiceUsed = { providerId ->
+                    val current = detailMovieItem
+                    if (current != null) {
+                        val updated = current.copy(providerIds = providerId)
+                        detailMovieItem = updated
+                        viewModel.setServiceUsed(updated, providerId)
+                    }
                 }
             )
         }
@@ -1941,7 +1960,14 @@ fun WatchedTabContent(
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("timeline") } // "timeline", "alpha", "rating"
     var selectedGenre by remember { mutableStateOf<String?>(null) }
+    var selectedEra by remember { mutableStateOf<String?>(null) }
+    var selectedService by remember { mutableStateOf<String?>(null) }
+    var showAnalyticsSheet by remember { mutableStateOf(false) }
     var viewMode by remember { mutableStateOf("timeline") } // "timeline" or "grid"
+
+    val watchedAnalytics = remember(watchedItems, allProviders) {
+        WatchedAnalyticsCalculator.calculateAnalytics(watchedItems, allProviders)
+    }
 
     val allGenres = remember(watchedItems) {
         watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
@@ -1950,11 +1976,16 @@ fun WatchedTabContent(
             .sorted()
     }
 
-    val filteredItems = remember(watchedItems, searchQuery, selectedGenre) {
+    val filteredItems = remember(watchedItems, searchQuery, selectedGenre, selectedEra, selectedService) {
         watchedItems.filter { item ->
             val matchesSearch = item.title.contains(searchQuery, ignoreCase = true)
             val matchesGenre = selectedGenre == null || item.genres?.contains(selectedGenre!!, ignoreCase = true) == true
-            matchesSearch && matchesGenre
+            val matchesEra = selectedEra == null || WatchedAnalyticsCalculator.determineEra(WatchedAnalyticsCalculator.extractReleaseYear(item)) == selectedEra
+            val matchesService = selectedService == null || (
+                if (selectedService == "other") item.providersList.isEmpty()
+                else item.providersList.any { it.equals(selectedService, ignoreCase = true) }
+            )
+            matchesSearch && matchesGenre && matchesEra && matchesService
         }.distinctBy { it.title.trim().lowercase() }
     }
 
@@ -2032,34 +2063,51 @@ fun WatchedTabContent(
                         )
                     }
 
-                    // View Mode Switcher: Timeline vs Grid
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                            .padding(2.dp)
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         IconButton(
-                            onClick = { viewMode = "timeline" },
-                            modifier = Modifier.size(32.dp)
+                            onClick = { showAnalyticsSheet = true },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
                         ) {
                             Icon(
-                                Icons.Default.DateRange,
-                                contentDescription = "Timeline View",
-                                tint = if (viewMode == "timeline") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                Icons.Default.Analytics,
+                                contentDescription = "Cinema Analytics",
+                                tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
-                        IconButton(
-                            onClick = { viewMode = "grid" },
-                            modifier = Modifier.size(32.dp)
+
+                        // View Mode Switcher: Timeline vs Grid
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                .padding(2.dp)
                         ) {
-                            Icon(
-                                Icons.Default.GridView,
-                                contentDescription = "Poster Wall Grid",
-                                tint = if (viewMode == "grid") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            IconButton(
+                                onClick = { viewMode = "timeline" },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.DateRange,
+                                    contentDescription = "Timeline View",
+                                    tint = if (viewMode == "timeline") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewMode = "grid" },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.GridView,
+                                    contentDescription = "Poster Wall Grid",
+                                    tint = if (viewMode == "grid") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -2097,6 +2145,39 @@ fun WatchedTabContent(
                             color = Color(0xFFFFD700)
                         )
                         Text("Avg Rating", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Cinephile Analytics Banner (Issue #10 & movies-dataset integration)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showAnalyticsSheet = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Insights, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Viewing Analytics & Eras",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Text(
+                            text = if (watchedAnalytics.topEra != null) "Top: ${watchedAnalytics.topEra} • ${watchedAnalytics.topGenre ?: "Cinema"} →" else "Explore trends →",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
                 }
 
@@ -2295,6 +2376,44 @@ fun WatchedTabContent(
             }
         }
 
+        // Active Analytics Filters (Era & Service Used)
+        if (selectedEra != null || selectedService != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Filters:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                if (selectedEra != null) {
+                    FilterChip(
+                        selected = true,
+                        onClick = { selectedEra = null },
+                        label = { Text("Era: $selectedEra ✕", fontSize = 11.sp) }
+                    )
+                }
+                if (selectedService != null) {
+                    val sName = allProviders.find { it.id.equals(selectedService, ignoreCase = true) }?.name ?: selectedService
+                    FilterChip(
+                        selected = true,
+                        onClick = { selectedService = null },
+                        label = { Text("Service: $sName ✕", fontSize = 11.sp) }
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        selectedEra = null
+                        selectedService = null
+                    },
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text("Clear All", fontSize = 11.sp)
+                }
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -2388,6 +2507,26 @@ fun WatchedTabContent(
                     }
                 }
             }
+        }
+
+        if (showAnalyticsSheet) {
+            WatchedAnalyticsBottomSheet(
+                analytics = watchedAnalytics,
+                allProviders = allProviders,
+                selectedEra = selectedEra,
+                onSelectEra = { era ->
+                    selectedEra = if (selectedEra == era) null else era
+                },
+                selectedGenre = selectedGenre,
+                onSelectGenre = { genre ->
+                    selectedGenre = if (selectedGenre == genre) null else genre
+                },
+                selectedService = selectedService,
+                onSelectService = { service ->
+                    selectedService = if (selectedService == service) null else service
+                },
+                onDismiss = { showAnalyticsSheet = false }
+            )
         }
     }
 }
@@ -2505,29 +2644,69 @@ fun WatchedMediaCard(
                     }
                 }
 
-                // Formatted Watch Date Badge (Issue #9)
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                // Badges Row: Watch Date & Service Used & Release Era
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 3.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Formatted Watch Date Badge (Issue #9)
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
                     ) {
-                        Icon(
-                            Icons.Default.Check,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Watched $watchDateStr",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Watched $watchDateStr",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
+
+                    // Service Used Badge (movies-dataset integration)
+                    if (item.providersList.isNotEmpty()) {
+                        val provName = allProviders.find { it.id == item.providersList.first() }?.name ?: item.providersList.first()
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+                        ) {
+                            Text(
+                                text = provName,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    // Release Era Badge
+                    val era = WatchedAnalyticsCalculator.determineEra(WatchedAnalyticsCalculator.extractReleaseYear(item))
+                    if (era != "Unknown") {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                        ) {
+                            Text(
+                                text = era,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 
@@ -5174,11 +5353,14 @@ fun MovieDetailsBottomSheet(
     item: MediaItem,
     allProviders: List<StreamingProvider>,
     discoveredDevices: List<CastDevice>,
+    castWithAges: List<CastMemberWithAge> = emptyList(),
+    isLoadingCast: Boolean = false,
     onCastClick: (CastDevice, MediaItem) -> Unit,
     onDismiss: () -> Unit,
     onWatchClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    onDiscussInExplore: ((String) -> Unit)? = null
+    onDiscussInExplore: ((String) -> Unit)? = null,
+    onSetServiceUsed: ((String) -> Unit)? = null
 ) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
@@ -5362,6 +5544,56 @@ fun MovieDetailsBottomSheet(
                 }
             }
 
+            // Service Used to Watch (Issue #10 / movies-dataset integration)
+            if (item.status == MediaStatus.WATCHED.name && onSetServiceUsed != null) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Service Used to Watch:",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (item.providersList.isNotEmpty()) {
+                            val activeName = allProviders.find { it.id == item.providersList.first() }?.name ?: item.providersList.first()
+                            Text(
+                                text = "Logged: $activeName",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Tag which service you watched this film on to curate your viewing analytics.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        allProviders.forEach { prov ->
+                            val isSelected = item.providersList.contains(prov.id)
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { onSetServiceUsed(prov.id) },
+                                label = { Text(prov.name, fontSize = 12.sp) },
+                                leadingIcon = if (isSelected) {
+                                    { Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) }
+                                } else null
+                            )
+                        }
+                    }
+                }
+            }
+
             // Movie Plot / Overview
             Text(
                 text = "Storyline / Overview",
@@ -5375,6 +5607,167 @@ fun MovieDetailsBottomSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 20.sp
             )
+
+            // --- CAST & ACTOR AGES AT RELEASE ---
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Cake,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Cast & Age at Release",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                if (castWithAges.isNotEmpty()) {
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                    ) {
+                        Text(
+                            text = "${castWithAges.size} Cast",
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            if (isLoadingCast) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Calculating actor ages at premiere...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            } else if (castWithAges.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    castWithAges.forEach { actor ->
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+                            modifier = Modifier.width(160.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (!actor.profilePath.isNullOrEmpty()) {
+                                        coil.compose.AsyncImage(
+                                            model = "https://image.tmdb.org/t/p/w185${actor.profilePath}",
+                                            contentDescription = actor.name,
+                                            modifier = Modifier
+                                                .size(44.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                        )
+                                    } else {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                            modifier = Modifier.size(44.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    Icons.Default.Person,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = actor.name,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (actor.character.isNotBlank()) {
+                                            Text(
+                                                text = actor.character,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (actor.ageAtRelease != null) {
+                                        MaterialTheme.colorScheme.primaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = if (actor.ageAtRelease != null) "🎂 Age ${actor.ageAtRelease} at release" else "Age unknown",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (actor.ageAtRelease != null) {
+                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.outline
+                                        },
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                        modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp)
+                                    )
+                                }
+
+                                if (actor.isDeceased && actor.deceasedLabel != null) {
+                                    Text(
+                                        text = "🕊️ ${actor.deceasedLabel}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        fontSize = 10.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // User Personal Notes & Source Section
             if (!item.userNotes.isNullOrEmpty() || !item.importSource.isNullOrEmpty()) {

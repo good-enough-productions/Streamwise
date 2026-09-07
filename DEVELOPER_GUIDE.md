@@ -136,3 +136,29 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
   - `PodcastEpisodeCatalog.kt` dynamically loads `podcast_titles.json` on app startup (`PodcastEpisodeCatalog.initialize(context)`), integrates *Unspooled*, and tests title matches against `importSource`, user notes tags (`[The Rewatchables]`), the 2,300+ title catalog, and static mentions.
   - `AdvancedFilterBottomSheet.kt` correctly updates filter count indicators (e.g. *The Rewatchables* displaying 359 matching titles).
 
+## 17. Actor Age at Release Engine (`ActorAgeCalculator.kt` - v1.5.4)
+
+- **Domain Logic & Math**: Derived from the standalone `good-enough-productions/actor-age` repository. Calculates exact age when a movie was released using `ActorAgeCalculator.calculateAgeAtRelease(birthday, releaseDate, deathday)`.
+- **Date Handling & Edge Cases**:
+  - Full ISO-8601 `YYYY-MM-DD` date parsing using `java.time.LocalDate` and `java.time.Period`.
+  - Leap year (`Feb 29`) boundary handling.
+  - Year-only fallback (e.g. `"1994"`) estimating age via simple year subtraction.
+  - Deceased state computation: verifies if the actor was alive when the movie released, formatting deceased status (`isDeceased: Boolean`) while ensuring post-mortem releases compute their final age at death.
+- **TMDB API & Concurrent Lookups**:
+  - `TmdbApiService.kt` extended with `@GET("person/{person_id}")` returning `TmdbPersonDetails` (`birthday`, `deathday`, `profile_path`, `place_of_birth`).
+  - `StreamViewModel.loadMovieCastWithAges`: Runs parallel network requests using `async(Dispatchers.IO)` limited to the top 10 billed cast members. Results are cached in a thread-safe `ConcurrentHashMap<Int, TmdbPersonDetails>` to avoid redundant network traffic on repeated bottom sheet presentations.
+- **UI Integration**: `MovieDetailsBottomSheet` displays a horizontal scrollable card row showing actor portrait, character name, age badge (e.g. `🎂 Age 38 at release`), and deceased badge (`🕊️ (Deceased)`).
+
+## 18. Cinephile Viewing Analytics & Release Eras Engine (`WatchedAnalyticsCalculator.kt` - v1.5.4)
+
+- **Analytics Computation**: Synthesizes the core analytical features from `good-enough-productions/movies-dataset` natively inside Android SQLite/Room memory:
+  - **Decades & Eras Breakdown**: Partitions watch history across 7 cinema eras: `2020s`, `2010s`, `2000s`, `1990s`, `1980s`, `1970s`, and `Pre-1970s Classic`. Calculates absolute film counts, percentages, and total runtime per era.
+  - **Genre Profiling & User Ratings**: Computes genre frequencies and averages the user's logged Letterboxd star ratings per genre to identify highest-rated categories vs most-watched categories.
+  - **Streaming "Service Used"**: Tracks viewing platform tags (`serviceUsed` field in `MediaItem`), quantifying provider usage (Netflix, Max, Criterion Channel, Theatrical, etc.) and unassigned counts.
+  - **Letterboxd Rating Distribution**: Partitions ratings into 5 visual histogram tiers: Masterpieces (9-10★), Great (7-8.9★), Good (5-6.9★), Mediocre (3-4.9★), and Poor (0.5-2.9★).
+  - **Viewing Rhythm**: Identifies the user's all-time peak watch month (e.g. `October 2025: 42 films`) and calculates year-over-year watch volumes.
+- **Interactive UI (`WatchedAnalyticsBottomSheet.kt`)**:
+  - Modal bottom sheet with 4 KPI summary cards (Total Films, Screen Time in hours/days, Average Rating, Peak Era).
+  - 1-tap interactive filtering: Tapping any era or service directly sets `selectedEra` or `selectedService` in `HomeScreen`, closing the sheet and filtering the Watched Vault with an active dismissible filter chip ribbon.
+  - "Service Used to Watch" interactive selector added to `MovieDetailsBottomSheet` for watched titles to easily tag streaming services.
+

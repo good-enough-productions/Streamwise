@@ -45,6 +45,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import com.example.data.util.CastMemberWithAge
+import com.example.data.util.ActorAgeCalculator
+import com.example.data.remote.TmdbPersonDetails
+import com.example.data.remote.TmdbClient
+import java.util.concurrent.ConcurrentHashMap
 
 class StreamViewModel(
     application: Application,
@@ -174,6 +181,103 @@ class StreamViewModel(
 
     fun clearLetterboxdSyncResult() {
         _letterboxdSyncResult.value = null
+    }
+
+    // Cast members with ages for currently inspected movie in MovieDetailsBottomSheet
+    private val _selectedMovieCast = MutableStateFlow<List<CastMemberWithAge>>(emptyList())
+    val selectedMovieCast: StateFlow<List<CastMemberWithAge>> = _selectedMovieCast.asStateFlow()
+
+    private val _isLoadingCast = MutableStateFlow(false)
+    val isLoadingCast: StateFlow<Boolean> = _isLoadingCast.asStateFlow()
+
+    private val personCache = ConcurrentHashMap<Int, TmdbPersonDetails>()
+
+    fun loadMovieCastWithAges(item: MediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingCast.value = true
+            _selectedMovieCast.value = emptyList()
+            try {
+                val apiKey = _tmdbApiKey.value.ifEmpty {
+                    if (BuildConfig.TMDB_API_KEY != "MY_TMDB_API_KEY") BuildConfig.TMDB_API_KEY else ""
+                }
+                if (apiKey.isEmpty()) {
+                    _isLoadingCast.value = false
+                    return@launch
+                }
+
+                var movieId = item.tmdbId?.toIntOrNull()
+                var releaseDate: String? = null
+
+                if (movieId == null) {
+                    val searchResp = TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
+                    val best = searchResp.results.firstOrNull()
+                    movieId = best?.id
+                    releaseDate = best?.releaseDate
+                }
+
+                if (movieId == null) {
+                    _isLoadingCast.value = false
+                    return@launch
+                }
+
+                if (releaseDate.isNullOrBlank()) {
+                    try {
+                        val details = TmdbClient.tmdbApiService.getMovieDetails(movieId, apiKey)
+                        releaseDate = details.releaseDate
+                    } catch (e: Exception) {
+                        val match = Regex("\\b(19\\d\\d|20\\d\\d)\\b").find(item.title)
+                        releaseDate = match?.value
+                    }
+                }
+
+                val credits = TmdbClient.tmdbApiService.getCredits(movieId, apiKey)
+                val topCast = credits.cast.take(8)
+
+                val castWithAges = topCast.map { castMember ->
+                    async {
+                        val person = if (castMember.id > 0) {
+                            personCache.getOrPut(castMember.id) {
+                                try {
+                                    TmdbClient.tmdbApiService.getPersonDetails(castMember.id, apiKey)
+                                } catch (e: Exception) {
+                                    TmdbPersonDetails(
+                                        id = castMember.id,
+                                        name = castMember.name
+                                    )
+                                }
+                            }
+                        } else null
+
+                        val age = ActorAgeCalculator.calculateAgeAtRelease(
+                            birthday = person?.birthday,
+                            releaseDate = releaseDate
+                        )
+                        val isDeceased = !person?.deathday.isNullOrBlank()
+                        val deathAge = if (isDeceased) {
+                            ActorAgeCalculator.calculateDeathAge(person?.birthday, person?.deathday)
+                        } else null
+
+                        CastMemberWithAge(
+                            id = castMember.id,
+                            name = castMember.name,
+                            character = castMember.character,
+                            profilePath = castMember.profilePath ?: person?.profilePath,
+                            birthday = person?.birthday,
+                            deathday = person?.deathday,
+                            ageAtRelease = age,
+                            isDeceased = isDeceased,
+                            deathAge = deathAge
+                        )
+                    }
+                }.awaitAll()
+
+                _selectedMovieCast.value = castWithAges
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading movie cast with ages: ${e.message}", e)
+            } finally {
+                _isLoadingCast.value = false
+            }
+        }
     }
 
     init {
@@ -1482,6 +1586,22 @@ class StreamViewModel(
     private fun extractUrlFromText(text: String): String? {
         val words = text.split(Regex("\\s+"))
         return words.find { it.startsWith("http://", ignoreCase = true) || it.startsWith("https://", ignoreCase = true) }
+    }
+
+    fun updateMediaItem(item: MediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.updateMediaItem(item)
+        }
+    }
+
+    fun setServiceUsed(item: MediaItem, providerId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val updated = item.copy(
+                providerIds = providerId,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateMediaItem(updated)
+        }
     }
 
     private fun String.capitalizeWords(): String {

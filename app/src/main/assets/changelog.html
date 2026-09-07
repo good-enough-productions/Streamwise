@@ -20,6 +20,25 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.5.4</span> <span class="date">September 2026</span></h2>
+        <h3>Actor Age at Release & Cinephile Viewing Analytics Hub</h3>
+        <ul>
+            <li><strong>Actor Age at Release (from <code>actor-age</code>):</strong> The Movie Details Bottom Sheet now features a horizontal Cast & Age scrollbar. For every featured cast member, Streamwise displays their profile photo, character name, and dynamically computes their exact age at the film's release date (e.g. <code>🎂 Age 38 at release</code>) with deceased indicators (<code>🕊️ (Deceased)</code>) where applicable. Powered by parallel TMDB person details lookups with thread-safe in-memory caching.</li>
+            <li><strong>Cinephile Viewing Analytics & Eras (from <code>movies-dataset</code>):</strong> The Watched Vault now features an interactive Analytics command center. Tap the Analytics banner or top action icon to inspect:
+                <ul>
+                    <li><strong>4 Cinephile KPIs:</strong> Total Films Watched, Total Screen Time (Hours & Days), Average Rating, and Peak Cinema Era.</li>
+                    <li><strong>Cinema Eras & Decades Breakdown:</strong> Visual progress bars and counts across 2020s, 2010s, 2000s, 1990s, 1980s, 1970s, and Pre-1970s classic cinema with 1-tap filtering.</li>
+                    <li><strong>Genre Distribution & Ratings:</strong> Favorite genres sorted by logged frequency alongside your average star rating for each genre.</li>
+                    <li><strong>Streaming Service Used Breakdown:</strong> Track where you actually watched each film (Netflix, Max, Criterion, Theatrical, etc.) with 1-tap service tagging in Movie Details and vault filtering.</li>
+                    <li><strong>Letterboxd Rating Distribution:</strong> 5-tier star rating histogram (9-10★ Masterpieces down to 0.5-2.9★).</li>
+                    <li><strong>Viewing Rhythm Milestone:</strong> Highlights your all-time most active viewing month and year-over-year watch volumes.</li>
+                </ul>
+            </li>
+            <li><strong>Active Filters Ribbon & Quick Clear:</strong> Added 1-tap dismissible filter chips and a "Clear All" action for active Era and Service filters in the Watched Vault.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.5.3</span> <span class="date">September 2026</span></h2>
         <h3>Cinema Podcast RSS Feed Scraper & Comprehensive Tracker Sync</h3>
         <ul>
