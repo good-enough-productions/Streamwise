@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
@@ -62,9 +63,11 @@ import com.example.data.remote.LetterboxdSyncResult
 import com.example.data.remote.LetterboxdFileImportResult
 import com.example.data.remote.UpdateStatus
 import com.example.data.util.CastMemberWithAge
+import com.example.data.util.WatchedAnalytics
 import com.example.data.util.WatchedAnalyticsCalculator
 import java.text.SimpleDateFormat
 import java.util.Date
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -338,6 +341,7 @@ fun HomeScreen(
                         WatchedTabContent(
                             watchedItems = watchedItems,
                             allProviders = allProviders,
+                            watchlistItems = watchlistItems,
                             onMovieClick = { detailMovieItem = it },
                             onDeleteClick = { viewModel.deleteItem(it) },
                             onSyncClick = {
@@ -355,12 +359,16 @@ fun HomeScreen(
                             onExportLetterboxdCsv = onExportForLetterboxd
                         )
                     }
-                    2 -> MonthlyRoiContent(
-                        monthlyStats = monthlyStats,
-                        allProviders = allProviders,
-                        watchlistItems = watchlistItems,
-                        onProviderClick = { showServiceDetailProvider = it }
-                    )
+                    2 -> {
+                        val watchedItems by viewModel.watchedItems.collectAsState()
+                        MonthlyRoiContent(
+                            monthlyStats = monthlyStats,
+                            allProviders = allProviders,
+                            watchlistItems = watchlistItems,
+                            watchedItems = watchedItems,
+                            onProviderClick = { showServiceDetailProvider = it }
+                        )
+                    }
                     3 -> {
                         val chatMessages by viewModel.chatMessages.collectAsState()
                         val isChatLoading by viewModel.isChatLoading.collectAsState()
@@ -1949,180 +1957,93 @@ fun MediaItemCard(
 }
 
 // ==========================================
-// COMPOSABLE: Watched History & Cinephile Vault (Issue #9 & #10)
+// COMPOSABLE: Watched History & Cinephile Vault (Issue #9, #10 & #16)
 // ==========================================
 @Composable
-fun WatchedTabContent(
-    watchedItems: List<MediaItem>,
-    allProviders: List<StreamingProvider>,
-    onMovieClick: (MediaItem) -> Unit,
-    onDeleteClick: (MediaItem) -> Unit,
-    onSyncClick: () -> Unit,
-    isSyncingToSheet: Boolean = false,
-    onSyncLetterboxdToSheet: () -> Unit = {},
-    onSyncLetterboxdLive: () -> Unit = {},
-    onRewatchIntent: (MediaItem) -> Unit = {},
-    onPickLetterboxdFile: () -> Unit = {},
-    onExportLetterboxdCsv: () -> Unit = {}
+fun WatchedVaultOverviewCard(
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    totalFilms: Int,
+    estHours: Int,
+    avgRating: Double,
+    watchedAnalytics: WatchedAnalytics,
+    topGenres: List<Pair<String, Int>>,
+    onOpenAnalytics: () -> Unit,
+    onPickLetterboxdFile: () -> Unit,
+    onExportLetterboxdCsv: () -> Unit,
+    onSyncLetterboxdLive: () -> Unit,
+    onSyncLetterboxdToSheet: () -> Unit,
+    isSyncingToSheet: Boolean
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var sortBy by remember { mutableStateOf("timeline") } // "timeline", "alpha", "rating"
-    var selectedGenre by remember { mutableStateOf<String?>(null) }
-    var selectedEra by remember { mutableStateOf<String?>(null) }
-    var selectedService by remember { mutableStateOf<String?>(null) }
-    var showAnalyticsSheet by remember { mutableStateOf(false) }
-    var viewMode by remember { mutableStateOf("timeline") } // "timeline" or "grid"
-
-    val watchedAnalytics = remember(watchedItems, allProviders) {
-        WatchedAnalyticsCalculator.calculateAnalytics(watchedItems, allProviders)
-    }
-
-    val allGenres = remember(watchedItems) {
-        watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .sorted()
-    }
-
-    val filteredItems = remember(watchedItems, searchQuery, selectedGenre, selectedEra, selectedService) {
-        watchedItems.filter { item ->
-            val matchesSearch = item.title.contains(searchQuery, ignoreCase = true)
-            val matchesGenre = selectedGenre == null || item.genres?.contains(selectedGenre!!, ignoreCase = true) == true
-            val matchesEra = selectedEra == null || WatchedAnalyticsCalculator.determineEra(WatchedAnalyticsCalculator.extractReleaseYear(item)) == selectedEra
-            val matchesService = selectedService == null || (
-                if (selectedService == "other") item.providersList.isEmpty()
-                else item.providersList.any { it.equals(selectedService, ignoreCase = true) }
-            )
-            matchesSearch && matchesGenre && matchesEra && matchesService
-        }.distinctBy { it.title.trim().lowercase() }
-    }
-
-    val processedItems = remember(filteredItems, sortBy) {
-        when (sortBy) {
-            "alpha" -> filteredItems.sortedBy { it.title.lowercase() }
-            "rating" -> filteredItems.sortedByDescending { it.rating ?: 0.0 }
-            else -> filteredItems.sortedWith(
-                compareByDescending<MediaItem> { it.watchedAt ?: it.addedAt }
-                    .thenByDescending { it.id }
-            )
-        }
-    }
-
-    // Group items by Year-Month for timeline diary
-    val groupedItems = remember(processedItems) {
-        val sdf = java.text.SimpleDateFormat("MMMM yyyy", Locale.US)
-        processedItems.groupBy { item ->
-            val ts = item.watchedAt ?: item.addedAt
-            if (ts > 0) sdf.format(java.util.Date(ts)) else "Older Logs"
-        }
-    }
-
-    // Cinephile Vault Stats
-    val totalFilms = watchedItems.size
-    val estHours = (totalFilms * 110) / 60
-    val ratedFilms = remember(watchedItems) { watchedItems.filter { (it.rating ?: 0.0) > 0.0 } }
-    val avgRating = remember(ratedFilms) {
-        if (ratedFilms.isNotEmpty()) ratedFilms.map { it.rating!! }.average() else 0.0
-    }
-    val topGenres = remember(watchedItems) {
-        watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
-            .filter { it.isNotBlank() }
-            .groupingBy { it }
-            .eachCount()
-            .toList()
-            .sortedByDescending { it.second }
-            .take(4)
-    }
-
-    Column(
+    Card(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+            .fillMaxWidth()
+            .clickable { onToggleExpand() },
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        ),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
     ) {
-        // Cinephile Vault & Letterboxd Overview Card (Issue #9 & #10)
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 12.dp),
-            shape = RoundedCornerShape(18.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-            ),
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "CINEMATIC VAULT & DIARY",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp
-                        )
-                        Text(
-                            "Letterboxd Sync & Chronological Log",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        IconButton(
-                            onClick = { showAnalyticsSheet = true },
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
-                        ) {
-                            Icon(
-                                Icons.Default.Analytics,
-                                contentDescription = "Cinema Analytics",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        // View Mode Switcher: Timeline vs Grid
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                                .padding(2.dp)
-                        ) {
-                            IconButton(
-                                onClick = { viewMode = "timeline" },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.DateRange,
-                                    contentDescription = "Timeline View",
-                                    tint = if (viewMode == "timeline") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                            IconButton(
-                                onClick = { viewMode = "grid" },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.GridView,
-                                    contentDescription = "Poster Wall Grid",
-                                    tint = if (viewMode == "grid") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
+        Column(modifier = Modifier.padding(14.dp)) {
+            // Header Row (Always visible)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "CINEMATIC VAULT & DIARY",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = if (isExpanded) "Letterboxd Sync & Chronological Log"
+                        else "$totalFilms Films • ~${estHours}h • ★ ${String.format(Locale.US, "%.1f", avgRating)} • ~${String.format(Locale.US, "%.1f", watchedAnalytics.monthlyVelocity)}/mo",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(
+                        onClick = onOpenAnalytics,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+                    ) {
+                        Icon(
+                            Icons.Default.Analytics,
+                            contentDescription = "Cinema Analytics",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
 
-                // 3-KPI Stats Row
+                    IconButton(
+                        onClick = onToggleExpand,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isExpanded) "Collapse summary" else "Expand details",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 4-KPI Stats Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -2130,42 +2051,51 @@ fun WatchedTabContent(
                     Column(horizontalAlignment = Alignment.Start) {
                         Text(
                             text = "$totalFilms",
-                            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+                            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
                             fontWeight = FontWeight.Black,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text("Films Watched", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        Text("Watched", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "~${estHours}h",
-                            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+                            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
                             fontWeight = FontWeight.Black,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text("Screen Time", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     }
-                    Column(horizontalAlignment = Alignment.End) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "★ ${String.format(Locale.US, "%.1f", avgRating)}",
-                            style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum"),
+                            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
                             fontWeight = FontWeight.Black,
                             color = Color(0xFFFFD700)
                         )
                         Text("Avg Rating", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                     }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "~${String.format(Locale.US, "%.1f", watchedAnalytics.monthlyVelocity)}",
+                            style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text("Films/Mo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Cinephile Analytics Banner (Issue #10 & movies-dataset integration)
+                // Cinephile Analytics Banner
                 Surface(
                     shape = RoundedCornerShape(10.dp),
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { showAnalyticsSheet = true }
+                        .clickable { onOpenAnalytics() }
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -2212,7 +2142,6 @@ fun WatchedTabContent(
                                 )
                             }
                         }
-
                     }
                 }
 
@@ -2306,57 +2235,197 @@ fun WatchedTabContent(
                 }
             }
         }
+    }
+}
 
-        // Search & Sorting controls
+@Composable
+fun WatchedTabContent(
+    watchedItems: List<MediaItem>,
+    allProviders: List<StreamingProvider>,
+    watchlistItems: List<MediaItem> = emptyList(),
+    onMovieClick: (MediaItem) -> Unit,
+    onDeleteClick: (MediaItem) -> Unit,
+    onSyncClick: () -> Unit,
+    isSyncingToSheet: Boolean = false,
+    onSyncLetterboxdToSheet: () -> Unit = {},
+    onSyncLetterboxdLive: () -> Unit = {},
+    onRewatchIntent: (MediaItem) -> Unit = {},
+    onPickLetterboxdFile: () -> Unit = {},
+    onExportLetterboxdCsv: () -> Unit = {}
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var sortBy by remember { mutableStateOf("timeline") } // "timeline", "alpha", "rating"
+    var selectedGenre by remember { mutableStateOf<String?>(null) }
+    var selectedEra by remember { mutableStateOf<String?>(null) }
+    var selectedService by remember { mutableStateOf<String?>(null) }
+    var showAnalyticsSheet by remember { mutableStateOf(false) }
+    var viewMode by remember { mutableStateOf("timeline") } // "timeline" or "grid"
+    var isOverviewExpanded by remember { mutableStateOf(false) }
+
+    val watchedAnalytics = remember(watchedItems, allProviders, watchlistItems) {
+        WatchedAnalyticsCalculator.calculateAnalytics(watchedItems, allProviders, watchlistItems)
+    }
+
+    val allGenres = remember(watchedItems) {
+        watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .sorted()
+    }
+
+    val filteredItems = remember(watchedItems, searchQuery, selectedGenre, selectedEra, selectedService) {
+        watchedItems.filter { item ->
+            val matchesSearch = item.title.contains(searchQuery, ignoreCase = true)
+            val matchesGenre = selectedGenre == null || item.genres?.contains(selectedGenre!!, ignoreCase = true) == true
+            val matchesEra = selectedEra == null || WatchedAnalyticsCalculator.determineEra(WatchedAnalyticsCalculator.extractReleaseYear(item)) == selectedEra
+            val matchesService = selectedService == null || (
+                if (selectedService == "other") item.providersList.isEmpty()
+                else item.providersList.any { it.equals(selectedService, ignoreCase = true) }
+            )
+            matchesSearch && matchesGenre && matchesEra && matchesService
+        }.distinctBy { it.title.trim().lowercase() }
+    }
+
+    val processedItems = remember(filteredItems, sortBy) {
+        when (sortBy) {
+            "alpha" -> filteredItems.sortedBy { it.title.lowercase() }
+            "rating" -> filteredItems.sortedByDescending { it.rating ?: 0.0 }
+            else -> filteredItems.sortedWith(
+                compareByDescending<MediaItem> { it.watchedAt ?: it.addedAt }
+                    .thenByDescending { it.id }
+            )
+        }
+    }
+
+    // Group items by Year-Month for timeline diary
+    val groupedItems = remember(processedItems) {
+        val sdf = java.text.SimpleDateFormat("MMMM yyyy", Locale.US)
+        processedItems.groupBy { item ->
+            val ts = item.watchedAt ?: item.addedAt
+            if (ts > 0) sdf.format(java.util.Date(ts)) else "Older Logs"
+        }
+    }
+
+    // Cinephile Vault Stats
+    val totalFilms = watchedItems.size
+    val estHours = (totalFilms * 110) / 60
+    val ratedFilms = remember(watchedItems) { watchedItems.filter { (it.rating ?: 0.0) > 0.0 } }
+    val avgRating = remember(ratedFilms) {
+        if (ratedFilms.isNotEmpty()) ratedFilms.map { it.rating!! }.average() else 0.0
+    }
+    val topGenres = remember(watchedItems) {
+        watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+            .toList()
+            .sortedByDescending { it.second }
+            .take(4)
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        // Slim Sticky Top Bar: Search, Sort, View Switcher & Quick Analytics Button (Issue #16)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 10.dp),
+                .padding(bottom = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                label = { Text("Search history...") },
+                placeholder = { Text("Search vault...", fontSize = 13.sp) },
                 singleLine = true,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
+                        IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
                             Icon(Icons.Default.Clear, contentDescription = "Clear search", modifier = Modifier.size(16.dp))
                         }
                     }
                 },
                 modifier = Modifier
-                    .weight(1.5f)
-                    .height(52.dp),
+                    .weight(1f)
+                    .height(48.dp),
                 textStyle = MaterialTheme.typography.bodyMedium,
                 shape = RoundedCornerShape(12.dp)
             )
 
-            // Sort Selector
+            // Compact Sort Dropdown
             var sortExpanded by remember { mutableStateOf(false) }
-            Box(modifier = Modifier.weight(1.2f)) {
+            Box {
                 OutlinedButton(
                     onClick = { sortExpanded = true },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(12.dp)
+                    modifier = Modifier.height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp)
                 ) {
                     val sortLabel = when (sortBy) {
                         "alpha" -> "A-Z"
                         "rating" -> "Rating"
                         else -> "Timeline"
                     }
-                    Icon(Icons.Default.DateRange, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Sort, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(sortLabel, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(sortLabel, fontSize = 12.sp)
                 }
                 DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
                     DropdownMenuItem(text = { Text("Watched Timeline") }, onClick = { sortBy = "timeline"; sortExpanded = false })
                     DropdownMenuItem(text = { Text("Alphabetical A-Z") }, onClick = { sortBy = "alpha"; sortExpanded = false })
                     DropdownMenuItem(text = { Text("Highest Rated") }, onClick = { sortBy = "rating"; sortExpanded = false })
                 }
+            }
+
+            // View Mode Switcher: Timeline vs Grid
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    .padding(2.dp)
+            ) {
+                IconButton(
+                    onClick = { viewMode = "timeline" },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.DateRange,
+                        contentDescription = "Timeline View",
+                        tint = if (viewMode == "timeline") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                IconButton(
+                    onClick = { viewMode = "grid" },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.GridView,
+                        contentDescription = "Poster Wall Grid",
+                        tint = if (viewMode == "grid") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            // Quick Cinema Analytics Icon Button
+            IconButton(
+                onClick = { showAnalyticsSheet = true },
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f))
+            ) {
+                Icon(
+                    Icons.Default.Analytics,
+                    contentDescription = "Cinema Analytics",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
 
@@ -2365,7 +2434,7 @@ fun WatchedTabContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 10.dp)
+                    .padding(bottom = 6.dp)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -2389,12 +2458,12 @@ fun WatchedTabContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                    .padding(bottom = 6.dp)
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Filters:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                Text("Active:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 if (selectedEra != null) {
                     FilterChip(
                         selected = true,
@@ -2433,8 +2502,8 @@ fun WatchedTabContent(
                 fontWeight = FontWeight.Bold
             )
             Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = onSyncClick) {
-                Icon(Icons.Default.Refresh, contentDescription = "Enrich metadata", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            IconButton(onClick = onSyncClick, modifier = Modifier.size(28.dp)) {
+                Icon(Icons.Default.Refresh, contentDescription = "Enrich metadata", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
             }
         }
 
@@ -2443,13 +2512,31 @@ fun WatchedTabContent(
                 Text("No logged titles found.", color = MaterialTheme.colorScheme.outline)
             }
         } else if (viewMode == "grid") {
-            // Poster Wall Grid View
+            // Poster Wall Grid View with Collapsible Header Card inside scrollable grid
             LazyVerticalGrid(
                 columns = GridCells.Fixed(3),
                 modifier = Modifier.fillMaxSize(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item(span = { GridItemSpan(maxLineSpan) }, key = "vault_overview_card") {
+                    WatchedVaultOverviewCard(
+                        isExpanded = isOverviewExpanded,
+                        onToggleExpand = { isOverviewExpanded = !isOverviewExpanded },
+                        totalFilms = totalFilms,
+                        estHours = estHours,
+                        avgRating = avgRating,
+                        watchedAnalytics = watchedAnalytics,
+                        topGenres = topGenres,
+                        onOpenAnalytics = { showAnalyticsSheet = true },
+                        onPickLetterboxdFile = onPickLetterboxdFile,
+                        onExportLetterboxdCsv = onExportLetterboxdCsv,
+                        onSyncLetterboxdLive = onSyncLetterboxdLive,
+                        onSyncLetterboxdToSheet = onSyncLetterboxdToSheet,
+                        isSyncingToSheet = isSyncingToSheet
+                    )
+                }
+
                 items(processedItems, key = { it.id }) { item ->
                     WatchedGridPosterCard(
                         item = item,
@@ -2458,11 +2545,29 @@ fun WatchedTabContent(
                 }
             }
         } else {
-            // Timeline Chronological Diary View (Grouped by Month & Year)
+            // Timeline Chronological Diary View with Collapsible Header Card inside scrollable list
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                item(key = "vault_overview_card") {
+                    WatchedVaultOverviewCard(
+                        isExpanded = isOverviewExpanded,
+                        onToggleExpand = { isOverviewExpanded = !isOverviewExpanded },
+                        totalFilms = totalFilms,
+                        estHours = estHours,
+                        avgRating = avgRating,
+                        watchedAnalytics = watchedAnalytics,
+                        topGenres = topGenres,
+                        onOpenAnalytics = { showAnalyticsSheet = true },
+                        onPickLetterboxdFile = onPickLetterboxdFile,
+                        onExportLetterboxdCsv = onExportLetterboxdCsv,
+                        onSyncLetterboxdLive = onSyncLetterboxdLive,
+                        onSyncLetterboxdToSheet = onSyncLetterboxdToSheet,
+                        isSyncingToSheet = isSyncingToSheet
+                    )
+                }
+
                 groupedItems.forEach { (monthYear, itemsInMonth) ->
                     item(key = "header_$monthYear") {
                         Row(
@@ -2842,11 +2947,33 @@ fun MonthlyRoiContent(
     monthlyStats: List<ProviderUsageStats>,
     allProviders: List<StreamingProvider>,
     watchlistItems: List<MediaItem> = emptyList(),
+    watchedItems: List<MediaItem> = emptyList(),
     onProviderClick: (StreamingProvider) -> Unit = {}
 ) {
     val activeSubscribed = remember(allProviders) { allProviders.filter { it.isActive } }
     val inactiveProviders = remember(allProviders) { allProviders.filter { !it.isActive } }
     val totalCost = remember(activeSubscribed) { activeSubscribed.sumOf { it.costPerMonth } }
+
+    // Viewing Velocity & Single-Service Expected Value (Issue #15)
+    val velocity = remember(watchedItems) {
+        WatchedAnalyticsCalculator.calculateAnalytics(watchedItems).monthlyVelocity
+    }
+    val effectiveCostPerFilm = remember(totalCost, velocity) {
+        if (velocity > 0f) totalCost / velocity else 0.0
+    }
+
+    val serviceQueuedCounts = remember(activeSubscribed, watchlistItems) {
+        activeSubscribed.map { p ->
+            val count = watchlistItems.count { item ->
+                item.providersList.any { it.equals(p.id, ignoreCase = true) || it.contains(p.name, ignoreCase = true) }
+            }
+            p to count
+        }.sortedByDescending { it.second }
+    }
+    val topQueued = serviceQueuedCounts.firstOrNull()
+    val singleServiceCost = topQueued?.first?.costPerMonth ?: (activeSubscribed.maxOfOrNull { it.costPerMonth } ?: 15.99)
+    val potentialMonthlySavings = (totalCost - singleServiceCost).coerceAtLeast(0.0)
+    val annualSavings = potentialMonthlySavings * 12.0
     
     // Sort active channels by costPerHour descending (worst value!) to bubble up prime pausing candidates.
     val activeWithStats = remember(activeSubscribed, monthlyStats) {
@@ -2917,6 +3044,156 @@ fun MonthlyRoiContent(
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
                     )
+                }
+            }
+        }
+
+        if (activeSubscribed.size > 1) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SwapHoriz,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Column {
+                                    Text(
+                                        "SINGLE-SERVICE ROTATION ADVISOR",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 1.sp,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                    Text(
+                                        "Expected Value & Spend Optimization",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    "SAVE ~$${String.format(Locale.US, "%.0f", potentialMonthlySavings)}/MO",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // 2 KPI Stat Blocks: Effective Cost / Film vs Potential Savings
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("Effective Cost / Film", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        "$${String.format(Locale.US, "%.2f", effectiveCostPerFilm)}",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "~${String.format(Locale.US, "%.1f", velocity)} films/mo pace",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.06f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text("Annual Savings", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        "$${String.format(Locale.US, "%.0f", annualSavings)}/yr",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFF4CAF50)
+                                    )
+                                    Text(
+                                        "Rotating 1 service/mo",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Actionable Advice Box
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                if (topQueued != null && topQueued.second > 0) {
+                                    val monthsSupply = if (velocity > 0f) (topQueued.second / velocity).roundToInt().coerceAtLeast(1) else 1
+                                    Text(
+                                        "🎯 Top Rotation Pick: ${topQueued.first.name}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        "You have ${topQueued.second} watchlist titles on ${topQueued.first.name} (~$monthsSupply months of backlog at your ~${String.format(Locale.US, "%.1f", velocity)} films/mo pace). Keep ${topQueued.first.name} active, pause the other ${activeSubscribed.size - 1} services, and save ~$${String.format(Locale.US, "%.0f", potentialMonthlySavings)}/mo with uninterrupted viewing!",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Text(
+                                        "💡 Subscribing to multiple services at once increases idle spend. Rotating through your ${activeSubscribed.size} services one per month maintains full catalog variety while saving ~$${String.format(Locale.US, "%.0f", annualSavings)} every year.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
