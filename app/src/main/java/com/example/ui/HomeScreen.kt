@@ -863,22 +863,29 @@ fun WatchlistTabContent(
                 if ((item.rating ?: 0.0) < threshold) return@filter false
             }
 
+            // Reject non-movie episodes from ever showing in the watchlist feed
+            if (com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) {
+                return@filter false
+            }
+
             // Multi-select Release Eras (OR logic: widens search to any selected era)
             if (selectedEras.isNotEmpty()) {
-                val yearMatch = Regex("""\b(19\d\d|20\d\d)\b""").find(item.overview ?: "")?.value?.toIntOrNull()
-                    ?: Regex("""\b(19\d\d|20\d\d)\b""").find(item.title)?.value?.toIntOrNull()
-                if (yearMatch != null) {
+                val year = item.releaseYear
+                    ?: com.example.data.util.WatchedAnalyticsCalculator.extractReleaseYear(item)
+                if (year != null) {
                     val matchesAnyEra = selectedEras.any { era ->
                         when (era) {
-                            "2020s" -> yearMatch >= 2020
-                            "2010s" -> yearMatch in 2010..2019
-                            "2000s" -> yearMatch in 2000..2009
-                            "90s" -> yearMatch in 1990..1999
-                            "Classic" -> yearMatch < 1990
+                            "2020s" -> year >= 2020
+                            "2010s" -> year in 2010..2019
+                            "2000s" -> year in 2000..2009
+                            "90s" -> year in 1990..1999
+                            "Classic" -> year < 1990
                             else -> true
                         }
                     }
                     if (!matchesAnyEra) return@filter false
+                } else {
+                    return@filter false
                 }
             }
 
@@ -894,7 +901,8 @@ fun WatchlistTabContent(
                 if (!matchesPodcast) return@filter false
             }
 
-            if (filterOnlyMyServices) {
+            // If user explicitly chose a podcast or platforms, do NOT silently gate by active services
+            if (filterOnlyMyServices && selectedPodcastId == null && selectedPlatforms.isEmpty()) {
                 val provs = item.providersList
                 if (item.tmdbId == null) {
                     true

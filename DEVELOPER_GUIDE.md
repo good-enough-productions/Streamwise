@@ -162,3 +162,26 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
   - 1-tap interactive filtering: Tapping any era or service directly sets `selectedEra` or `selectedService` in `HomeScreen`, closing the sheet and filtering the Watched Vault with an active dismissible filter chip ribbon.
   - "Service Used to Watch" interactive selector added to `MovieDetailsBottomSheet` for watched titles to easily tag streaming services.
 
+## 19. Data Integrity Hardening, Strict TMDB Gating & CursorWindow Memory Architecture (v1.5.5)
+
+- **Root Cause Analysis (Issues #13 & #14)**:
+  - Previously, `syncPodcastRecommendationsInternal` inserted unverified podcast RSS titles directly into `WATCHLIST`. 470 non-movie discussions (mailbags, drafts, auctions, hall of fame shows) polluted the user's database without TMDB IDs or poster art.
+  - Furthermore, `filterOnlyMyServices` defaulted to `true`. When a user selected a podcast filter (e.g. *The Rewatchables*), movies covered by the podcast that were not on the user's active paid subscriptions were filtered out, giving the impression that the podcast filter was not working (#13).
+  - In addition, concatenating multi-kilobyte episode descriptions into `userNotes` pushed the SQLite query payload beyond Android's default 2MB `CursorWindow` limit, causing `IllegalStateException: Couldn't read row 587, col 0 from CursorWindow` on cold launch.
+- **Data Integrity Sanitize & Gatekeeping (`MediaTitleSanitizer.kt`)**:
+  - `isNonMovieEpisode`: Comprehensive regex blacklist filtering out drafts, auctions, mailbags, Oscar predictions, festival recaps, and bare podcast show titles.
+  - `cleanCandidateTitle`: Strips podcast prefixes (e.g. *"The Re-"*, *"(Re)"*), guest names, and episode markers before TMDB querying.
+  - **Zero-Tolerance Gating**: During podcast syncs or imports, items that do not return a matching movie or TV show on TMDB are discarded immediately—never inserted into the Watchlist.
+- **Room v9 Database Schema & CursorWindow Resilience**:
+  - Upgraded Room DB from version 7 -> 8 (adding `releaseDate TEXT` column) -> 9 (automated data integrity purge and text trimming).
+  - Synchronous `onOpen` SQLite cleanup:
+    ```sql
+    DELETE FROM media_items WHERE status = 'WATCHLIST' AND (tmdbId IS NULL OR tmdbId = '');
+    UPDATE media_items SET userNotes = substr(userNotes, 1, 300) WHERE length(userNotes) > 300;
+    UPDATE media_items SET overview = substr(overview, 1, 300) WHERE length(overview) > 300;
+    UPDATE media_items SET trivia = NULL WHERE trivia IS NOT NULL;
+    ```
+  - In `StreamApp.onCreate()`, `sCursorWindowSize` is programmatically set to 50MB via reflection, permanently preventing `CursorWindowAllocationException`.
+- **Podcast Filter Precedence (`HomeScreen.kt`)**:
+  - Filter logic updated: when `selectedPodcastId != null` or `selectedPlatforms.isNotEmpty()`, the subscription-gating check (`filterOnlyMyServices`) is automatically bypassed so all covered films across all providers are displayed.
+

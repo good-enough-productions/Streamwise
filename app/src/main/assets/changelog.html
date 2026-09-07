@@ -20,6 +20,18 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.5.5</span> <span class="date">September 2026</span></h2>
+        <h3>Data Integrity Hardening, Strict TMDB Gating & Filter Fixes</h3>
+        <ul>
+            <li><strong>Data Integrity Purge & Non-Movie Blacklist:</strong> Scrubbed 470 non-movie podcast discussions (drafts, auctions, mailbags, Oscar predictions, hall of fame shows) out of the Watchlist. Added <code>MediaTitleSanitizer</code> with strict regex filtering and candidate title normalization.</li>
+            <li><strong>Strict TMDB Gating:</strong> Enforced mandatory TMDB validation on podcast syncs and imports. Only verified feature films and series are admitted to the Watchlist.</li>
+            <li><strong>Room v9 Database Migration & Performance:</strong> Upgraded Room database schema to v9 (adding <code>releaseDate TEXT</code> column in v8, and automated cursor-window-size cleanup and text column trimming in v9). Configured 50MB <code>CursorWindow</code> allocation in <code>StreamApp</code> to permanently avoid cursor window limits.</li>
+            <li><strong>Podcast Filter Fix (Resolves #13):</strong> Bypassed <code>filterOnlyMyServices</code> whenever a podcast filter or platform filter is active, allowing cinema fans to explore all films covered on <em>The Rewatchables</em>, <em>The Big Picture</em>, <em>Unspooled</em>, <em>How Did This Get Made?</em>, and <em>What Went Wrong</em> regardless of personal streaming subscriptions.</li>
+            <li><strong>Instant TMDB Match Resolution (Resolves #14):</strong> Strips podcast prefixes (e.g., <em>"The Re-"</em>, <em>"(Re)"</em>, guest names, episode numbers) and matches candidates against TMDB before display.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.5.4</span> <span class="date">September 2026</span></h2>
         <h3>Actor Age at Release & Cinephile Viewing Analytics Hub</h3>
         <ul>

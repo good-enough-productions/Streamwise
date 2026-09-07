@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 7,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -97,6 +97,22 @@ abstract class AppDatabase : RoomDatabase() {
                 }
             }
         }
+
+        private val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN releaseDate TEXT")
+            }
+        }
+
+        private val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Purge non-movie podcast discussions from Watchlist and trim oversized text columns
+                db.execSQL("DELETE FROM media_items WHERE status = 'WATCHLIST' AND (tmdbId IS NULL OR tmdbId = '')")
+                db.execSQL("UPDATE media_items SET userNotes = substr(userNotes, 1, 300) WHERE length(userNotes) > 300")
+                db.execSQL("UPDATE media_items SET overview = substr(overview, 1, 300) WHERE length(overview) > 300")
+                db.execSQL("UPDATE media_items SET trivia = NULL WHERE trivia IS NOT NULL")
+            }
+        }
     }
 
     private class DatabaseCallback(
@@ -125,6 +141,15 @@ abstract class AppDatabase : RoomDatabase() {
 
         override fun onOpen(db: SupportSQLiteDatabase) {
             super.onOpen(db)
+            try {
+                // Synchronously purge non-movie podcast entries from Watchlist before DAO cursor iteration
+                db.execSQL("DELETE FROM media_items WHERE status = 'WATCHLIST' AND (tmdbId IS NULL OR tmdbId = '')")
+                db.execSQL("UPDATE media_items SET userNotes = substr(userNotes, 1, 300) WHERE length(userNotes) > 300")
+                db.execSQL("UPDATE media_items SET overview = substr(overview, 1, 300) WHERE length(overview) > 300")
+                db.execSQL("UPDATE media_items SET trivia = NULL WHERE trivia IS NOT NULL")
+            } catch (e: Exception) {
+                Log.e("AppDatabase", "Error during onOpen integrity scrub", e)
+            }
             INSTANCE?.let { database ->
                 scope.launch(Dispatchers.IO) {
                     val watchedCount = database.mediaDao().getWatchedCount()

@@ -32,6 +32,15 @@ class StreamApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // Configure CursorWindow size to prevent CursorWindowAllocationException with large datasets
+        try {
+            val field = android.database.CursorWindow::class.java.getDeclaredField("sCursorWindowSize")
+            field.isAccessible = true
+            field.set(null, 50 * 1024 * 1024) // 50MB
+        } catch (e: Throwable) {
+            android.util.Log.w("StreamApp", "Could not set sCursorWindowSize: ${e.message}")
+        }
         
         // Setup Dependency Injection Container
         container = AppContainer(this, applicationScope)

@@ -203,10 +203,11 @@ object PodcastEpisodeCatalog {
     )
 
     internal fun normalize(str: String): String {
-        return str.lowercase()
-            .replace(Regex("[^a-z0-9 ]"), "")
-            .replace(Regex("\\s+"), " ")
-            .trim()
+        var s = str.lowercase().trim()
+        s = s.replace(Regex("""\s*\(\d{4}\)$"""), "").trim()
+        s = s.replace(Regex("[^a-z0-9 ]"), "")
+        s = s.replace(Regex("\\s+"), " ").trim()
+        return s
     }
 
     fun isCoveredOnPodcast(
@@ -242,12 +243,16 @@ object PodcastEpisodeCatalog {
 
         val norm = normalize(movieTitle)
         if (norm.isBlank()) return false
+        val normNoThe = if (norm.startsWith("the ")) norm.removePrefix("the ").trim() else norm
 
         // 2. Comprehensive asset catalog lookup (2,300+ scraped titles)
         val catalogSet = dynamicTitlesMap[podcastId]
         if (catalogSet != null) {
-            if (catalogSet.contains(norm)) return true
-            if (!mainSubjectOnly && catalogSet.any { it.contains(norm) || norm.contains(it) }) {
+            if (catalogSet.contains(norm) || catalogSet.contains(normNoThe)) return true
+            if (!mainSubjectOnly && catalogSet.any { 
+                it == norm || it == normNoThe || it.contains(norm) || norm.contains(it) ||
+                (normNoThe.length >= 4 && it.contains(normNoThe))
+            }) {
                 return true
             }
         }
