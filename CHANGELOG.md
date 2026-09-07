@@ -2,6 +2,25 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.5.3] - 2026-09-06
+
+### Added
+- **Cinema Podcast Catalog & RSS Scraper (`scrape_feeds.py`)**:
+  - Standalone zero-dependency script parsing, normalizing, and extracting film titles across 5 premier film podcasts (2,516 total episodes):
+    - *The Rewatchables* (479 episodes)
+    - *The Big Picture* (968 episodes)
+    - *Unspooled* (468 episodes)
+    - *How Did This Get Made?* (393 episodes)
+    - *What Went Wrong* (208 episodes)
+  - Exports standard catalog to `podcast_catalog.csv` and `podcast_catalog.json` with air dates, clean film titles, formats, verdicts, and show context.
+- **Gemini Spark Sheet Tracker Completion**:
+  - Synchronized 2,233 newly discovered podcast episodes directly into the living Google Sheet (`1Eo-SVac12qRs8Z5DtYKUGqyC54xgDtm8584CFCyRr18`) with automatic deduplication.
+- **Dynamic In-App Podcast Filtering**:
+  - Bundled `podcast_titles.json` into assets for offline, zero-latency lookup of 2,300+ movie titles across podcasts.
+  - Added *Unspooled* (`📽️`) to `AVAILABLE_PODCASTS` in `PodcastEpisodeCatalog`.
+  - Upgraded `isCoveredOnPodcast` to check both dynamic asset catalogs and movie `importSource`/`userNotes` metadata tags.
+  - Fixed filter modal showing `Show 0 Titles` for *The Rewatchables* (now matches 350+ queued titles).
+
 ## [1.5.2] - 2026-09-06
 
 ### Added

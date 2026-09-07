@@ -52,6 +52,10 @@ class StreamViewModel(
     private val userPreferences: UserPreferencesManager
 ) : AndroidViewModel(application) {
 
+    init {
+        com.example.data.model.PodcastEpisodeCatalog.initialize(application.applicationContext)
+    }
+
     private val TAG = "StreamViewModel"
 
     // --- State Expositions ---

@@ -119,3 +119,20 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
   2. Central Cloud Run proxy (`feedback-proxy-rljydlcchq-uc.a.run.app`).
   3. Google Apps Script Web App fallback with HTTP 302 redirect resolution.
 - **Visible Error Banner & Toasts**: `FeedbackDialog` hoists the error card outside the scrollable column right above the submit button, coupled with native Android Toast alerts on both success and error, preventing silent failures.
+
+## 16. Cinema Podcast RSS Ingestion Pipeline & Dynamic Catalog Matching (v1.5.3)
+
+- **Zero-Dependency Python Scraper (`scrape_feeds.py`)**: Standalone Python script using standard library modules (`urllib.request`, `xml.etree.ElementTree`, `re`, `csv`, `json`) to scrape, parse, and normalize all available episodes across 5 cinema podcast feeds:
+  - *The Rewatchables* (`https://feeds.megaphone.fm/the-rewatchables`) - 479 episodes
+  - *The Big Picture* (`https://feeds.megaphone.fm/the-big-picture`) - 968 episodes
+  - *Unspooled* (`https://feeds.megaphone.fm/SBP3707703183`) - 468 episodes
+  - *How Did This Get Made?* (`https://feeds.simplecast.com/Ao0C24M8`) - 393 episodes
+  - *What Went Wrong* (`https://feeds.acast.com/public/shows/what-went-wrong1`) - 208 episodes
+  Totaling **2,516 scraped episodes**.
+- **Episode Title Extraction Regex Engine**: Robust multi-pattern extractor designed to handle single/curly quotes, internal apostrophes (e.g. *'She's the One'*, *'There's Something About Mary'*), host/guest credit stripping without truncating titles with the word "with" (e.g. *Interview with the Vampire*), and colon/dash episode formatting.
+- **Google Sheet Population (`sync_to_sheet.py`)**: Apps Script Web App (`AKfycbzsbZfiDbXXGJunAmJX2xb9OtpnigwVl69M6qbBQ5bNBuyAdj6TtkW-LflbSxSFJJoI0w`) endpoint `appendPodcastEpisodes` populated 2,233 missing episodes into the living Google Sheet tracker with deduplication, bringing total tracker rows to 2,394.
+- **Dynamic Asset & Tag-Aware Filtering**:
+  - `generate_podcast_assets.py` exports `podcast_titles.json` (2,300+ unique titles mapped to podcast IDs) into Android assets.
+  - `PodcastEpisodeCatalog.kt` dynamically loads `podcast_titles.json` on app startup (`PodcastEpisodeCatalog.initialize(context)`), integrates *Unspooled*, and tests title matches against `importSource`, user notes tags (`[The Rewatchables]`), the 2,300+ title catalog, and static mentions.
+  - `AdvancedFilterBottomSheet.kt` correctly updates filter count indicators (e.g. *The Rewatchables* displaying 359 matching titles).
+

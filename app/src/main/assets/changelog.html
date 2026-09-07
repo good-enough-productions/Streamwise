@@ -20,6 +20,16 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.5.3</span> <span class="date">September 2026</span></h2>
+        <h3>Cinema Podcast RSS Feed Scraper & Comprehensive Tracker Sync</h3>
+        <ul>
+            <li><strong>Standalone Podcast Scraper (<code>scrape_feeds.py</code>):</strong> Zero-dependency Python script scraping, cleaning, and normalizing 2,516 episodes across 5 cinema podcast feeds (<em>The Rewatchables</em>, <em>The Big Picture</em>, <em>Unspooled</em>, <em>How Did This Get Made?</em>, and <em>What Went Wrong</em>) into <code>podcast_catalog.csv</code> and <code>podcast_catalog.json</code>.</li>
+            <li><strong>Gemini Spark Sheet Tracker Completion:</strong> Added 2,233 newly extracted podcast recommendations directly into the living Google Sheet tracker with smart deduplication.</li>
+            <li><strong>Offline Dynamic Podcast Indexing:</strong> Bundled <code>podcast_titles.json</code> into app assets covering 2,300+ movie titles across all shows. Added <em>Unspooled</em> (📽️) to podcast filters. Upgraded podcast filter matching to recognize both title catalogs and metadata tags, fixing the 0 titles issue on <em>The Rewatchables</em>.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.5.2</span> <span class="date">September 2026</span></h2>
         <h3>My Services Watchlist Volume & Resilient Feedback Pipeline</h3>
         <ul>
