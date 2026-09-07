@@ -20,6 +20,16 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.5.2</span> <span class="date">September 2026</span></h2>
+        <h3>My Services Watchlist Volume & Resilient Feedback Pipeline</h3>
+        <ul>
+            <li><strong>My Services Watchlist Volume Tracking:</strong> Every active streaming provider card now directly displays how many movies currently in your watchlist are available to stream on that provider (e.g. <code>🎬 10 Watchlist Titles</code>). Inactive services also show their queued count (<code>🎬 3 Queued</code>) to help you decide whether to resubscribe.</li>
+            <li><strong>Watchlist Queue on Service Details:</strong> Tapping any provider card opens the Service Details sheet featuring a dedicated <em>Watchlist on [Service]</em> section listing your queued titles with 1-tap navigation to open movie details.</li>
+            <li><strong>Resilient Multi-Tier Feedback Loop:</strong> Cloud Run feedback proxy re-authenticated and integrated with an automated Google Apps Script serverless fallback. Feedback submissions now show sticky error banners and instant Android Toast confirmations on success or failure.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.5.1</span> <span class="date">September 2026</span></h2>
         <h3>Gemini Spark Podcast Sync & Feedback Polish</h3>
         <ul>
