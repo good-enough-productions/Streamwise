@@ -83,6 +83,13 @@ object WatchedAnalyticsCalculator {
     private val YEAR_PAREN_REGEX = Regex("\\((19\\d\\d|20\\d\\d)\\)")
     private val YEAR_LETTERBOXD_REGEX = Regex("Letterboxd diary: .*?\\b(19\\d\\d|20\\d\\d)\\b", RegexOption.IGNORE_CASE)
     private val YEAR_WORD_REGEX = Regex("\\b(19\\d\\d|20\\d\\d)\\b")
+    private val YEAR_URL_REGEX = Regex("-([12]\\d{3})/?$")
+    private val YEAR_DATE_REGEX = Regex("^\\s*([12]\\d{3})")
+
+    private val STAR_RATING_REGEX = Regex("([★½]+)")
+    private val RATING_SLASH_10_REGEX = Regex("(?i)rating[:\\s]+(\\d+(?:\\.\\d+)?)\\s*/\\s*10")
+    private val RATING_SLASH_5_REGEX = Regex("(?i)rating[:\\s]+(\\d+(?:\\.\\d+)?)\\s*/\\s*5")
+    private val SCORE_REGEX = Regex("(?i)(?:score|rating)[:\\s]+(\\d+(?:\\.\\d+)?)")
 
     // Curated Acclaimed Director Filmographies for Pattern Matching
     private val DIRECTOR_FILMOGRAPHIES: Map<String, List<String>> = mapOf(
@@ -129,30 +136,90 @@ object WatchedAnalyticsCalculator {
     }
 
     /**
-     * Extracts the 4-digit release year from title, overview, or notes.
+     * Extracts the 4-digit release year from official release date, overview, notes, shared url, or title.
      */
     fun extractReleaseYear(item: MediaItem): Int? {
         // 0. Direct official release date/year from TMDB if available
         item.releaseYear?.let { return it }
+        if (!item.releaseDate.isNullOrBlank()) {
+            YEAR_DATE_REGEX.find(item.releaseDate)?.let { match ->
+                match.groupValues.getOrNull(1)?.toIntOrNull()?.let { return it }
+            }
+        }
 
         // 1. Look for (YYYY) in title
         YEAR_PAREN_REGEX.find(item.title)?.let { match ->
             match.groupValues.getOrNull(1)?.toIntOrNull()?.let { return it }
         }
 
-        // 2. Look for Letterboxd diary pattern in overview: "Movie (YYYY)"
+        // 2. Look for Letterboxd diary pattern in overview: "Movie (YYYY)" or "diary: ... (YYYY)"
         if (!item.overview.isNullOrBlank()) {
-            YEAR_LETTERBOXD_REGEX.find(item.overview)?.let { match ->
+            YEAR_PAREN_REGEX.find(item.overview)?.let { match ->
                 match.groupValues.getOrNull(1)?.toIntOrNull()?.let { return it }
             }
-            YEAR_PAREN_REGEX.find(item.overview)?.let { match ->
+            YEAR_LETTERBOXD_REGEX.find(item.overview)?.let { match ->
                 match.groupValues.getOrNull(1)?.toIntOrNull()?.let { return it }
             }
         }
 
-        // 3. Look for standalone 4-digit year in title
+        // 3. Look for year at end of Letterboxd slug URL: e.g. /film/ready-or-not-2019/ or /the-babysitter-2017/
+        if (!item.sharedUrl.isNullOrBlank()) {
+            YEAR_URL_REGEX.find(item.sharedUrl)?.let { match ->
+                match.groupValues.getOrNull(1)?.toIntOrNull()?.let { return it }
+            }
+        }
+
+        // 4. Look for (YYYY) in user notes
+        if (!item.userNotes.isNullOrBlank()) {
+            YEAR_PAREN_REGEX.find(item.userNotes)?.let { match ->
+                match.groupValues.getOrNull(1)?.toIntOrNull()?.let { return it }
+            }
+        }
+
+        // 5. Look for standalone 4-digit year in title
         YEAR_WORD_REGEX.find(item.title)?.let { match ->
             match.groupValues.getOrNull(1)?.toIntOrNull()?.let { return it }
+        }
+
+        return null
+    }
+
+    /**
+     * Extracts rating on a 10.0 scale from item.rating, userNotes, or overview.
+     */
+    fun extractRating(item: MediaItem): Double? {
+        val direct = item.rating
+        if (direct != null && direct > 0.0) return direct
+
+        val combinedText = "${item.userNotes ?: ""} ${item.overview ?: ""}"
+        if (combinedText.isBlank()) return null
+
+        // Star glyph parser (e.g. ★★★★½ -> 9.0, ★★★ -> 6.0)
+        STAR_RATING_REGEX.find(combinedText)?.let { match ->
+            val starsStr = match.groupValues.getOrNull(1) ?: ""
+            var score = 0.0
+            for (ch in starsStr) {
+                if (ch == '★') score += 2.0
+                else if (ch == '½') score += 1.0
+            }
+            if (score > 0.0 && score <= 10.0) return score
+        }
+
+        // "Rating: 8.5/10" or "8/10"
+        RATING_SLASH_10_REGEX.find(combinedText)?.let { match ->
+            match.groupValues.getOrNull(1)?.toDoubleOrNull()?.let { return it.coerceIn(0.0, 10.0) }
+        }
+
+        // "Rating: 4.5/5" -> 9.0
+        RATING_SLASH_5_REGEX.find(combinedText)?.let { match ->
+            match.groupValues.getOrNull(1)?.toDoubleOrNull()?.let { return (it * 2.0).coerceIn(0.0, 10.0) }
+        }
+
+        // "Rating: 8.5" or "Score: 9.0"
+        SCORE_REGEX.find(combinedText)?.let { match ->
+            match.groupValues.getOrNull(1)?.toDoubleOrNull()?.let {
+                return if (it <= 5.0) (it * 2.0).coerceIn(0.0, 10.0) else it.coerceIn(0.0, 10.0)
+            }
         }
 
         return null
@@ -207,12 +274,15 @@ object WatchedAnalyticsCalculator {
         }
 
         val totalHours = (total * 110) / 60
-        val ratedItems = items.filter { (it.rating ?: 0.0) > 0.0 }
-        val avgRating = if (ratedItems.isNotEmpty()) {
-            ratedItems.map { it.rating!! }.average()
+        val ratedItemsWithScore = items.mapNotNull { item ->
+            extractRating(item)?.let { score -> item to score }
+        }
+        val avgRating = if (ratedItemsWithScore.isNotEmpty()) {
+            ratedItemsWithScore.map { it.second }.average()
         } else {
             0.0
         }
+        val ratedCount = ratedItemsWithScore.size
 
         // --- 1. Era Breakdown ---
         val eraOrder = listOf("2020s", "2010s", "2000s", "1990s", "1980s", "1970s", "Pre-1970s", "Unknown")
@@ -236,8 +306,8 @@ object WatchedAnalyticsCalculator {
         }
         val genreBreakdown = genreItemsMap.map { (genre, gItems) ->
             val count = gItems.size
-            val gRated = gItems.filter { (it.rating ?: 0.0) > 0.0 }
-            val gAvg = if (gRated.isNotEmpty()) gRated.map { it.rating!! }.average() else null
+            val gRated = gItems.mapNotNull { extractRating(it) }
+            val gAvg = if (gRated.isNotEmpty()) gRated.average() else null
             GenreStat(
                 genre = genre,
                 count = count,
@@ -294,11 +364,11 @@ object WatchedAnalyticsCalculator {
             "0.5 - 2.9 ★" to (0.5..2.99)
         )
         val ratingBins = binDefinitions.map { (label, range) ->
-            val count = ratedItems.count { (it.rating ?: 0.0) in range }
+            val count = ratedItemsWithScore.count { it.second in range }
             RatingBinStat(
                 binLabel = label,
                 count = count,
-                percentage = if (ratedItems.isNotEmpty()) (count.toFloat() / ratedItems.size) * 100f else 0f
+                percentage = if (ratedItemsWithScore.isNotEmpty()) (count.toFloat() / ratedItemsWithScore.size) * 100f else 0f
             )
         }
 
@@ -364,8 +434,9 @@ object WatchedAnalyticsCalculator {
             if (matchedDirector != null) {
                 directorCountMap[matchedDirector] = (directorCountMap[matchedDirector] ?: 0) + 1
                 directorTitlesMap.getOrPut(matchedDirector) { mutableListOf() }.add(item.title.trim())
-                if (item.rating != null && item.rating > 0.0) {
-                    directorRatingsMap.getOrPut(matchedDirector) { mutableListOf() }.add(item.rating)
+                val score = extractRating(item)
+                if (score != null && score > 0.0) {
+                    directorRatingsMap.getOrPut(matchedDirector) { mutableListOf() }.add(score)
                 }
             }
         }
@@ -489,7 +560,7 @@ object WatchedAnalyticsCalculator {
             totalFilms = total,
             totalHours = totalHours,
             avgRating = avgRating,
-            ratedCount = ratedItems.size,
+            ratedCount = ratedCount,
             topEra = topEra,
             topGenre = topGenre,
             eraBreakdown = eraBreakdown,

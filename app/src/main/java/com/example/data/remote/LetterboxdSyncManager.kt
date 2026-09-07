@@ -106,6 +106,7 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                             rating = entry.ratingTenScale ?: existing.rating,
                             userNotes = entry.notes ?: existing.userNotes,
                             importSource = "Letterboxd Live RSS (@$cleanUser)",
+                            releaseDate = existing.releaseDate ?: entry.year?.takeIf { it.isNotBlank() },
                             overview = existing.overview ?: "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}."
                         )
                         mediaDao.updateMediaItem(updated)
@@ -122,6 +123,7 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                         rating = entry.ratingTenScale,
                         userNotes = entry.notes,
                         importSource = "Letterboxd Live RSS (@$cleanUser)",
+                        releaseDate = entry.year?.takeIf { it.isNotBlank() },
                         overview = "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}."
                     )
                     val insertedId = mediaDao.insertMediaItem(item)

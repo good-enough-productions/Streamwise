@@ -47,6 +47,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import com.example.data.util.CastMemberWithAge
 import com.example.data.util.ActorAgeCalculator
 import com.example.data.remote.TmdbPersonDetails
@@ -176,6 +177,13 @@ class StreamViewModel(
     // Live Letterboxd RSS Sync
     private val _isSyncingLetterboxd = MutableStateFlow(false)
     val isSyncingLetterboxd: StateFlow<Boolean> = _isSyncingLetterboxd.asStateFlow()
+
+    // Vault TMDB Rating Enrichment State
+    private val _isEnrichingVault = MutableStateFlow(false)
+    val isEnrichingVault: StateFlow<Boolean> = _isEnrichingVault.asStateFlow()
+
+    private val _vaultEnrichProgress = MutableStateFlow("")
+    val vaultEnrichProgress: StateFlow<String> = _vaultEnrichProgress.asStateFlow()
 
     private val _letterboxdSyncResult = MutableStateFlow<LetterboxdSyncResult?>(null)
     val letterboxdSyncResult: StateFlow<LetterboxdSyncResult?> = _letterboxdSyncResult.asStateFlow()
@@ -1768,6 +1776,103 @@ class StreamViewModel(
                 updatedAt = System.currentTimeMillis()
             )
             repository.updateMediaItem(updated)
+        }
+    }
+
+    /**
+     * Enriches logged watched films with official TMDB ratings, release dates, and genres.
+     */
+    fun enrichWatchedVaultRatings(batchLimit: Int = 150) {
+        if (_isEnrichingVault.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isEnrichingVault.value = true
+            _vaultEnrichProgress.value = "Preparing vault enrichment..."
+            try {
+                val runtimeKey = userPreferences.tmdbApiKey
+                val buildTimeKey = com.example.BuildConfig.TMDB_API_KEY
+                val key = if (runtimeKey.isNotEmpty() && runtimeKey != "MY_TMDB_API_KEY") runtimeKey else buildTimeKey
+                if (key.isEmpty() || key == "MY_TMDB_API_KEY") {
+                    _statusMessage.value = "Please configure your TMDB API Key in Settings to enrich ratings."
+                    _isEnrichingVault.value = false
+                    return@launch
+                }
+
+                val allItems = repository.allMediaItems.first()
+                val unratedWatched = allItems.filter { 
+                    it.status == MediaStatus.WATCHED.name && ((it.rating ?: 0.0) <= 0.0) 
+                }.take(batchLimit)
+
+                if (unratedWatched.isEmpty()) {
+                    _statusMessage.value = "All watched films are rated!"
+                    _vaultEnrichProgress.value = "Vault ratings are fully enriched."
+                    _isEnrichingVault.value = false
+                    return@launch
+                }
+
+                _vaultEnrichProgress.value = "Enriching ${unratedWatched.size} films with TMDB ratings..."
+
+                val genreMap = try {
+                    val resp = com.example.data.remote.TmdbClient.tmdbApiService.getGenreList(key)
+                    resp.genres.associate { it.id to it.name }
+                } catch (e: Exception) {
+                    emptyMap<Int, String>()
+                }
+
+                var enrichedCount = 0
+                val updatedList = mutableListOf<MediaItem>()
+
+                for ((idx, item) in unratedWatched.withIndex()) {
+                    _vaultEnrichProgress.value = "Enriching ${idx + 1}/${unratedWatched.size}: ${item.title}"
+                    // Respect TMDB rate-limiting
+                    delay(250)
+
+                    val cleanTitle = MediaTitleSanitizer.cleanCandidateTitle(item.title)
+                    try {
+                        val searchResp = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, cleanTitle)
+                        val match = searchResp.results.firstOrNull() ?: if (cleanTitle.contains(":")) {
+                            val prefix = cleanTitle.substringBefore(":").trim()
+                            if (prefix.length >= 3) {
+                                com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, prefix).results.firstOrNull()
+                            } else null
+                        } else null
+
+                        if (match != null && match.voteAverage != null && match.voteAverage > 0.0) {
+                            val genres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
+                            val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
+                            val updated = item.copy(
+                                rating = match.voteAverage,
+                                genres = item.genres ?: genres,
+                                imageUrl = item.imageUrl ?: poster,
+                                tmdbId = item.tmdbId ?: match.id.toString(),
+                                releaseDate = item.releaseDate ?: match.releaseDate,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            updatedList.add(updated)
+                            enrichedCount++
+                        }
+                    } catch (e: Exception) {
+                        Log.e("StreamViewModel", "Error enriching ${item.title}", e)
+                    }
+
+                    if (updatedList.size >= 25) {
+                        repository.updateMediaItems(updatedList.toList())
+                        updatedList.clear()
+                    }
+                }
+
+                if (updatedList.isNotEmpty()) {
+                    repository.updateMediaItems(updatedList.toList())
+                    updatedList.clear()
+                }
+
+                _statusMessage.value = "Enriched $enrichedCount watched films with TMDB ratings."
+                _vaultEnrichProgress.value = "Enriched $enrichedCount films."
+            } catch (e: Exception) {
+                Log.e("StreamViewModel", "Error during vault rating enrichment", e)
+                _statusMessage.value = "Enrichment error: ${e.message}"
+            } finally {
+                _isEnrichingVault.value = false
+            }
         }
     }
 

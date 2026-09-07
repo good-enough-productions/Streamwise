@@ -33,6 +33,9 @@ interface MediaDao {
     @Update
     suspend fun updateMediaItem(item: MediaItem)
 
+    @Update
+    suspend fun updateMediaItems(items: List<MediaItem>)
+
     @Delete
     suspend fun deleteMediaItem(item: MediaItem)
 

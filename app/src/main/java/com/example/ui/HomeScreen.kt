@@ -338,6 +338,9 @@ fun HomeScreen(
                         LaunchedEffect(Unit) {
                             viewModel.syncLetterboxdLive(silent = true)
                         }
+                        val isEnrichingVault by viewModel.isEnrichingVault.collectAsState()
+                        val vaultEnrichProgress by viewModel.vaultEnrichProgress.collectAsState()
+
                         WatchedTabContent(
                             watchedItems = watchedItems,
                             allProviders = allProviders,
@@ -356,7 +359,10 @@ fun HomeScreen(
                             },
                             onRewatchIntent = { viewModel.startIntendingToWatch(it) },
                             onPickLetterboxdFile = { letterboxdFileLauncher.launch(arrayOf("*/*", "text/*", "text/csv", "application/zip")) },
-                            onExportLetterboxdCsv = onExportForLetterboxd
+                            onExportLetterboxdCsv = onExportForLetterboxd,
+                            onEnrichVaultRatings = { viewModel.enrichWatchedVaultRatings() },
+                            isEnrichingVault = isEnrichingVault,
+                            vaultEnrichProgress = vaultEnrichProgress
                         )
                     }
                     2 -> {
@@ -956,7 +962,9 @@ fun WatchlistTabContent(
                         ) {
                             Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onToggleSpotlightCollapsed() },
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -989,22 +997,36 @@ fun WatchlistTabContent(
                                             )
                                         }
                                     }
+
+                                    IconButton(
+                                        onClick = onToggleSpotlightCollapsed,
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isSpotlightCollapsed) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
+                                            contentDescription = if (isSpotlightCollapsed) "Expand spotlight" else "Collapse spotlight",
+                                            tint = MaterialTheme.colorScheme.outline,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
                                 }
 
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 8.dp)
-                                        .horizontalScroll(rememberScrollState()),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    spotlightItems.forEach { item ->
-                                        SpotlightCard(
-                                            item = item,
-                                            allProviders = allProviders,
-                                            onWatchClick = { onWatchClick(item) },
-                                            onMovieClick = { onMovieClick(item) }
-                                        )
+                                if (!isSpotlightCollapsed) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 8.dp)
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        spotlightItems.forEach { item ->
+                                            SpotlightCard(
+                                                item = item,
+                                                allProviders = allProviders,
+                                                onWatchClick = { onWatchClick(item) },
+                                                onMovieClick = { onMovieClick(item) }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -1134,58 +1156,6 @@ fun WatchlistTabContent(
                                 modifier = Modifier.testTag("filter_free_chip")
                             )
 
-                            // Active Multi-Select Platform Pills (1-tap dismiss)
-                            selectedPlatforms.forEach { pId ->
-                                val provName = allProviders.find { it.id == pId }?.name ?: pId
-                                InputChip(
-                                    selected = true,
-                                    onClick = { selectedPlatforms = selectedPlatforms - pId },
-                                    label = { Text(provName, fontSize = 11.sp) },
-                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                                )
-                            }
-
-                            // Active Multi-Select Genre Pills
-                            selectedGenres.forEach { genre ->
-                                InputChip(
-                                    selected = true,
-                                    onClick = { selectedGenres = selectedGenres - genre },
-                                    label = { Text(genre, fontSize = 11.sp) },
-                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                                )
-                            }
-
-                            // Active Multi-Select Era Pills
-                            selectedEras.forEach { era ->
-                                val eraLabel = if (era == "Classic") "Pre-1990" else era
-                                InputChip(
-                                    selected = true,
-                                    onClick = { selectedEras = selectedEras - era },
-                                    label = { Text(eraLabel, fontSize = 11.sp) },
-                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                                )
-                            }
-
-                            if (minRating > 0.0) {
-                                InputChip(
-                                    selected = true,
-                                    onClick = { minRating = 0.0 },
-                                    label = { Text("★ ${minRating}+", fontSize = 11.sp) },
-                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                                )
-                            }
-
-                            if (selectedPodcastId != null) {
-                                val pod = com.example.data.model.PodcastEpisodeCatalog.AVAILABLE_PODCASTS.find { it.id == selectedPodcastId }
-                                val podLabel = "${pod?.emoji ?: "🎙️"} ${pod?.name ?: "Podcast"}${if (podcastMainSubjectOnly) " (Main)" else ""}"
-                                InputChip(
-                                    selected = true,
-                                    onClick = { selectedPodcastId = null },
-                                    label = { Text(podLabel, fontSize = 11.sp) },
-                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
-                                )
-                            }
-
                             // Advanced Filters Entry Button
                             ElevatedFilterChip(
                                 selected = activeAdvancedCount > 0,
@@ -1206,6 +1176,23 @@ fun WatchlistTabContent(
                                     )
                                 }
                             )
+
+                            // Clean single Clear chip when advanced filters are active (Issue #8)
+                            if (activeAdvancedCount > 0) {
+                                InputChip(
+                                    selected = true,
+                                    onClick = {
+                                        selectedPlatforms = emptySet()
+                                        selectedGenres = emptySet()
+                                        selectedEras = emptySet()
+                                        minRating = 0.0
+                                        selectedPodcastId = null
+                                        podcastMainSubjectOnly = false
+                                    },
+                                    label = { Text("Clear ($activeAdvancedCount)", fontSize = 11.sp) },
+                                    trailingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(12.dp)) }
+                                )
+                            }
 
                             IconButton(
                                 onClick = onSyncClick,
@@ -2145,10 +2132,95 @@ fun WatchedVaultOverviewCard(
                     }
                 }
 
+                // Mini Decade Trend Capsules (Issue #9)
+                if (watchedAnalytics.eraBreakdown.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        for (eraData in watchedAnalytics.eraBreakdown.take(5)) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = eraData.eraLabel,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "${String.format(Locale.US, "%.0f", eraData.percentage)}%",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Letterboxd Multi-Way Sync Ribbon
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // 1-Tap Letterboxd + Google Sheet Sync (Issue #10)
+                Button(
+                    onClick = {
+                        onSyncLetterboxdLive()
+                        onSyncLetterboxdToSheet()
+                    },
+                    enabled = !isSyncingToSheet,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    contentPadding = PaddingValues(vertical = 10.dp, horizontal = 14.dp)
+                ) {
+                    if (isSyncingToSheet) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Syncing Letterboxd & Google Sheet...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Sync Letterboxd & Google Sheet", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Collapsible File Tools for Import / Export (Issue #9 - declutter)
+                var showFileTools by remember { mutableStateOf(false) }
+                TextButton(
+                    onClick = { showFileTools = !showFileTools },
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        if (showFileTools) "Hide CSV File Tools ▲" else "CSV File Tools (Import / Export) ▼",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+
+                if (showFileTools) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -2157,79 +2229,22 @@ fun WatchedVaultOverviewCard(
                             onClick = onPickLetterboxdFile,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp, horizontal = 8.dp)
+                            contentPadding = PaddingValues(vertical = 6.dp, horizontal = 8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.FolderOpen,
-                                contentDescription = "Import CSV or ZIP",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Import CSV/ZIP", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Import CSV", fontSize = 11.sp)
                         }
 
                         FilledTonalButton(
                             onClick = onExportLetterboxdCsv,
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp, horizontal = 8.dp)
+                            contentPadding = PaddingValues(vertical = 6.dp, horizontal = 8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Export for Letterboxd",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Export for LB", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = onSyncLetterboxdLive,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary
-                            ),
-                            contentPadding = PaddingValues(vertical = 8.dp, horizontal = 8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CloudDownload,
-                                contentDescription = "Sync Diary from Letterboxd",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Sync RSS Diary", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-
-                        OutlinedButton(
-                            onClick = onSyncLetterboxdToSheet,
-                            enabled = !isSyncingToSheet,
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(vertical = 8.dp, horizontal = 8.dp)
-                        ) {
-                            if (isSyncingToSheet) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(14.dp),
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Syncing...", fontSize = 11.sp)
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.CloudUpload,
-                                    contentDescription = "Sync to Sheet",
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Sync to Sheet", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            }
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Export CSV", fontSize = 11.sp)
                         }
                     }
                 }
@@ -2251,7 +2266,10 @@ fun WatchedTabContent(
     onSyncLetterboxdLive: () -> Unit = {},
     onRewatchIntent: (MediaItem) -> Unit = {},
     onPickLetterboxdFile: () -> Unit = {},
-    onExportLetterboxdCsv: () -> Unit = {}
+    onExportLetterboxdCsv: () -> Unit = {},
+    onEnrichVaultRatings: () -> Unit = {},
+    isEnrichingVault: Boolean = false,
+    vaultEnrichProgress: String = ""
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var sortBy by remember { mutableStateOf("timeline") } // "timeline", "alpha", "rating"
@@ -2289,7 +2307,7 @@ fun WatchedTabContent(
     val processedItems = remember(filteredItems, sortBy) {
         when (sortBy) {
             "alpha" -> filteredItems.sortedBy { it.title.lowercase() }
-            "rating" -> filteredItems.sortedByDescending { it.rating ?: 0.0 }
+            "rating" -> filteredItems.sortedByDescending { WatchedAnalyticsCalculator.extractRating(it) ?: 0.0 }
             else -> filteredItems.sortedWith(
                 compareByDescending<MediaItem> { it.watchedAt ?: it.addedAt }
                     .thenByDescending { it.id }
@@ -2309,9 +2327,9 @@ fun WatchedTabContent(
     // Cinephile Vault Stats
     val totalFilms = watchedItems.size
     val estHours = (totalFilms * 110) / 60
-    val ratedFilms = remember(watchedItems) { watchedItems.filter { (it.rating ?: 0.0) > 0.0 } }
+    val ratedFilms = remember(watchedItems) { watchedItems.filter { WatchedAnalyticsCalculator.extractRating(it) != null } }
     val avgRating = remember(ratedFilms) {
-        if (ratedFilms.isNotEmpty()) ratedFilms.map { it.rating!! }.average() else 0.0
+        if (ratedFilms.isNotEmpty()) ratedFilms.mapNotNull { WatchedAnalyticsCalculator.extractRating(it) }.average() else 0.0
     }
     val topGenres = remember(watchedItems) {
         watchedItems.flatMap { it.genres?.split(",")?.map { g -> g.trim() } ?: emptyList() }
@@ -2638,6 +2656,9 @@ fun WatchedTabContent(
                 onSelectService = { service ->
                     selectedService = if (selectedService == service) null else service
                 },
+                onEnrichVaultRatings = onEnrichVaultRatings,
+                isEnrichingVault = isEnrichingVault,
+                vaultEnrichProgress = vaultEnrichProgress,
                 onDismiss = { showAnalyticsSheet = false }
             )
         }
@@ -2661,6 +2682,17 @@ fun WatchedMediaCard(
             val sdf = java.text.SimpleDateFormat("MMM d, yyyy", Locale.US)
             sdf.format(java.util.Date(ts))
         } else "Logged"
+    }
+
+    val releaseYear = remember(item) {
+        item.releaseYear ?: WatchedAnalyticsCalculator.extractReleaseYear(item)
+    }
+    val titleDisplay = remember(item.title, releaseYear) {
+        if (releaseYear != null && !item.title.contains("($releaseYear)")) {
+            "${item.title} ($releaseYear)"
+        } else {
+            item.title
+        }
     }
 
     Card(
@@ -2701,7 +2733,7 @@ fun WatchedMediaCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = item.title,
+                        text = titleDisplay,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -2723,12 +2755,15 @@ fun WatchedMediaCard(
                     }
                 }
 
-                // Rating & Genres
+                // Rating & Genres (Robust Extraction)
+                val ratingValue = remember(item) {
+                    WatchedAnalyticsCalculator.extractRating(item)
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 2.dp)
                 ) {
-                    if (item.rating != null && item.rating > 0.0) {
+                    if (ratingValue != null && ratingValue > 0.0) {
                         Icon(
                             Icons.Default.Star,
                             contentDescription = null,
@@ -2737,7 +2772,7 @@ fun WatchedMediaCard(
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = String.format(Locale.US, "%.1f", item.rating),
+                            text = String.format(Locale.US, "%.1f", ratingValue),
                             style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2891,8 +2926,34 @@ fun WatchedGridPosterCard(
                 )
             }
 
-            // Top rating badge
-            if (item.rating != null && item.rating > 0.0) {
+            val releaseYear = remember(item) {
+                item.releaseYear ?: WatchedAnalyticsCalculator.extractReleaseYear(item)
+            }
+            val ratingValue = remember(item) {
+                WatchedAnalyticsCalculator.extractRating(item)
+            }
+
+            // Top year badge (TopStart)
+            if (releaseYear != null) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Black.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .align(Alignment.TopStart)
+                ) {
+                    Text(
+                        text = "$releaseYear",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            // Top rating badge (TopEnd)
+            if (ratingValue != null && ratingValue > 0.0) {
                 Surface(
                     shape = RoundedCornerShape(6.dp),
                     color = Color.Black.copy(alpha = 0.75f),
@@ -2907,7 +2968,7 @@ fun WatchedGridPosterCard(
                         Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(10.dp))
                         Spacer(modifier = Modifier.width(2.dp))
                         Text(
-                            text = String.format(Locale.US, "%.1f", item.rating),
+                            text = String.format(Locale.US, "%.1f", ratingValue),
                             style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                             color = Color.White,
                             fontWeight = FontWeight.Bold,

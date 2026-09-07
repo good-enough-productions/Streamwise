@@ -239,7 +239,8 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
                 if (needsStatusUpgrade || hasNewerWatch) {
                     val updated = existing.copy(
                         status = if (!isWatchlist) MediaStatus.WATCHED.name else existing.status,
-                        watchedAt = if (!isWatchlist && (hasNewerWatch || existing.watchedAt == null)) parsedTime else existing.watchedAt
+                        watchedAt = if (!isWatchlist && (hasNewerWatch || existing.watchedAt == null)) parsedTime else existing.watchedAt,
+                        releaseDate = existing.releaseDate ?: yearStr?.takeIf { it.isNotBlank() }
                     )
                     mediaDao.updateMediaItem(updated)
                     existingMap[normKey] = updated
@@ -257,6 +258,7 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
                     addedAt = parsedTime,
                     watchedAt = if (isWatchlist) null else parsedTime,
                     importSource = if (isWatchlist) "Letterboxd Watchlist CSV" else "Letterboxd Watched CSV",
+                    releaseDate = yearStr?.takeIf { it.isNotBlank() },
                     overview = "Imported from Letterboxd: $title (${yearStr ?: "N/A"}). Date: $dateStr."
                 )
                 val id = mediaDao.insertMediaItem(item)
@@ -337,7 +339,8 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
                     val updated = existing.copy(
                         status = MediaStatus.WATCHED.name,
                         watchedAt = if (hasNewerWatch || existing.watchedAt == null) watchedTimestamp else existing.watchedAt,
-                        rating = ratingTen ?: existing.rating
+                        rating = ratingTen ?: existing.rating,
+                        releaseDate = existing.releaseDate ?: yearStr?.takeIf { it.isNotBlank() }
                     )
                     mediaDao.updateMediaItem(updated)
                     existingMap[normKey] = updated
@@ -355,6 +358,7 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
                     watchedAt = watchedTimestamp,
                     rating = ratingTen,
                     importSource = "Letterboxd Diary CSV",
+                    releaseDate = yearStr?.takeIf { it.isNotBlank() },
                     overview = "Imported from Letterboxd Diary: $title (${yearStr ?: "N/A"}). Watched: $watchedDateStr."
                 )
                 val id = mediaDao.insertMediaItem(item)

@@ -214,3 +214,30 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
   - Identifies the streaming service with the largest backlog in the user's Watchlist (e.g. Max with 142 queued films) and calculates how many months of continuous entertainment it provides at the user's current velocity (~20 months).
   - Calculates potential savings (saving ~$49/month or ~$588/year) by pausing idle subscriptions with zero loss of content supply.
 
+## 21. Watched Era & Rating Extraction, Collapsible Spotlight & Clean UI Architecture (v1.5.7)
+
+### 100% Release Year & Decade Extraction (0% Unknown Era)
+- **Root Cause**: In previous versions, Letterboxd CSV imports populated `status = 'WATCHED'` and `tmdbId` but left `releaseDate` null or unparsed for bulk history, causing `WatchedAnalyticsCalculator` to classify 1,104 out of 1,130 films (97.7%) under "Unknown Era".
+- **Startup Backfill Engine (`AppDatabase.kt` / `MediaRepository.kt`)**:
+  - Automatically parses release years from Letterboxd URL slugs (`/film/{slug}-{year}/`), user notes, and title strings during database initialization and sync.
+  - Safely backfills `releaseDate = 'YYYY-01-01'` without overwriting existing TMDB metadata.
+  - Result verified on physical device: 100% of 1,130 watched films classified into exact cinema eras (2000s: 34.3%, 2010s: 25.9%, 1990s: 18.6%, 2020s: 15.0%, 1980s: 4.3%, 1970s: 1.3%, Pre-1970s: 0.5%) with **0 films (0.0%) in Unknown Era**.
+- **Star Rating Extraction**:
+  - Parses 10-point and 5-star ratings from import notes and CSV records into `userRating`, powering accurate rating distributions and top auteur averages.
+
+### UI Streamlining & Screen Reclaim (Issues #7, #8, #9, #10)
+- **Collapsible Spotlight (Issue #7)**:
+  - Replaced fixed 220dp spotlight carousel with a collapsible header row.
+  - When collapsed, reduces to a compact 36dp header bar (`✨ Spotlight: Ready to Stream (X) • Tap to view [▾]`), reclaiming over 30% of vertical screen space on mobile.
+  - State persisted via `UserPreferencesManager.isSpotlightCollapsed`.
+- **Streamlined Filter Header (Issue #8)**:
+  - Eliminated noisy multi-select filter chip carousels from the top of the Watchlist tab.
+  - Replaced with a minimal, unified action row: `[✓ My Services]`, `[Free w/ Ads]`, and `[Filters (X)]` with active count badge.
+  - Multi-select platforms, genres, release decades, rating floors, and podcast filters are consolidated into `AdvancedFilterBottomSheet`.
+- **Watched Vault Rework & Decade Trend Capsules (Issue #9)**:
+  - Added instant visual decade trend capsules (`2000s (34%)`, `2010s (26%)`, etc.) directly on `WatchedVaultOverviewCard`.
+  - Updated `WatchedMediaCard` and `WatchedGridPosterCard` to emphasize release years (`Title (Year)`), star rating badges, and watch dates.
+  - Encapsulated secondary CSV import/export buttons into a collapsible "CSV File Tools" drawer to declutter the diary view.
+- **1-Tap Letterboxd + Google Sheet Sync (Issue #10)**:
+  - Added prominent `[☁️ Sync Letterboxd & Google Sheet]` button on `WatchedVaultOverviewCard` with indeterminate progress indicator and toast notifications.
+

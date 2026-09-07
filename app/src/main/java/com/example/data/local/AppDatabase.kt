@@ -168,6 +168,7 @@ abstract class AppDatabase : RoomDatabase() {
                     if (removed > 0) {
                         Log.d("AppDatabase", "Cleaned up $removed duplicate media items on database open.")
                     }
+                    backfillMissingReleaseDates(database.mediaDao(), context)
                 }
             }
         }
@@ -223,6 +224,7 @@ abstract class AppDatabase : RoomDatabase() {
                             providerIds = null,
                             userNotes = row.notes,
                             importSource = row.source,
+                            releaseDate = row.year.takeIf { it.isNotBlank() },
                             overview = "Imported watchlist item \"${row.name}\" from Letterboxd account watchlist record."
                         )
                     }
@@ -251,6 +253,7 @@ abstract class AppDatabase : RoomDatabase() {
                         providerIds = null,
                         userNotes = row.notes,
                         importSource = row.source,
+                        releaseDate = row.year.takeIf { it.isNotBlank() },
                         overview = "Imported movie logged as watched on ${row.date} from Letterboxd archive."
                     )
                 }
@@ -372,6 +375,67 @@ abstract class AppDatabase : RoomDatabase() {
                 sdf.parse(dateStr.trim())?.time ?: System.currentTimeMillis()
             } catch (e: Exception) {
                 System.currentTimeMillis()
+            }
+        }
+
+        private suspend fun backfillMissingReleaseDates(dao: MediaDao, context: Context) {
+            try {
+                val missing = dao.getAllMediaItemsList().filter { it.releaseDate.isNullOrBlank() }
+                if (missing.isEmpty()) return
+
+                Log.d("AppDatabase", "Backfilling missing release dates for ${missing.size} media items...")
+
+                val uriToYear = mutableMapOf<String, String>()
+                val titleToYear = mutableMapOf<String, String>()
+
+                fun norm(t: String): String = t.replace(Regex("[^a-zA-Z0-9]"), "").lowercase()
+
+                listOf("watched_history.csv", "watchlist.csv").forEach { fileName ->
+                    try {
+                        val rows = parseCsv(context, fileName)
+                        for (row in rows) {
+                            val y = row.year.trim()
+                            if (y.isNotBlank()) {
+                                if (row.uri.isNotBlank()) uriToYear[row.uri.trim()] = y
+                                if (row.name.isNotBlank()) titleToYear[norm(row.name)] = y
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("AppDatabase", "Error reading $fileName for release date backfill", e)
+                    }
+                }
+
+                val parenRegex = Regex("\\((19\\d\\d|20\\d\\d)\\)")
+                val urlRegex = Regex("-([12]\\d{3})/?$")
+
+                val updatedItems = mutableListOf<MediaItem>()
+                for (item in missing) {
+                    val url = item.sharedUrl?.trim()
+                    val year = when {
+                        !url.isNullOrBlank() && uriToYear.containsKey(url) -> uriToYear[url]
+                        titleToYear.containsKey(norm(item.title)) -> titleToYear[norm(item.title)]
+                        !item.overview.isNullOrBlank() && parenRegex.find(item.overview) != null ->
+                            parenRegex.find(item.overview)?.groupValues?.getOrNull(1)
+                        !url.isNullOrBlank() && urlRegex.find(url) != null ->
+                            urlRegex.find(url)?.groupValues?.getOrNull(1)
+                        parenRegex.find(item.title) != null ->
+                            parenRegex.find(item.title)?.groupValues?.getOrNull(1)
+                        else -> null
+                    }
+
+                    if (!year.isNullOrBlank()) {
+                        updatedItems.add(item.copy(releaseDate = year))
+                    }
+                }
+
+                if (updatedItems.isNotEmpty()) {
+                    updatedItems.chunked(500).forEach { chunk ->
+                        dao.updateMediaItems(chunk)
+                    }
+                    Log.d("AppDatabase", "Successfully backfilled release dates for ${updatedItems.size} items.")
+                }
+            } catch (e: Exception) {
+                Log.e("AppDatabase", "Error during release date backfill", e)
             }
         }
 
