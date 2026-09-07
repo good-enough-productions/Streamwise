@@ -868,7 +868,9 @@ fun WatchlistTabContent(
                 val matchesPodcast = com.example.data.model.PodcastEpisodeCatalog.isCoveredOnPodcast(
                     movieTitle = item.title,
                     podcastId = selectedPodcastId,
-                    mainSubjectOnly = podcastMainSubjectOnly
+                    mainSubjectOnly = podcastMainSubjectOnly,
+                    importSource = item.importSource,
+                    notes = item.userNotes
                 )
                 if (!matchesPodcast) return@filter false
             }

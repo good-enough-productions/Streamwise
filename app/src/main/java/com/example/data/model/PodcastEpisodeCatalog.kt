@@ -1,4 +1,4 @@
-﻿package com.example.data.model
+package com.example.data.model
 
 data class PodcastInfo(
     val id: String,
@@ -46,6 +46,13 @@ object PodcastEpisodeCatalog {
             emoji = "🎟️"
         ),
         PodcastInfo(
+            id = "unspooled",
+            name = "Unspooled",
+            hosts = "Paul Scheer & Amy Nicholson",
+            description = "Journey through the greatest movies ever made with Paul & Amy.",
+            emoji = "📽️"
+        ),
+        PodcastInfo(
             id = "hdtgm",
             name = "How Did This Get Made?",
             hosts = "Paul Scheer, June Diane Raphael & Jason Mantzoukas",
@@ -53,6 +60,28 @@ object PodcastEpisodeCatalog {
             emoji = "🎙️"
         )
     )
+
+    private val dynamicTitlesMap = mutableMapOf<String, Set<String>>()
+
+    fun initialize(context: android.content.Context) {
+        if (dynamicTitlesMap.isNotEmpty()) return
+        try {
+            val jsonString = context.assets.open("podcast_titles.json").bufferedReader().use { it.readText() }
+            val jsonObject = org.json.JSONObject(jsonString)
+            val keys = jsonObject.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val array = jsonObject.getJSONArray(key)
+                val set = HashSet<String>(array.length())
+                for (i in 0 until array.length()) {
+                    set.add(array.getString(i))
+                }
+                dynamicTitlesMap[key] = set
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("PodcastEpisodeCatalog", "Error loading podcast titles asset: ${e.message}")
+        }
+    }
 
     // Catalog mapping lowercase normalized movie titles
     private val MENTIONS = listOf(
@@ -164,12 +193,47 @@ object PodcastEpisodeCatalog {
     fun isCoveredOnPodcast(
         movieTitle: String,
         podcastId: String?,
-        mainSubjectOnly: Boolean
+        mainSubjectOnly: Boolean = false,
+        importSource: String? = null,
+        notes: String? = null
     ): Boolean {
         if (podcastId.isNullOrBlank()) return true
+
+        // 1. Tag and notes matching
+        val podInfo = AVAILABLE_PODCASTS.find { it.id == podcastId }
+        if (podInfo != null) {
+            val name = podInfo.name
+            val shortName = name.removePrefix("The ").trim()
+            if (importSource?.contains(name, ignoreCase = true) == true ||
+                importSource?.contains(shortName, ignoreCase = true) == true ||
+                notes?.contains(name, ignoreCase = true) == true ||
+                notes?.contains(shortName, ignoreCase = true) == true
+            ) {
+                return true
+            }
+            if (podcastId == "hdtgm") {
+                if (importSource?.contains("How Did This Get Made", ignoreCase = true) == true ||
+                    notes?.contains("How Did This Get Made", ignoreCase = true) == true ||
+                    notes?.contains("HDTGM", ignoreCase = true) == true
+                ) {
+                    return true
+                }
+            }
+        }
+
         val norm = normalize(movieTitle)
         if (norm.isBlank()) return false
 
+        // 2. Comprehensive asset catalog lookup (2,300+ scraped titles)
+        val catalogSet = dynamicTitlesMap[podcastId]
+        if (catalogSet != null) {
+            if (catalogSet.contains(norm)) return true
+            if (!mainSubjectOnly && catalogSet.any { it.contains(norm) || norm.contains(it) }) {
+                return true
+            }
+        }
+
+        // 3. Fallback static MENTIONS
         return MENTIONS.any { mention ->
             if (mention.podcastId != podcastId) return@any false
             if (mainSubjectOnly && !mention.isMainSubject) return@any false
