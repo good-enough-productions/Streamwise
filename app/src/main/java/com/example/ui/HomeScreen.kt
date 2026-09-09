@@ -108,6 +108,8 @@ fun HomeScreen(
     var showLetterboxdImportDialog by remember { mutableStateOf(false) }
     var showUserGuideDialog by remember { mutableStateOf(false) }
     var showChangelogDialog by remember { mutableStateOf(false) }
+    var showShareExportDialog by remember { mutableStateOf(false) }
+    var itemPendingRemoval by remember { mutableStateOf<MediaItem?>(null) }
 
     // Android Document Picker launcher for Letterboxd CSV/ZIP files
     val letterboxdFileLauncher = rememberLauncherForActivityResult(
@@ -198,12 +200,12 @@ fun HomeScreen(
                         )
                     }
                     IconButton(
-                        onClick = { viewModel.exportToObsidian() },
-                        modifier = Modifier.testTag("export_obsidian_button")
+                        onClick = { showShareExportDialog = true },
+                        modifier = Modifier.testTag("share_export_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
-                            contentDescription = "Export to Obsidian",
+                            contentDescription = "Share and Export",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -342,8 +344,9 @@ fun HomeScreen(
                         filterOnlyMyServices = filterOnlyMyServices,
                         onFilterToggle = { filterOnlyMyServices = it },
                         onWatchClick = { viewModel.launchAndIntendToWatch(context, it) },
-                        onDeleteClick = { viewModel.deleteItem(it) },
-                        onSyncClick = { viewModel.triggerImmediateSync() },
+                        onDeleteClick = { itemPendingRemoval = it },
+                        onMarkWatchedClick = { viewModel.markItemAsWatched(it) },
+                        onSyncClick = { viewModel.triggerImmediateSync(force = true) },
                         tmdbApiKey = tmdbApiKey,
                         onOpenSettings = { showSettingsDialog = true },
                         onMovieClick = { detailMovieItem = it },
@@ -354,7 +357,7 @@ fun HomeScreen(
                     )
                     1 -> {
                         val watchedItems by viewModel.watchedItems.collectAsState()
-                        // Automatically sync Letterboxd when viewing the Watched Vault
+                        // Automatically sync Letterboxd when viewing the Watched Vault (throttled)
                         LaunchedEffect(Unit) {
                             viewModel.syncLetterboxdLive(silent = true)
                         }
@@ -366,10 +369,10 @@ fun HomeScreen(
                             allProviders = allProviders,
                             watchlistItems = watchlistItems,
                             onMovieClick = { detailMovieItem = it },
-                            onDeleteClick = { viewModel.deleteItem(it) },
+                            onDeleteClick = { itemPendingRemoval = it },
                             onSyncClick = {
                                 viewModel.syncLetterboxdLive(silent = false)
-                                viewModel.triggerImmediateSync()
+                                viewModel.triggerImmediateSync(force = true)
                             },
                             isSyncingToSheet = isSyncingToSheet,
                             onSyncLetterboxdToSheet = { viewModel.syncLetterboxdToGoogleSheet() },
@@ -427,9 +430,66 @@ fun HomeScreen(
             AddMediaDialog(
                 allProviders = allProviders,
                 onDismiss = { showAddDialog = false },
-                onAdd = { titlesInput, selectedProviderIds, notes, source ->
-                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source)
+                onAdd = { titlesInput, selectedProviderIds, notes, source, targetStatus ->
+                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source, targetStatus)
                     showAddDialog = false
+                }
+            )
+        }
+
+        // Removal & Watched Confirmation Dialog (Issue #20)
+        if (itemPendingRemoval != null) {
+            val itemToProcess = itemPendingRemoval!!
+            RemoveOrWatchedConfirmationDialog(
+                item = itemToProcess,
+                onDismiss = { itemPendingRemoval = null },
+                onMarkAsWatched = {
+                    viewModel.markItemAsWatched(itemToProcess)
+                    itemPendingRemoval = null
+                },
+                onMoveToWatchlist = {
+                    viewModel.moveItemToWatchlist(itemToProcess)
+                    itemPendingRemoval = null
+                },
+                onDeletePermanently = {
+                    viewModel.deleteItem(itemToProcess)
+                    itemPendingRemoval = null
+                }
+            )
+        }
+
+        // Share & Export Dialog (Issue #18)
+        if (showShareExportDialog) {
+            ShareAndExportDialog(
+                onDismiss = { showShareExportDialog = false },
+                onShareWatchlist = {
+                    coroutineScope.launch {
+                        val shareText = viewModel.generateWatchlistShareText()
+                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "My Streamwise Recommendations")
+                            putExtra(Intent.EXTRA_TEXT, shareText)
+                        }
+                        context.startActivity(Intent.createChooser(sendIntent, "Share Watchlist via"))
+                        showShareExportDialog = false
+                    }
+                },
+                onExportObsidian = {
+                    viewModel.exportToObsidian()
+                    showShareExportDialog = false
+                },
+                onExportLetterboxdCsv = {
+                    onExportForLetterboxd()
+                    showShareExportDialog = false
+                },
+                onCopyClipboard = {
+                    coroutineScope.launch {
+                        val shareText = viewModel.generateWatchlistShareText()
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Streamwise Recommendations", shareText))
+                        snackbarHostState.showSnackbar("Watchlist recommendations copied to clipboard!")
+                        showShareExportDialog = false
+                    }
                 }
             )
         }
@@ -646,7 +706,17 @@ fun HomeScreen(
                     detailMovieItem = null
                 },
                 onDeleteClick = {
-                    viewModel.deleteItem(detailMovieItem!!)
+                    itemPendingRemoval = detailMovieItem
+                    detailMovieItem = null
+                },
+                onMarkWatchedClick = {
+                    val m = detailMovieItem
+                    if (m != null) viewModel.markItemAsWatched(m)
+                    detailMovieItem = null
+                },
+                onMoveToWatchlistClick = {
+                    val m = detailMovieItem
+                    if (m != null) viewModel.moveItemToWatchlist(m)
                     detailMovieItem = null
                 },
                 onDiscussInExplore = { prompt ->
@@ -806,13 +876,15 @@ fun PosterGridItem(
     item: MediaItem,
     allProviders: List<StreamingProvider>,
     onWatchClick: () -> Unit,
-    onMovieClick: () -> Unit
+    onMovieClick: () -> Unit,
+    activeOrFreeProviderIds: Set<String>? = null,
+    providerMap: Map<String, StreamingProvider>? = null
 ) {
-    val activeOrFreeProvider = remember(item, allProviders) {
-        val activeIds = allProviders.filter { it.isActive || it.costPerMonth == 0.0 }.map { it.id }.toSet()
+    val activeOrFreeProvider = remember(item.providerIds, allProviders) {
+        val activeIds = activeOrFreeProviderIds ?: allProviders.filter { it.isActive || it.costPerMonth == 0.0 }.map { it.id }.toSet()
         val firstActiveId = item.providersList.firstOrNull { activeIds.contains(it) }
-        firstActiveId?.let { id -> allProviders.find { it.id == id } }
-            ?: item.providersList.firstOrNull()?.let { id -> allProviders.find { it.id == id } }
+        val map = providerMap ?: allProviders.associateBy { it.id }
+        firstActiveId?.let { map[it] } ?: item.providersList.firstOrNull()?.let { map[it] }
     }
 
     Card(
@@ -983,6 +1055,7 @@ fun WatchlistTabContent(
     onFilterToggle: (Boolean) -> Unit,
     onWatchClick: (MediaItem) -> Unit,
     onDeleteClick: (MediaItem) -> Unit,
+    onMarkWatchedClick: ((MediaItem) -> Unit)? = null,
     onSyncClick: () -> Unit = {},
     tmdbApiKey: String,
     onOpenSettings: () -> Unit,
@@ -997,6 +1070,12 @@ fun WatchlistTabContent(
     }
     val freeProviderIds = remember(allProviders) {
         allProviders.filter { it.costPerMonth == 0.0 }.map { it.id }.toSet()
+    }
+    val activeOrFreeProviderIds = remember(allProviders) {
+        allProviders.filter { it.isActive || it.costPerMonth == 0.0 }.map { it.id }.toSet()
+    }
+    val providerMap = remember(allProviders) {
+        allProviders.associateBy { it.id }
     }
 
     // Letterboxd-Style Top Sub-Tabs (Ready on My Subs, All Saved, Under 100m, Podcast Picks)
@@ -1618,7 +1697,9 @@ fun WatchlistTabContent(
                                         item = movie,
                                         allProviders = allProviders,
                                         onWatchClick = { onWatchClick(movie) },
-                                        onMovieClick = { onMovieClick(movie) }
+                                        onMovieClick = { onMovieClick(movie) },
+                                        activeOrFreeProviderIds = activeOrFreeProviderIds,
+                                        providerMap = providerMap
                                     )
                                 }
                             }
@@ -1634,6 +1715,7 @@ fun WatchlistTabContent(
                                 item = item,
                                 allProviders = allProviders,
                                 onWatchClick = { onWatchClick(item) },
+                                onMarkWatchedClick = onMarkWatchedClick?.let { cb -> { cb(item) } },
                                 onDeleteClick = { onDeleteClick(item) },
                                 onMovieClick = { onMovieClick(item) }
                             )
@@ -1985,7 +2067,8 @@ fun MediaItemCard(
     allProviders: List<StreamingProvider>,
     onWatchClick: () -> Unit,
     onDeleteClick: () -> Unit,
-    onMovieClick: () -> Unit
+    onMovieClick: () -> Unit,
+    onMarkWatchedClick: (() -> Unit)? = null
 ) {
     val activeSubscribedIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -2298,26 +2381,49 @@ fun MediaItemCard(
                     }
                 }
 
-                // INTENT TRIGGER: Watch now button with concentric radius (20 - 12 = 8dp) and optical centroid alignment
-                Button(
-                    onClick = onWatchClick,
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    ),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                    modifier = Modifier.height(36.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(16.dp)
-                                .offset(x = 1.dp) // Optical centroid alignment
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Watch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (onMarkWatchedClick != null && item.status != MediaStatus.WATCHED.name) {
+                        FilledTonalIconButton(
+                            onClick = onMarkWatchedClick,
+                            modifier = Modifier.size(36.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Mark as Watched",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    // INTENT TRIGGER: Watch now button with concentric radius (20 - 12 = 8dp) and optical centroid alignment
+                    Button(
+                        onClick = onWatchClick,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .offset(x = 1.dp) // Optical centroid alignment
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Watch", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -4043,11 +4149,12 @@ fun ManageServicesTabContent(
 fun AddMediaDialog(
     allProviders: List<StreamingProvider>,
     onDismiss: () -> Unit,
-    onAdd: (String, List<String>, String?, String?) -> Unit
+    onAdd: (String, List<String>, String?, String?, String) -> Unit
 ) {
     var titlesInput by remember { mutableStateOf("") }
     var userNotes by remember { mutableStateOf("") }
     var importSource by remember { mutableStateOf("") }
+    var targetStatus by remember { mutableStateOf(MediaStatus.WATCHLIST.name) }
     val selectedProviders = remember { mutableStateListOf<String>() }
     val parsedTitles = remember(titlesInput) {
         titlesInput
@@ -4065,6 +4172,31 @@ fun AddMediaDialog(
                 modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Destination Selector: Watchlist vs Watched Vault
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = targetStatus == MediaStatus.WATCHLIST.name,
+                        onClick = { targetStatus = MediaStatus.WATCHLIST.name },
+                        label = { Text("Watchlist", fontSize = 12.sp) },
+                        leadingIcon = if (targetStatus == MediaStatus.WATCHLIST.name) {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = targetStatus == MediaStatus.WATCHED.name,
+                        onClick = { targetStatus = MediaStatus.WATCHED.name },
+                        label = { Text("Watched Vault", fontSize = 12.sp) },
+                        leadingIcon = if (targetStatus == MediaStatus.WATCHED.name) {
+                            { Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) }
+                        } else null,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
                 OutlinedTextField(
                     value = titlesInput,
                     onValueChange = { titlesInput = it },
@@ -4179,13 +4311,14 @@ fun AddMediaDialog(
             Button(
                 onClick = {
                     if (parsedTitles.isNotEmpty()) {
-                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource)
+                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource, targetStatus)
                     }
                 },
                 enabled = parsedTitles.isNotEmpty(),
                 modifier = Modifier.testTag("add_dialog_confirm")
             ) {
-                Text(if (parsedTitles.size > 1) "Add ${parsedTitles.size} Titles" else "Add to Watchlist")
+                val dest = if (targetStatus == MediaStatus.WATCHED.name) "Watched Vault" else "Watchlist"
+                Text(if (parsedTitles.size > 1) "Add ${parsedTitles.size} Titles to $dest" else "Add to $dest")
             }
         },
         dismissButton = {
@@ -6308,6 +6441,8 @@ fun MovieDetailsBottomSheet(
     onDismiss: () -> Unit,
     onWatchClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    onMarkWatchedClick: (() -> Unit)? = null,
+    onMoveToWatchlistClick: (() -> Unit)? = null,
     onDiscussInExplore: ((String) -> Unit)? = null,
     onSetServiceUsed: ((String) -> Unit)? = null
 ) {
@@ -6777,6 +6912,34 @@ fun MovieDetailsBottomSheet(
                     Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Letterboxd", fontSize = 12.sp)
+                }
+
+                if (item.status != MediaStatus.WATCHED.name && onMarkWatchedClick != null) {
+                    FilledTonalButton(
+                        onClick = {
+                            onDismiss()
+                            onMarkWatchedClick()
+                        },
+                        modifier = Modifier.weight(1.1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Watched", fontSize = 12.sp)
+                    }
+                } else if (item.status == MediaStatus.WATCHED.name && onMoveToWatchlistClick != null) {
+                    FilledTonalButton(
+                        onClick = {
+                            onDismiss()
+                            onMoveToWatchlistClick()
+                        },
+                        modifier = Modifier.weight(1.1f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Watchlist", fontSize = 12.sp)
+                    }
                 }
 
                 Button(
@@ -7945,5 +8108,249 @@ fun AgentChatTabContent(
             }
         }
     }
+}
+
+// ==========================================
+// COMPOSABLE: Remove or Watched Confirmation Dialog (Issue #20)
+// ==========================================
+@Composable
+fun RemoveOrWatchedConfirmationDialog(
+    item: MediaItem,
+    onDismiss: () -> Unit,
+    onMarkAsWatched: () -> Unit,
+    onMoveToWatchlist: () -> Unit,
+    onDeletePermanently: () -> Unit
+) {
+    val isWatched = item.status == MediaStatus.WATCHED.name
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = if (isWatched) "Remove from Watched Vault?" else "Remove from Watchlist?",
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = if (isWatched) {
+                        "\"${item.title}\" will be removed from your Watched Vault. Would you like to move it back to your active Watchlist or delete it permanently from your library?"
+                    } else {
+                        "\"${item.title}\" will be removed from your Watchlist. Did you already watch this film, or would you like to delete it permanently?"
+                    },
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        },
+        confirmButton = {
+            if (!isWatched) {
+                Button(
+                    onClick = {
+                        onMarkAsWatched()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Mark as Watched")
+                }
+            } else {
+                Button(
+                    onClick = {
+                        onMoveToWatchlist()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Move to Watchlist")
+                }
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = {
+                        onDeletePermanently()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text("Delete")
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+            }
+        }
+    )
+}
+
+// ==========================================
+// COMPOSABLE: Share and Export Dialog (Issue #18)
+// ==========================================
+@Composable
+fun ShareAndExportDialog(
+    onDismiss: () -> Unit,
+    onShareWatchlist: () -> Unit,
+    onExportObsidian: () -> Unit,
+    onExportLetterboxdCsv: () -> Unit,
+    onCopyClipboard: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text("Share & Export", fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Select an export format or share recommendations with friends:",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                // Option 1: Share Watchlist via Android system sheet
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onShareWatchlist() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Share, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Share Recommendations", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("Send formatted watchlist picks via Messages, WhatsApp, etc.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+
+                // Option 2: Export for Obsidian
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onExportObsidian() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Description, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Export Markdown (Obsidian)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("Saves .md notes with YAML frontmatter to Downloads/StreamwiseVault", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+
+                // Option 3: Export Letterboxd CSV
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onExportLetterboxdCsv() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.FileDownload, null, tint = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Export Letterboxd CSV", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("Official diary CSV ready for direct Letterboxd account import", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+
+                // Option 4: Copy to Clipboard
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCopyClipboard() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.ContentCopy, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Copy Picks to Clipboard", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Text("Quickly copy movie list text for pasting into messages", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
