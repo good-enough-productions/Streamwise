@@ -20,6 +20,18 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.5.9</span> <span class="date">September 2026</span></h2>
+        <h3>Couch-First Poster Density, Letterboxd Sub-Navigation & Zero-Intermediary Deep Linking</h3>
+        <ul>
+            <li><strong>3-Column Poster Grid & View Mode Toggle:</strong> Replaced vertical card bloat with a Letterboxd-style 3-column poster grid (2:3 aspect ratio, gold star rating badge, orange quick-play button, and provider pill) paired with a persistent view mode toggle in the Top App Bar allowing seamless switching between Poster Grid and Detailed Cards.</li>
+            <li><strong>Letterboxd-Style Top Sub-Navigation Tabs:</strong> Added top sub-navigation tabs with dynamic live title count badges on the Watchlist (<em>Ready on Subs</em>, <em>All Saved</em>, <em>Under 100m</em>, <em>Podcast Picks</em>) and Watched Vault (<em>Watched Diary</em>, <em>Highest Rated</em>, <em>Analytics</em>).</li>
+            <li><strong>Zero-Intermediary Native App Deep Linking (<code>StreamingAppLauncher</code>):</strong> Tapping "Watch" now resolves native Android package names, custom deep link URI schemes, and media search intents across 15+ streaming services (Netflix, Prime Video, Max, Disney+, Hulu, Tubi, Apple TV+, Paramount+, Criterion Channel, Pluto TV, Peacock, Hoopla, Kanopy) to directly launch playback on your couch.</li>
+            <li><strong>High-Performance O(1) Catalog Indexing:</strong> Eliminated heavy string-matching loops across 2,300+ titles by pre-indexing podcast mentions and dynamic titles into optimized hash sets, resolving Android startup ANRs and ensuring instantaneous UI rendering.</li>
+            <li><strong>Ambient Subscription ROI & Backlog Projections:</strong> Surfaced exact watchlist title counts and estimated backlog months per active provider on the Services tab, turning passive subscription tracking into an active decision engine.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.5.8</span> <span class="date">September 2026</span></h2>
         <h3>Design System Modernization, WCAG Contrast & UX Critic Audit Resolution</h3>
         <ul>

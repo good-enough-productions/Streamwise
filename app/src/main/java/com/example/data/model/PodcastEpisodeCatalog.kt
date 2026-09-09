@@ -62,6 +62,7 @@ object PodcastEpisodeCatalog {
     )
 
     private val dynamicTitlesMap = mutableMapOf<String, Set<String>>()
+    private val allDynamicTitlesSet = mutableSetOf<String>()
 
     fun initialize(context: android.content.Context) {
         if (dynamicTitlesMap.isNotEmpty()) return
@@ -95,10 +96,15 @@ object PodcastEpisodeCatalog {
 
     fun loadCatalog(map: Map<String, Set<String>>) {
         dynamicTitlesMap.putAll(map)
+        allDynamicTitlesSet.clear()
+        for (set in dynamicTitlesMap.values) {
+            allDynamicTitlesSet.addAll(set)
+        }
     }
 
     fun clearForTesting() {
         dynamicTitlesMap.clear()
+        allDynamicTitlesSet.clear()
     }
 
     // Catalog mapping lowercase normalized movie titles
@@ -275,5 +281,36 @@ object PodcastEpisodeCatalog {
             val mentionNorm = normalize(mention.movieTitle)
             norm == mentionNorm || norm.contains(mentionNorm) || mentionNorm.contains(norm)
         }
+    }
+
+    private val staticMentionTitles by lazy {
+        MENTIONS.map { normalize(it.movieTitle) }.toSet()
+    }
+
+    fun isCoveredOnAnyPodcast(movieTitle: String, importSource: String? = null, notes: String? = null): Boolean {
+        if (!importSource.isNullOrBlank() || !notes.isNullOrBlank()) {
+            for (pod in AVAILABLE_PODCASTS) {
+                val name = pod.name
+                val shortName = name.removePrefix("The ").trim()
+                if (importSource?.contains(name, ignoreCase = true) == true ||
+                    importSource?.contains(shortName, ignoreCase = true) == true ||
+                    notes?.contains(name, ignoreCase = true) == true ||
+                    notes?.contains(shortName, ignoreCase = true) == true
+                ) return true
+            }
+            if (importSource?.contains("HDTGM", ignoreCase = true) == true ||
+                notes?.contains("HDTGM", ignoreCase = true) == true
+            ) return true
+        }
+
+        val norm = normalize(movieTitle)
+        if (norm.isBlank()) return false
+        val normNoThe = if (norm.startsWith("the ")) norm.removePrefix("the ").trim() else norm
+
+        if (allDynamicTitlesSet.contains(norm) || allDynamicTitlesSet.contains(normNoThe)) {
+            return true
+        }
+
+        return staticMentionTitles.contains(norm) || staticMentionTitles.contains(normNoThe)
     }
 }

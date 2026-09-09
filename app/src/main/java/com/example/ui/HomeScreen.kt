@@ -134,6 +134,7 @@ fun HomeScreen(
     }
 
     val isDark by viewModel.isDarkMode.collectAsState()
+    val isGridView by viewModel.isGridView.collectAsState()
     val enableBetaFeedback by viewModel.enableBetaFeedback.collectAsState()
     val isSpotlightCollapsed by viewModel.isSpotlightCollapsed.collectAsState()
     val isSyncingToSheet by viewModel.isSyncingToSheet.collectAsState()
@@ -174,6 +175,18 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    if (selectedTab == 0 || selectedTab == 1) {
+                        IconButton(
+                            onClick = { viewModel.toggleGridView() },
+                            modifier = Modifier.testTag("toggle_view_mode_button")
+                        ) {
+                            Icon(
+                                imageVector = if (isGridView) Icons.Default.ViewAgenda else Icons.Default.GridView,
+                                contentDescription = if (isGridView) "Switch to Detailed Cards" else "Switch to Poster Grid",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = { viewModel.toggleDarkMode() },
                         modifier = Modifier.testTag("theme_toggle_button")
@@ -328,14 +341,16 @@ fun HomeScreen(
                         allProviders = allProviders,
                         filterOnlyMyServices = filterOnlyMyServices,
                         onFilterToggle = { filterOnlyMyServices = it },
-                        onWatchClick = { viewModel.startIntendingToWatch(it) },
+                        onWatchClick = { viewModel.launchAndIntendToWatch(context, it) },
                         onDeleteClick = { viewModel.deleteItem(it) },
                         onSyncClick = { viewModel.triggerImmediateSync() },
                         tmdbApiKey = tmdbApiKey,
                         onOpenSettings = { showSettingsDialog = true },
                         onMovieClick = { detailMovieItem = it },
                         isSpotlightCollapsed = isSpotlightCollapsed,
-                        onToggleSpotlightCollapsed = { viewModel.toggleSpotlightCollapsed() }
+                        onToggleSpotlightCollapsed = { viewModel.toggleSpotlightCollapsed() },
+                        isGridView = isGridView,
+                        onToggleGridView = { viewModel.toggleGridView() }
                     )
                     1 -> {
                         val watchedItems by viewModel.watchedItems.collectAsState()
@@ -362,7 +377,7 @@ fun HomeScreen(
                                 viewModel.syncLetterboxdLive(silent = false)
                                 showLetterboxdSyncDialog = true
                             },
-                            onRewatchIntent = { viewModel.startIntendingToWatch(it) },
+                            onRewatchIntent = { viewModel.launchAndIntendToWatch(context, it) },
                             onPickLetterboxdFile = { letterboxdFileLauncher.launch(arrayOf("*/*", "text/*", "text/csv", "application/zip")) },
                             onExportLetterboxdCsv = onExportForLetterboxd,
                             onEnrichVaultRatings = { viewModel.enrichWatchedVaultRatings() },
@@ -627,7 +642,7 @@ fun HomeScreen(
                 onCastClick = { device, item -> viewModel.castToDevice(device, item) },
                 onDismiss = { detailMovieItem = null },
                 onWatchClick = {
-                    viewModel.startIntendingToWatch(detailMovieItem!!)
+                    viewModel.launchAndIntendToWatch(context, detailMovieItem!!)
                     detailMovieItem = null
                 },
                 onDeleteClick = {
@@ -784,6 +799,179 @@ fun SpotlightCard(
 }
 
 // ==========================================
+// COMPOSABLE: Letterboxd-Style Poster Grid Item (Issue #2: Couch-First Poster Density)
+// ==========================================
+@Composable
+fun PosterGridItem(
+    item: MediaItem,
+    allProviders: List<StreamingProvider>,
+    onWatchClick: () -> Unit,
+    onMovieClick: () -> Unit
+) {
+    val activeOrFreeProvider = remember(item, allProviders) {
+        val activeIds = allProviders.filter { it.isActive || it.costPerMonth == 0.0 }.map { it.id }.toSet()
+        val firstActiveId = item.providersList.firstOrNull { activeIds.contains(it) }
+        firstActiveId?.let { id -> allProviders.find { it.id == id } }
+            ?: item.providersList.firstOrNull()?.let { id -> allProviders.find { it.id == id } }
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onMovieClick() },
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Column {
+            // 2:3 Poster aspect container
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(2f / 3f)
+                    .clip(RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                if (!item.imageUrl.isNullOrBlank()) {
+                    coil.compose.AsyncImage(
+                        model = item.imageUrl,
+                        contentDescription = item.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Movie,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+
+                // Top-left rating badge
+                if (item.rating != null && item.rating > 0.0) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color.Black.copy(alpha = 0.8f),
+                        modifier = Modifier
+                            .padding(4.dp)
+                            .align(Alignment.TopStart)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Star, null, tint = Color(0xFFFFD700), modifier = Modifier.size(9.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = String.format(Locale.US, "%.1f", item.rating),
+                                style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp
+                            )
+                        }
+                    }
+                }
+
+                // Top-right quick launch button (Direct TV/App Launch)
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .size(26.dp)
+                        .align(Alignment.TopEnd)
+                        .clickable { onWatchClick() },
+                    shadowElevation = 4.dp
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = "Watch now",
+                            modifier = Modifier.size(15.dp).offset(x = 1.dp)
+                        )
+                    }
+                }
+
+                // Bottom streaming provider overlay pill
+                if (activeOrFreeProvider != null) {
+                    Surface(
+                        shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp),
+                        color = Color.Black.copy(alpha = 0.85f),
+                        border = BorderStroke(0.5.dp, Color.White.copy(alpha = 0.15f)),
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = activeOrFreeProvider.name,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (activeOrFreeProvider.costPerMonth == 0.0) Color(0xFF10B981) else Color(0xFFF59E0B),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 2.dp, horizontal = 2.dp)
+                        )
+                    }
+                }
+            }
+
+            // Compact Title & Year
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 5.dp)
+            ) {
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 11.sp
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val year = item.releaseYear ?: com.example.data.util.WatchedAnalyticsCalculator.extractReleaseYear(item)
+                    Text(
+                        text = if (year != null) "$year" else "",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        fontSize = 9.sp
+                    )
+                    if (!item.genres.isNullOrBlank()) {
+                        val firstGenre = item.genres.split(",").firstOrNull()?.trim() ?: ""
+                        Text(
+                            text = firstGenre,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline,
+                            fontSize = 8.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==========================================
 // COMPOSABLE: Watchlist Screen
 // ==========================================
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
@@ -800,13 +988,39 @@ fun WatchlistTabContent(
     onOpenSettings: () -> Unit,
     onMovieClick: (MediaItem) -> Unit,
     isSpotlightCollapsed: Boolean = false,
-    onToggleSpotlightCollapsed: () -> Unit = {}
+    onToggleSpotlightCollapsed: () -> Unit = {},
+    isGridView: Boolean = true,
+    onToggleGridView: () -> Unit = {}
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
     }
     val freeProviderIds = remember(allProviders) {
         allProviders.filter { it.costPerMonth == 0.0 }.map { it.id }.toSet()
+    }
+
+    // Letterboxd-Style Top Sub-Tabs (Ready on My Subs, All Saved, Under 100m, Podcast Picks)
+    var watchlistSubTab by remember { mutableStateOf("ready") } // "ready", "all", "short", "podcasts"
+
+    val readyCount = remember(watchlistItems, activeProviderIds, freeProviderIds) {
+        watchlistItems.count { item ->
+            item.status != MediaStatus.WATCHED.name &&
+            !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title) &&
+            (item.tmdbId == null || item.providersList.any { activeProviderIds.contains(it) || freeProviderIds.contains(it) })
+        }
+    }
+    val totalSavedCount = remember(watchlistItems) {
+        watchlistItems.count { item ->
+            item.status != MediaStatus.WATCHED.name &&
+            !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)
+        }
+    }
+    val podcastCount = remember(watchlistItems) {
+        watchlistItems.count { item ->
+            item.status != MediaStatus.WATCHED.name &&
+            !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title) &&
+            com.example.data.model.PodcastEpisodeCatalog.isCoveredOnAnyPodcast(item.title, item.importSource, item.userNotes)
+        }
     }
 
     // Multi-select filter states to widen search (OR logic)
@@ -843,6 +1057,7 @@ fun WatchlistTabContent(
     // Filter items according to state with OR widening logic for multi-selected chips
     val filteredItems = remember(
         watchlistItems,
+        watchlistSubTab,
         filterOnlyMyServices,
         activeProviderIds,
         freeProviderIds,
@@ -859,7 +1074,46 @@ fun WatchlistTabContent(
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
 
-            // Multi-select Platforms (OR logic: widens search to any selected platform)
+            // Reject non-movie episodes from ever showing in the watchlist feed
+            if (com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) {
+                return@filter false
+            }
+
+            // Letterboxd Top Sub-Tab Filtering
+            when (watchlistSubTab) {
+                "ready" -> {
+                    val provs = item.providersList
+                    if (item.tmdbId != null && provs.none { activeProviderIds.contains(it) || freeProviderIds.contains(it) }) {
+                        return@filter false
+                    }
+                }
+                "short" -> {
+                    // Under 100m runtime filter
+                    val overview = item.overview ?: ""
+                    val match = Regex("""\b(\d{2,3})\s*(?:mins?|minutes?|m)\b""", RegexOption.IGNORE_CASE).find(overview)
+                    val mins = match?.groupValues?.getOrNull(1)?.toIntOrNull()
+                    val isShortGenre = item.genres?.contains("Animation", ignoreCase = true) == true ||
+                                      item.genres?.contains("Comedy", ignoreCase = true) == true ||
+                                      item.genres?.contains("Short", ignoreCase = true) == true
+                    if (mins != null) {
+                        if (mins > 105) return@filter false
+                    } else if (!isShortGenre) {
+                        val year = item.releaseYear ?: 2000
+                        if (year >= 1960) return@filter false
+                    }
+                }
+                "podcasts" -> {
+                    val covered = com.example.data.model.PodcastEpisodeCatalog.isCoveredOnAnyPodcast(
+                        movieTitle = item.title,
+                        importSource = item.importSource,
+                        notes = item.userNotes
+                    )
+                    if (!covered) return@filter false
+                }
+                "all" -> {
+                    // All saved titles
+                }
+            }
             if (selectedPlatforms.isNotEmpty()) {
                 val hasPlatform = item.providersList.any { selectedPlatforms.contains(it) }
                 if (!hasPlatform) return@filter false
@@ -882,10 +1136,6 @@ fun WatchlistTabContent(
                 if ((item.rating ?: 0.0) < threshold) return@filter false
             }
 
-            // Reject non-movie episodes from ever showing in the watchlist feed
-            if (com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) {
-                return@filter false
-            }
 
             // Multi-select Release Eras (OR logic: widens search to any selected era)
             if (selectedEras.isNotEmpty()) {
@@ -945,6 +1195,8 @@ fun WatchlistTabContent(
             else -> items.sortedByDescending { it.addedAt }
         }
     }
+
+    val gridRows = remember(processedItems) { processedItems.chunked(3) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -1053,6 +1305,73 @@ fun WatchlistTabContent(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
+                        // 2a. Letterboxd Sub-Tabs (Ready on Subs, All Saved, Under 100m, Podcast Picks)
+                        ScrollableTabRow(
+                            selectedTabIndex = when (watchlistSubTab) {
+                                "ready" -> 0
+                                "all" -> 1
+                                "short" -> 2
+                                "podcasts" -> 3
+                                else -> 0
+                            },
+                            edgePadding = 0.dp,
+                            containerColor = Color.Transparent,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            divider = {},
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 6.dp)
+                        ) {
+                            Tab(
+                                selected = watchlistSubTab == "ready",
+                                onClick = { watchlistSubTab = "ready" },
+                                text = {
+                                    Text(
+                                        "Ready on Subs ($readyCount)",
+                                        fontWeight = if (watchlistSubTab == "ready") FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        color = if (watchlistSubTab == "ready") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
+                            Tab(
+                                selected = watchlistSubTab == "all",
+                                onClick = { watchlistSubTab = "all" },
+                                text = {
+                                    Text(
+                                        "All Saved ($totalSavedCount)",
+                                        fontWeight = if (watchlistSubTab == "all") FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        color = if (watchlistSubTab == "all") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
+                            Tab(
+                                selected = watchlistSubTab == "short",
+                                onClick = { watchlistSubTab = "short" },
+                                text = {
+                                    Text(
+                                        "Under 100m",
+                                        fontWeight = if (watchlistSubTab == "short") FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        color = if (watchlistSubTab == "short") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
+                            Tab(
+                                selected = watchlistSubTab == "podcasts",
+                                onClick = { watchlistSubTab = "podcasts" },
+                                text = {
+                                    Text(
+                                        "Podcast Picks ($podcastCount)",
+                                        fontWeight = if (watchlistSubTab == "podcasts") FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        color = if (watchlistSubTab == "podcasts") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
+                        }
+
                         // Search Row
                         Row(
                             modifier = Modifier
@@ -1285,15 +1604,40 @@ fun WatchlistTabContent(
                     }
                 }
             } else {
-                items(processedItems, key = { it.id }) { item ->
-                    Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
-                        MediaItemCard(
-                            item = item,
-                            allProviders = allProviders,
-                            onWatchClick = { onWatchClick(item) },
-                            onDeleteClick = { onDeleteClick(item) },
-                            onMovieClick = { onMovieClick(item) }
-                        )
+                if (isGridView) {
+                    items(gridRows, key = { row -> row.first().id }) { row ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (movie in row) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    PosterGridItem(
+                                        item = movie,
+                                        allProviders = allProviders,
+                                        onWatchClick = { onWatchClick(movie) },
+                                        onMovieClick = { onMovieClick(movie) }
+                                    )
+                                }
+                            }
+                            for (i in 0 until (3 - row.size)) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            }
+                        }
+                    }
+                } else {
+                    items(processedItems, key = { it.id }) { item ->
+                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 5.dp)) {
+                            MediaItemCard(
+                                item = item,
+                                allProviders = allProviders,
+                                onWatchClick = { onWatchClick(item) },
+                                onDeleteClick = { onDeleteClick(item) },
+                                onMovieClick = { onMovieClick(item) }
+                            )
+                        }
                     }
                 }
             }
@@ -2384,6 +2728,69 @@ fun WatchedTabContent(
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
+        // Letterboxd Sub-Tabs for Watched Vault (Watched Diary, Highest Rated, Analytics)
+        var watchedSubTab by remember { mutableStateOf("diary") } // "diary", "ranked", "analytics"
+
+        ScrollableTabRow(
+            selectedTabIndex = when (watchedSubTab) {
+                "diary" -> 0
+                "ranked" -> 1
+                "analytics" -> 2
+                else -> 0
+            },
+            edgePadding = 0.dp,
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.primary,
+            divider = {},
+            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+        ) {
+            Tab(
+                selected = watchedSubTab == "diary",
+                onClick = { 
+                    watchedSubTab = "diary"
+                    sortBy = "timeline"
+                },
+                text = {
+                    Text(
+                        "Watched Diary ($totalFilms)",
+                        fontWeight = if (watchedSubTab == "diary") FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 12.sp,
+                        color = if (watchedSubTab == "diary") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
+            Tab(
+                selected = watchedSubTab == "ranked",
+                onClick = { 
+                    watchedSubTab = "ranked"
+                    sortBy = "rating"
+                },
+                text = {
+                    Text(
+                        "Highest Rated",
+                        fontWeight = if (watchedSubTab == "ranked") FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 12.sp,
+                        color = if (watchedSubTab == "ranked") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
+            Tab(
+                selected = watchedSubTab == "analytics",
+                onClick = { 
+                    watchedSubTab = "analytics"
+                    showAnalyticsSheet = true
+                },
+                text = {
+                    Text(
+                        "Analytics",
+                        fontWeight = if (watchedSubTab == "analytics") FontWeight.Bold else FontWeight.Normal,
+                        fontSize = 12.sp,
+                        color = if (watchedSubTab == "analytics") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            )
+        }
+
         // Slim Sticky Top Bar: Search, Sort, View Switcher & Quick Analytics Button (Issue #16)
         Row(
             modifier = Modifier
