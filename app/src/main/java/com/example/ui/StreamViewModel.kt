@@ -133,6 +133,16 @@ class StreamViewModel(
         userPreferences.isSpotlightCollapsed = newVal
     }
 
+    // View Mode (Grid vs List) Setting
+    private val _isGridView = MutableStateFlow(userPreferences.isGridView)
+    val isGridView: StateFlow<Boolean> = _isGridView.asStateFlow()
+
+    fun toggleGridView() {
+        val newVal = !_isGridView.value
+        _isGridView.value = newVal
+        userPreferences.isGridView = newVal
+    }
+
     // Google Sheet Webhook Setting
     private val _googleSheetWebhookUrl = MutableStateFlow(userPreferences.googleSheetWebhookUrl)
     val googleSheetWebhookUrl: StateFlow<String> = _googleSheetWebhookUrl.asStateFlow()
@@ -1309,6 +1319,30 @@ class StreamViewModel(
             val updated = item.copy(status = MediaStatus.INTENDING_TO_WATCH.name, updatedAt = System.currentTimeMillis())
             repository.updateMediaItem(updated)
             _statusMessage.value = "Watching instruction initialized: Let's check in after!"
+        }
+    }
+
+    /**
+     * User clicks "Watch" to signify intent and directly launch into the streaming service.
+     * Marks intent for post-watch check-in and triggers native app deep-link or universal search.
+     */
+    fun launchAndIntendToWatch(context: android.content.Context, item: MediaItem) {
+        viewModelScope.launch {
+            val updated = item.copy(status = MediaStatus.INTENDING_TO_WATCH.name, updatedAt = System.currentTimeMillis())
+            repository.updateMediaItem(updated)
+
+            // Resolve primary available provider
+            val allProv = allProviders.value
+            val activeOrFreeIds = allProv.filter { it.isActive || it.costPerMonth == 0.0 }.map { it.id }.toSet()
+            val primaryProviderId = item.providersList.firstOrNull { activeOrFreeIds.contains(it) } 
+                ?: item.providersList.firstOrNull()
+
+            val result = com.example.data.util.StreamingAppLauncher.launchStreamingApp(
+                context = context,
+                providerId = primaryProviderId,
+                movieTitle = item.title
+            )
+            _statusMessage.value = result.message
         }
     }
 

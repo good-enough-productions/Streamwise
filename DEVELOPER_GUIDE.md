@@ -286,3 +286,48 @@ Comprehensive resolution of the 14 critical findings identified in the Streamwis
 - **Landscape Navigation**:
   - Added orientation-aware height checks to `NavigationBar`, adjusting from 72dp in portrait to a compact 56dp in landscape to preserve vertical browsing real estate.
 
+## 23. Couch-First Poster Density, Letterboxd Sub-Navigation & Zero-Intermediary Deep Linking (v1.5.9)
+
+Architecture updates addressing mobile visual density and couch-first discovery:
+
+### 1. Couch-First 3-Column Poster Grid & View Mode Toggle
+- **`PosterGridItem` Composable (`HomeScreen.kt`)**:
+  - High-density 3-column layout utilizing 2:3 aspect ratio posters with 10dp rounded corners.
+  - Overlay badges: Top-left gold star rating badge (`RatingGold` / `DarkGoldSurface`), top-right circular quick-play button (`DeepCouchOrange`), and bottom service attribution pill.
+  - Beneath poster: Single-line bold title, release year, and primary genre.
+- **Sticky Header Integration (`LazyColumn`)**:
+  - Chunked 3-column row rendering (`processedItems.chunked(3)`) inside `LazyColumn` rather than nested grids, maintaining seamless pinning of the search and filter ribbon via `stickyHeader`.
+- **Persistent View Mode State**:
+  - Backed by `UserPreferencesManager.isGridView` (default `true`), exposed via `StreamViewModel.isGridView: StateFlow<Boolean>`.
+  - Seamless toggle icon in `TopAppBar` (`Icons.Default.ViewAgenda` vs `Icons.Default.GridView`).
+
+### 2. Letterboxd-Style Top Sub-Navigation Tabs
+- **Watchlist Sub-Tabs**:
+  - `Ready on Subs (X)`: Dynamically counts and filters titles ready to stream on active subscriptions or free ad-supported platforms.
+  - `All Saved (X)`: Shows complete saved catalog across all providers.
+  - `Under 100m`: Filter for short runtime cinema (<105 mins or comedy/animation/shorts).
+  - `Podcast Picks (X)`: Dynamic count and filter for films covered on major cinema podcasts.
+- **Watched Vault Sub-Tabs**:
+  - `Watched Diary (X)`: Chronological timeline with re-watch intents.
+  - `Highest Rated`: Instant sort by user and community ratings.
+  - `Analytics`: One-tap navigation to the Cinephile Viewing Analytics Hub.
+
+### 3. Zero-Intermediary Streaming App Deep Linking (`StreamingAppLauncher.kt`)
+- **Direct Couch Handoff**:
+  - Tapping "Watch" resolves native Android package names, custom deep link URI schemes, and media search intents across 15+ streaming services:
+    - Prime Video (`com.amazon.avod.thirdpartyclient`, `https://app.primevideo.com/detail?gti=...`)
+    - Netflix (`com.netflix.mediaclient`, `nflx://www.netflix.com/title/...`)
+    - Max (`com.wbd.stream`, `https://play.max.com/movie/...`)
+    - Disney+ (`com.disney.disneyplus`, `https://www.disneyplus.com/movies/...`)
+    - Hulu (`com.hulu.plus`, `https://www.hulu.com/movie/...`)
+    - Tubi (`com.tubitv`, `https://tubitv.com/movies/...`)
+    - Apple TV+ (`com.apple.atve.androidtv.appletv`, `https://tv.apple.com/movie/...`)
+    - Paramount+, Criterion Channel, Pluto TV, Peacock, Hoopla, Kanopy
+  - Seamlessly activates `viewModel.launchAndIntendToWatch(context, item)`, updating the database status to `INTENDING_TO_WATCH` so the background check-in watcher triggers when the user returns.
+
+### 4. High-Performance O(1) Catalog Indexing
+- **Startup ANR Elimination (`PodcastEpisodeCatalog.kt`)**:
+  - Pre-indexes 2,300+ dynamic titles and static mentions into `allDynamicTitlesSet` and `staticMentionTitles` hash sets.
+  - Converts $O(N \times M)$ string search loops across 1,151 movies into instantaneous $O(1)$ hash set lookups (<1ms), completely eliminating main-thread freezing and Android input dispatch timeouts.
+
+
