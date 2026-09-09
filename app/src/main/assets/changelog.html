@@ -20,6 +20,21 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.5.8</span> <span class="date">September 2026</span></h2>
+        <h3>Design System Modernization, WCAG Contrast & UX Critic Audit Resolution</h3>
+        <ul>
+            <li><strong>WCAG AA Form Contrast & Standardized Field Tokens:</strong> Audited every form input and search bar across the app. Standardized text field backgrounds to <code>DarkInputBackground</code> (8% surface fill), boosted unfocused borders to 25% white opacity (<code>DarkBorderOutline</code>), and elevated low-emphasis labels to 62% white opacity. Meets strict WCAG AA contrast standards across OLED dark mode.</li>
+            <li><strong>AI Companion Humanization:</strong> Stripped internal technical model jargon ("Gemma 4", "Gemini 3.1 Pro", raw API tokens) from consumer interfaces. Replaced with clear persona copy: <em>"Olivia &mdash; AI Film Companion"</em>, <em>"Personalized Film & Taste Analysis"</em>, and <em>"Analyzing your cinematic vault..."</em>.</li>
+            <li><strong>Chat Ergonomics & Floating Icon Conflict:</strong> Replaced the oversized 56dp floating send button with a sleek 52dp inline rounded icon button. Suppressed the global beta feedback button when actively chatting with Olivia to eliminate touch target collisions.</li>
+            <li><strong>Intuitive Check-In Prompts:</strong> Overhauled ambiguous post-viewing check-in dialogs. Replaced misleading toggles with clear hierarchical action buttons: <code>[Yes, finished it &rarr;]</code>, <code>[Watched partially &rarr;]</code>, <code>[Watched something else &rarr;]</code>, and <code>[Didn't watch anything]</code>.</li>
+            <li><strong>Subscription Billing Transparency:</strong> Added explicit notices to the Subscription Rotation Advisor explaining that Streamwise calculates expected value and tracking targets, while actual billing pause and cancellation must be performed on service websites. Clarified active/inactive status toggles as internal tracking settings.</li>
+            <li><strong>Movie Card Badge Layout & Overflow:</strong> Fixed <code>FREE</code> badge overlap with provider tags and the "Watch" launch button on movie cards. Constrained provider tag widths with text truncation and capped synopsis previews to prevent vertical card stretching.</li>
+            <li><strong>Catalog Deduplication:</strong> Integrated <code>MediaTitleSanitizer</code> deduplication across spotlight and watchlist feeds to collapse duplicate entries into unified media cards.</li>
+            <li><strong>Responsive Landscape Support:</strong> Implemented responsive orientation breakpoints with a compact 56dp bottom navigation bar in landscape mode.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.5.7</span> <span class="date">September 2026</span></h2>
         <h3>Zero Unknown Eras, Robust Rating Extraction & UI Streamlining (Issues #7, #8, #9, #10)</h3>
         <ul>

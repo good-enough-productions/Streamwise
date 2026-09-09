@@ -241,3 +241,48 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 - **1-Tap Letterboxd + Google Sheet Sync (Issue #10)**:
   - Added prominent `[☁️ Sync Letterboxd & Google Sheet]` button on `WatchedVaultOverviewCard` with indeterminate progress indicator and toast notifications.
 
+## 22. Design System Modernization & UX Critic Audit Resolution (v1.5.8)
+
+Comprehensive resolution of the 14 critical findings identified in the Streamwise UX/UI Audit (`UX Critic-saved.html`):
+
+### Standardized Button & Component System (Tokens & Styling)
+- **High-Contrast Input Tokens (`Color.kt`)**:
+  - `DarkInputBackground` (`0x14FFFFFF` / 8% surface fill): Elevates text field contrast against pure black AMOLED backgrounds.
+  - `DarkBorderOutline` (`0x40FFFFFF` / 25% white opacity): Replaced 12% opacity borders to meet WCAG AA contrast for unfocused form fields.
+  - `DarkOutlineVariant` (`0x2EFFFFFF` / 18% white opacity): Replaced 10% borders for subtler card and divider outlines.
+  - `TextLowEmphasis` (`0x9EFFFFFF` / 62% white opacity): Replaced 38% opacity placeholder/label text to guarantee legibility.
+- **Universal Field Application**:
+  - Standardized `OutlinedTextFieldDefaults.colors` across all search bars (Watchlist, Watched Vault), dialogs (`AddMediaDialog`, `EditProviderDialog`, `CheckInDialog`, `FeedbackDialog`), and Settings configuration fields.
+
+### Agent Screen Humanization & Conversational Ergonomics
+- **Technical Jargon Elimination**:
+  - Replaced internal engineering references ("Gemma 4", "Gemini 3.1 Pro", "API Keys") with consumer-friendly framing: *"Olivia — AI Film Companion"*, *"Personalized Film & Taste Analysis"*, and *"Analyzing your cinematic vault..."*.
+- **Floating Icon Collision Elimination**:
+  - Replaced oversized 56dp floating send button with an ergonomic 52dp inline `FilledIconButton` positioned alongside the input field with automated keyboard avoidance.
+  - Suppressed the global `FloatingFeedbackButton` whenever the user is actively on the Olivia chat tab (`selectedTab == 3 && exploreSubTab == 1`), eliminating touch target overlaps.
+
+### Check-In Prompts & Decision Clarity
+- **Hierarchical Action Buttons**:
+  - Replaced ambiguous inline checkbox/toggle logic with explicit hierarchical buttons:
+    - Primary: `[Yes, finished it →]` (`Button`)
+    - Secondary: `[Watched partially →]` (`FilledTonalButton`)
+    - Tertiary: `[Watched something else →]` (`OutlinedButton`)
+    - Dismissal: `[Didn't watch anything]` (`TextButton`)
+  - Clear multi-step wizard preserves provider attribution, duration logging, and optional personal notes.
+
+### Subscription Rotation & Billing Transparency
+- **Advisor Transparency**:
+  - Added an explicit disclaimer on the Single-Service Rotation card: *"Note: Streamwise tracks subscriptions to calculate savings and optimize your viewing schedule. Actual subscription changes must be managed directly with providers."*
+  - Updated provider status toggle text in `EditProviderDialog` to *"Active (Tracked in Streamwise)"* and *"Inactive / Paused (Tracked in Streamwise)"*.
+
+### Movie Card Polish & Deduplication
+- **Free Badge & Action Collision**:
+  - Isolated the `FREE` indicator with a dedicated pill token (`FreeBadgeContainer` / `OnFreeBadgeContainer`) and capped provider badge rows with ellipsis truncation.
+  - Restricted movie synopsis previews to 1 line, ensuring the primary "Watch" button remains visually unobstructed.
+- **Catalog Deduplication**:
+  - Integrated `MediaTitleSanitizer.cleanCandidateTitle(it.title).lowercase()` deduplication across spotlight and watchlist feeds.
+
+### Responsive Breakpoints
+- **Landscape Navigation**:
+  - Added orientation-aware height checks to `NavigationBar`, adjusting from 72dp in portrait to a compact 56dp in landscape to preserve vertical browsing real estate.
+
