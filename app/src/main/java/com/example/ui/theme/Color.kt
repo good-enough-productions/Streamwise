@@ -20,15 +20,18 @@ val DarkCanvas = Color(0xFF0B0E14)
 val DarkSurface = Color(0xFF121622)
 val DarkSurfaceVariant = Color(0xFF1B2030)
 val DarkSurfaceElevated = Color(0xFF242B40)
-val DarkBorderOutline = Color(0x26FFFFFF) // 15% white border
-val DarkOutlineVariant = Color(0x14FFFFFF) // 8% white outline
+val DarkBorderOutline = Color(0x40FFFFFF) // 25% white border for high visibility
+val DarkOutlineVariant = Color(0x2EFFFFFF) // 18% white outline (up from 8% to pass WCAG contrast)
+val DarkInputBackground = Color(0x14FFFFFF) // 8% white surface fill for distinct input fields
 
-// Text Contrast Tokens (Softened off-white to prevent OLED halation)
+// Text Contrast Tokens (Softened off-white to prevent OLED halation, WCAG AA compliant)
 val TextHighEmphasis = Color(0xE6FFFFFF)  // 90% white
 val TextMediumEmphasis = Color(0xB3FFFFFF) // 70% white
-val TextLowEmphasis = Color(0x73FFFFFF)    // 45% white
+val TextLowEmphasis = Color(0x9EFFFFFF)    // 62% white (improved from 45% for readable placeholders)
 
-// Status indicators
+// Status & Badge indicators
 val StatusSuccess = Color(0xFF10B981)
 val StatusWarning = Color(0xFFF59E0B)
 val StatusError = Color(0xFFEF4444)
+val FreeBadgeContainer = Color(0xFF064E3B) // Dark Emerald Container for Free w/ ads
+val OnFreeBadgeContainer = Color(0xFF6EE7B7) // High contrast emerald label

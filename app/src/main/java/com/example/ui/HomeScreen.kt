@@ -68,6 +68,7 @@ import com.example.data.util.WatchedAnalyticsCalculator
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlin.math.roundToInt
+import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -210,9 +211,13 @@ fun HomeScreen(
             )
         },
         bottomBar = {
+            val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+            val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
             NavigationBar(
                 containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
-                modifier = Modifier.testTag("main_navigation_bar")
+                modifier = Modifier
+                    .testTag("main_navigation_bar")
+                    .then(if (isLandscape) Modifier.height(56.dp) else Modifier)
             ) {
                 NavigationBarItem(
                     selected = selectedTab == 0,
@@ -221,7 +226,6 @@ fun HomeScreen(
                         BadgedBox(badge = {
                             if (watchlistItems.isNotEmpty()) {
                                 Badge(
-                                    modifier = Modifier.offset(x = 6.dp, y = (-2).dp),
                                     containerColor = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary
                                 ) {
@@ -233,7 +237,7 @@ fun HomeScreen(
                             Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist")
                         }
                     },
-                    label = { Text("Watchlist") },
+                    label = { Text("Watchlist", fontSize = if (isLandscape) 10.sp else 12.sp) },
                     modifier = Modifier.testTag("tab_watchlist")
                 )
                 NavigationBarItem(
@@ -243,7 +247,6 @@ fun HomeScreen(
                         BadgedBox(badge = {
                             if (watchedItems.isNotEmpty()) {
                                 Badge(
-                                    modifier = Modifier.offset(x = 8.dp, y = (-2).dp),
                                     containerColor = MaterialTheme.colorScheme.secondary,
                                     contentColor = MaterialTheme.colorScheme.onSecondary
                                 ) {
@@ -259,33 +262,35 @@ fun HomeScreen(
                             Icon(Icons.Default.Check, contentDescription = "Watched")
                         }
                     },
-                    label = { Text("Watched") },
+                    label = { Text("Watched", fontSize = if (isLandscape) 10.sp else 12.sp) },
                     modifier = Modifier.testTag("tab_watched")
                 )
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
                     icon = { Icon(Icons.Default.Subscriptions, contentDescription = "My Services") },
-                    label = { Text("My Services") },
+                    label = { Text("My Services", fontSize = if (isLandscape) 10.sp else 12.sp) },
                     modifier = Modifier.testTag("tab_services")
                 )
                 NavigationBarItem(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
                     icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Explore") },
-                    label = { Text("Explore") },
+                    label = { Text("Explore", fontSize = if (isLandscape) 10.sp else 12.sp) },
                     modifier = Modifier.testTag("tab_agent")
                 )
             }
         },
         floatingActionButton = {
+            // Suppress global feedback FAB when actively chatting with Olivia to prevent overlapping input controls
+            val isChattingWithOlivia = selectedTab == 3 && exploreSubTab == 1
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.navigationBarsPadding()
             ) {
-                // Global Beta Feedback FAB
-                if (enableBetaFeedback) {
+                // Global Beta Feedback FAB (hidden during active chat conversation)
+                if (enableBetaFeedback && !isChattingWithOlivia) {
                     FloatingFeedbackButton(
                         onClick = { showFeedbackDialog = true }
                     )
@@ -830,7 +835,7 @@ fun WatchlistTabContent(
         watchlistItems.filter { item ->
             item.status != MediaStatus.WATCHED.name &&
             item.providersList.any { activeProviderIds.contains(it) || freeProviderIds.contains(it) }
-        }.distinctBy { it.title.trim().lowercase() }.sortedByDescending { it.rating ?: 0.0 }.take(8)
+        }.distinctBy { com.example.data.util.MediaTitleSanitizer.cleanCandidateTitle(it.title).lowercase() }.sortedByDescending { it.rating ?: 0.0 }.take(8)
     }
 
     val activeAdvancedCount = selectedPlatforms.size + selectedGenres.size + selectedEras.size + (if (minRating > 0.0) 1 else 0) + (if (selectedPodcastId != null) 1 else 0)
@@ -926,7 +931,7 @@ fun WatchlistTabContent(
             } else {
                 true
             }
-        }.distinctBy { it.title.trim().lowercase() }
+        }.distinctBy { com.example.data.util.MediaTitleSanitizer.cleanCandidateTitle(it.title).lowercase() }
     }
 
     val processedItems = remember(filteredItems, searchQuery, sortBy) {
@@ -1069,6 +1074,12 @@ fun WatchlistTabContent(
                                         }
                                     }
                                 },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                    focusedContainerColor = DarkInputBackground,
+                                    unfocusedContainerColor = DarkInputBackground
+                                ),
                                 modifier = Modifier
                                     .weight(1.5f)
                                     .height(50.dp),
@@ -1825,7 +1836,7 @@ fun MediaItemCard(
                             text = item.overview,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -1839,13 +1850,37 @@ fun MediaItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Streaming Providers availability badges
+                val providers = item.providersList
+                val freeProviderIds = remember(allProviders) {
+                    allProviders.filter { it.costPerMonth == 0.0 }.map { it.id }.toSet()
+                }
+                val hasFree = remember(providers, freeProviderIds) {
+                    providers.any { freeProviderIds.contains(it) }
+                }
+
+                // Streaming Providers availability badges with strict non-overlapping bounds
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f).padding(end = 8.dp)
                 ) {
-                    val providers = item.providersList
+                    if (hasFree) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = FreeBadgeContainer,
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "FREE",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black,
+                                fontSize = 9.sp,
+                                color = OnFreeBadgeContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
                     if (providers.isEmpty()) {
                         Surface(
                             shape = CircleShape,
@@ -1860,8 +1895,8 @@ fun MediaItemCard(
                             )
                         }
                     } else {
-                        // Limit display of providers to 3 to avoid overflow
-                        providers.take(3).forEach { pId ->
+                        val maxDisplay = if (hasFree) 1 else 2
+                        providers.take(maxDisplay).forEach { pId ->
                             val fullProvider = allProviders.find { it.id == pId }
                             val isSubscribed = activeSubscribedIds.contains(pId)
 
@@ -1900,17 +1935,20 @@ fun MediaItemCard(
                                         } else {
                                             MaterialTheme.colorScheme.outline
                                         },
-                                        fontWeight = if (isSubscribed) FontWeight.Bold else FontWeight.Normal
+                                        fontWeight = if (isSubscribed) FontWeight.Bold else FontWeight.Normal,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 110.dp)
                                     )
                                 }
                             }
                         }
-                        if (providers.size > 3) {
+                        if (providers.size > maxDisplay) {
                             Text(
-                                text = "+${providers.size - 3} more",
+                                text = "+${providers.size - maxDisplay} more",
                                 style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                                 color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.padding(start = 4.dp)
+                                modifier = Modifier.padding(start = 2.dp)
                             )
                         }
                     }
@@ -2371,7 +2409,14 @@ fun WatchedTabContent(
                     .weight(1f)
                     .height(48.dp),
                 textStyle = MaterialTheme.typography.bodyMedium,
-                shape = RoundedCornerShape(12.dp)
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = DarkInputBackground,
+                    unfocusedContainerColor = DarkInputBackground,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = DarkBorderOutline,
+                    cursorColor = MaterialTheme.colorScheme.primary
+                )
             )
 
             // Compact Sort Dropdown
@@ -3252,6 +3297,12 @@ fun MonthlyRoiContent(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "ℹ️ Note: Marking subscriptions inactive in Streamwise tracks your target savings. To pause or cancel billing, remember to adjust your subscription in each service's account settings.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
                             }
                         }
                     }
@@ -3616,7 +3667,14 @@ fun AddMediaDialog(
                     minLines = 3,
                     maxLines = 6,
                     modifier = Modifier.fillMaxWidth().testTag("add_input_title"),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = DarkInputBackground,
+                        unfocusedContainerColor = DarkInputBackground,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = DarkBorderOutline,
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    )
                 )
 
                 OutlinedTextField(
@@ -3625,7 +3683,14 @@ fun AddMediaDialog(
                     label = { Text("Personal Notes (Optional)") },
                     placeholder = { Text("e.g. Danny recommended this") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = DarkInputBackground,
+                        unfocusedContainerColor = DarkInputBackground,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = DarkBorderOutline,
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    )
                 )
 
                 OutlinedTextField(
@@ -3634,7 +3699,14 @@ fun AddMediaDialog(
                     label = { Text("Source / Origins (Optional)") },
                     placeholder = { Text("e.g. Podcast: The Big Picture") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = DarkInputBackground,
+                        unfocusedContainerColor = DarkInputBackground,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = DarkBorderOutline,
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    )
                 )
 
                 Text(
@@ -3787,31 +3859,30 @@ fun CheckInBottomSheet(
                             modifier = Modifier.fillMaxWidth().testTag("check_in_yes"),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Yes, finished it! (Logged to History)")
+                            Text("Yes, finished it →")
                         }
 
-                        Button(
+                        FilledTonalButton(
                             onClick = { flowStep = 2 },
                             modifier = Modifier.fillMaxWidth().testTag("check_in_partial"),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Watched some of it (Logged partial time)")
+                            Text("Watched partially →")
                         }
 
-                        Button(
+                        OutlinedButton(
                             onClick = { flowStep = 3 },
                             modifier = Modifier.fillMaxWidth().testTag("check_in_else"),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("Watched something else")
+                            Text("Watched something else →")
                         }
 
-                        OutlinedButton(
+                        TextButton(
                             onClick = onLoggedNothing,
-                            modifier = Modifier.fillMaxWidth().testTag("check_in_nothing"),
-                            shape = RoundedCornerShape(12.dp)
+                            modifier = Modifier.fillMaxWidth().testTag("check_in_nothing")
                         ) {
-                            Text("Didn't watch anything")
+                            Text("Didn't watch anything", color = MaterialTheme.colorScheme.outline)
                         }
                     }
 
@@ -3833,7 +3904,14 @@ fun CheckInBottomSheet(
                             label = { Text("Duration Watched (Minutes)") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth().testTag("input_duration")
+                            modifier = Modifier.fillMaxWidth().testTag("input_duration"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = DarkInputBackground,
+                                unfocusedContainerColor = DarkInputBackground,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = DarkBorderOutline,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
                         )
 
                         Text("Which service did you watch this on?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -3848,7 +3926,14 @@ fun CheckInBottomSheet(
                             onValueChange = { notesInput = it },
                             label = { Text("Notes (Optional)") },
                             placeholder = { Text("e.g. Loved the plot twist!") },
-                            modifier = Modifier.fillMaxWidth().height(80.dp)
+                            modifier = Modifier.fillMaxWidth().height(80.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = DarkInputBackground,
+                                unfocusedContainerColor = DarkInputBackground,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = DarkBorderOutline,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
                         )
 
                         Row(
@@ -3892,7 +3977,14 @@ fun CheckInBottomSheet(
                             label = { Text("Minutes Watched") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth().testTag("input_duration_partial")
+                            modifier = Modifier.fillMaxWidth().testTag("input_duration_partial"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = DarkInputBackground,
+                                unfocusedContainerColor = DarkInputBackground,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = DarkBorderOutline,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
                         )
 
                         Text("Which service did you watch this on?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -3907,7 +3999,14 @@ fun CheckInBottomSheet(
                             onValueChange = { notesInput = it },
                             label = { Text("Session notes") },
                             placeholder = { Text("e.g. Watched first 30 mins") },
-                            modifier = Modifier.fillMaxWidth().height(80.dp)
+                            modifier = Modifier.fillMaxWidth().height(80.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = DarkInputBackground,
+                                unfocusedContainerColor = DarkInputBackground,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = DarkBorderOutline,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
                         )
 
                         Row(
@@ -3951,7 +4050,14 @@ fun CheckInBottomSheet(
                             label = { Text("What did you watch?") },
                             placeholder = { Text("Movie or Show Title") },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("input_other_title")
+                            modifier = Modifier.fillMaxWidth().testTag("input_other_title"),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = DarkInputBackground,
+                                unfocusedContainerColor = DarkInputBackground,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = DarkBorderOutline,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
                         )
 
                         OutlinedTextField(
@@ -3960,7 +4066,14 @@ fun CheckInBottomSheet(
                             label = { Text("Duration (Minutes)") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = DarkInputBackground,
+                                unfocusedContainerColor = DarkInputBackground,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = DarkBorderOutline,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
                         )
 
                         Text("Which service did you watch this on?", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
@@ -4103,7 +4216,7 @@ fun ServiceDetailBottomSheet(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (isActive) "Active Subscription" else "Inactive / Not Subscribed",
+                            text = if (isActive) "Active (Tracked in Streamwise)" else "Inactive / Paused (Tracked in Streamwise)",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
                         )
@@ -4115,6 +4228,12 @@ fun ServiceDetailBottomSheet(
                     onCheckedChange = { isActive = it }
                 )
             }
+
+            Text(
+                text = "Toggle off to calculate savings when you pause or cancel billing on ${provider.name}'s website.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
@@ -4135,7 +4254,14 @@ fun ServiceDetailBottomSheet(
                     label = { Text("Plan Tier") },
                     placeholder = { Text("Standard, Ad-Free...") },
                     modifier = Modifier.weight(1.2f),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = DarkInputBackground,
+                        unfocusedContainerColor = DarkInputBackground,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = DarkBorderOutline,
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    )
                 )
 
                 OutlinedTextField(
@@ -4144,7 +4270,14 @@ fun ServiceDetailBottomSheet(
                     label = { Text("Cost ($/mo)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.weight(0.8f),
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = DarkInputBackground,
+                        unfocusedContainerColor = DarkInputBackground,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = DarkBorderOutline,
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    )
                 )
             }
 
@@ -4155,7 +4288,14 @@ fun ServiceDetailBottomSheet(
                 placeholder = { Text("e.g. 15") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = DarkInputBackground,
+                    unfocusedContainerColor = DarkInputBackground,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = DarkBorderOutline,
+                    cursorColor = MaterialTheme.colorScheme.primary
+                )
             )
 
             // Tenure & ROI Calculation Card
@@ -4776,7 +4916,14 @@ fun SettingsDialog(
                                         onValueChange = { nameInput = it },
                                         label = { Text("Your Name") },
                                         singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground,
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = DarkBorderOutline,
+                                            cursorColor = MaterialTheme.colorScheme.primary
+                                        )
                                     )
                                     Button(
                                         onClick = { onSaveUserName(nameInput) },
@@ -4821,7 +4968,14 @@ fun SettingsDialog(
                                         label = { Text("Letterboxd Username") },
                                         placeholder = { Text("e.g. scriptedmind") },
                                         singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground,
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = DarkBorderOutline,
+                                            cursorColor = MaterialTheme.colorScheme.primary
+                                        )
                                     )
 
                                     Row(
@@ -4941,7 +5095,14 @@ fun SettingsDialog(
                                         label = { Text("Apps Script Webhook URL") },
                                         placeholder = { Text("https://script.google.com/macros/s/.../exec") },
                                         singleLine = true,
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground,
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = DarkBorderOutline,
+                                            cursorColor = MaterialTheme.colorScheme.primary
+                                        )
                                     )
 
                                     Row(
@@ -5217,11 +5378,12 @@ fun SettingsDialog(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("TMDB API Key", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Movie Catalog & Posters (TMDB)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Enables movie posters, cast details, runtimes, and community ratings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                     OutlinedTextField(
                                         value = tmdbInput,
                                         onValueChange = { tmdbInput = it },
-                                        label = { Text("TMDB Key") },
+                                        label = { Text("TMDB API Key") },
                                         singleLine = true,
                                         visualTransformation = if (showTmdb) VisualTransformation.None else PasswordVisualTransformation(),
                                         trailingIcon = {
@@ -5229,14 +5391,20 @@ fun SettingsDialog(
                                                 Icon(imageVector = if (showTmdb) Icons.Default.Clear else Icons.Default.Search, contentDescription = null)
                                             }
                                         },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground
+                                        ),
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Button(
                                         onClick = { onSaveTmdbApiKey(tmdbInput) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp)
+                                        shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Text("Save TMDB Key", fontSize = 12.sp)
+                                        Text("Save TMDB Access", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -5248,7 +5416,8 @@ fun SettingsDialog(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Gemini API (AI Explore)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("AI Recommendations Engine (Gemini)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Powers Olivia, custom film taste analysis, and personalized viewing suggestions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                     OutlinedTextField(
                                         value = geminiInput,
                                         onValueChange = { geminiInput = it },
@@ -5260,14 +5429,20 @@ fun SettingsDialog(
                                                 Icon(imageVector = if (showGemini) Icons.Default.Clear else Icons.Default.Search, contentDescription = null)
                                             }
                                         },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground
+                                        ),
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Button(
                                         onClick = { onSaveGeminiApiKey(geminiInput) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp)
+                                        shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Text("Save Gemini Key", fontSize = 12.sp)
+                                        Text("Save AI Recommendations Key", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -5279,7 +5454,8 @@ fun SettingsDialog(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Watchmode API (Deep Links)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Direct Streaming Launchers (Watchmode)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Unlocks 1-tap playback directly into Netflix, Max, Apple TV+, and installed streaming apps.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                     OutlinedTextField(
                                         value = wmInput,
                                         onValueChange = { wmInput = it },
@@ -5291,15 +5467,21 @@ fun SettingsDialog(
                                                 Icon(imageVector = if (showWm) Icons.Default.Clear else Icons.Default.Search, contentDescription = null)
                                             }
                                         },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground
+                                        ),
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Button(
                                         onClick = { onSaveWatchmodeApiKey(wmInput) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                                     ) {
-                                        Text("Save Watchmode Key", fontSize = 12.sp)
+                                        Text("Save Streaming Launch Key", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -5311,21 +5493,28 @@ fun SettingsDialog(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Local AI Synthesis (Ollama)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Private Offline Assistant (Ollama)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Connects to your home computer running Ollama to chat with Olivia privately on your home network.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                     OutlinedTextField(
                                         value = hostInput,
                                         onValueChange = { hostInput = it },
                                         label = { Text("Ollama Host IP") },
                                         placeholder = { Text("e.g. 192.168.1.100") },
                                         singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground
+                                        ),
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Button(
                                         onClick = { onSaveOllamaHost(hostInput) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp)
+                                        shape = RoundedCornerShape(10.dp)
                                     ) {
-                                        Text("Save Ollama Host", fontSize = 12.sp)
+                                        Text("Save Offline Host", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -5337,7 +5526,8 @@ fun SettingsDialog(
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("GitHub Token (PAT)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Beta Feedback & Issue Submission", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                    Text("Allows submitting bug reports and feature requests directly to our project backlog.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                     OutlinedTextField(
                                         value = tokenInput,
                                         onValueChange = { tokenInput = it },
@@ -5353,15 +5543,21 @@ fun SettingsDialog(
                                                 )
                                             }
                                         },
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground
+                                        ),
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                     Button(
                                         onClick = { onSaveGithubToken(tokenInput) },
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp),
+                                        shape = RoundedCornerShape(10.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)
                                     ) {
-                                        Text("Save GitHub Token", fontSize = 12.sp)
+                                        Text("Save Feedback Token", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -6563,7 +6759,7 @@ fun ExploreTabContent(
                                             letterSpacing = 1.sp
                                         )
                                         Text(
-                                            "Powered by Gemini 3.1 Pro",
+                                            "Personalized Film & Taste Analysis",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.outline
                                         )
@@ -6767,7 +6963,7 @@ fun ExploreTabContent(
                                 ) {
                                     CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                                     Spacer(modifier = Modifier.width(12.dp))
-                                    Text("Synthesizing vault profile with Gemini Pro...", style = MaterialTheme.typography.bodySmall)
+                                    Text("Analyzing your cinematic vault...", style = MaterialTheme.typography.bodySmall)
                                 }
                             }
                         }
@@ -7246,7 +7442,7 @@ fun AgentChatTabContent(
                 Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                    Text("Olivia (Gemma 4)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("Olivia — AI Film Companion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("Ask me about your Vault, or ask for recommendations based on your history.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -7316,22 +7512,29 @@ fun AgentChatTabContent(
                 placeholder = { Text("What should I watch tonight?") },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(24.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedContainerColor = DarkInputBackground,
+                    unfocusedContainerColor = DarkInputBackground
+                ),
                 maxLines = 4
             )
-            FloatingActionButton(
+            FilledIconButton(
                 onClick = {
                     if (inputMessage.isNotBlank()) {
                         onSendMessage(inputMessage)
                         inputMessage = ""
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier.size(52.dp),
                 shape = CircleShape,
-                elevation = FloatingActionButtonDefaults.elevation(0.dp)
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send message")
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send message", modifier = Modifier.size(20.dp))
             }
         }
     }

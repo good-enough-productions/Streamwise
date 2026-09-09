@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.Feedback
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
+import com.example.ui.theme.DarkInputBackground
+import com.example.ui.theme.DarkBorderOutline
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -178,7 +180,14 @@ fun FeedbackDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("feedback_title_input"),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = DarkInputBackground,
+                            unfocusedContainerColor = DarkInputBackground,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = DarkBorderOutline,
+                            cursorColor = MaterialTheme.colorScheme.primary
+                        )
                     )
 
                     // Description
@@ -191,7 +200,14 @@ fun FeedbackDialog(
                             .fillMaxWidth()
                             .heightIn(min = 100.dp)
                             .testTag("feedback_description_input"),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = DarkInputBackground,
+                            unfocusedContainerColor = DarkInputBackground,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = DarkBorderOutline,
+                            cursorColor = MaterialTheme.colorScheme.primary
+                        )
                     )
 
                     // Screenshot inclusion toggle
