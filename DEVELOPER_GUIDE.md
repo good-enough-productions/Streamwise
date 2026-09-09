@@ -330,4 +330,34 @@ Architecture updates addressing mobile visual density and couch-first discovery:
   - Pre-indexes 2,300+ dynamic titles and static mentions into `allDynamicTitlesSet` and `staticMentionTitles` hash sets.
   - Converts $O(N \times M)$ string search loops across 1,151 movies into instantaneous $O(1)$ hash set lookups (<1ms), completely eliminating main-thread freezing and Android input dispatch timeouts.
 
+## 10. Share & Multi-Format Export Suite, Sync Throttling, and Watched Vault Controls (Issues #18, #19, #20)
+
+### 1. Interactive Share Suite (`ShareAndExportDialog`)
+- **Intent Chooser (`ACTION_SEND`)**:
+  - `StreamViewModel.generateWatchlistShareText()` formats top watchlist recommendations with titles, release years, star ratings, and streaming provider badges.
+  - Passes formatted text to `Intent.createChooser` with `Intent.ACTION_SEND` and MIME type `text/plain`.
+- **Multi-Format Local Exports**:
+  - Integrated Markdown (Obsidian notes) export to `Downloads/StreamwiseVault`.
+  - Integrated Letterboxd Diary CSV export with standard headers (`Title`, `Year`, `Rating10`, `WatchedDate`).
+  - Integrated system clipboard copy for quick messaging.
+
+### 2. UI Responsiveness & Sync Throttling
+- **Throttled Immediate Sync**:
+  - `StreamViewModel.triggerImmediateSync(force = false)` enforces a 30-minute cooldown window stored in `UserPreferencesManager.lastImmediateSyncTime`.
+  - Removed unconditional foreground sync and redundant network discovery triggers on `MainActivity.onResume()`.
+- **Cached Layout Lookups**:
+  - Precomputed `activeOrFreeProviderIds: Set<String>` and `providerMap: Map<String, StreamingProvider>` within `WatchlistTabContent` via `remember(allProviders)`.
+  - Passed precomputed collections to `PosterGridItem` to eliminate expensive per-card list filtering and mapping during scroll passes.
+
+### 3. Card Removal & Watched State Management
+- **`RemoveOrWatchedConfirmationDialog`**:
+  - Intercepts card removal `✕` tap and provides clear user choices:
+    - Watchlist items: `Mark as Watched` (updates status to `WATCHED`, logs `WatchSession`, updates timestamp) vs `Delete` (purges from Room database).
+    - Watched items: `Move to Watchlist` (restores status to `WATCHLIST`) vs `Delete`.
+- **1-Tap Watched Shortcut**:
+  - Direct `[✓]` button on `MediaItemCard` allowing instant 1-tap logging to the Watched Vault.
+- **Watched Destination in Add Media**:
+  - `AddMediaDialog` includes a destination selector (`[ Watchlist ]` vs `[ Watched Vault ]`), allowing direct cataloging of retroactively watched films with automatic session recording.
+
+
 

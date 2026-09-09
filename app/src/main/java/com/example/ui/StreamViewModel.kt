@@ -21,6 +21,7 @@ import com.example.data.local.ProviderUsageStats
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
 import com.example.data.model.StreamingProvider
+import com.example.data.model.WatchSession
 import com.example.data.model.GeminiAnalysisResult
 import com.example.data.model.PodcastEpisode
 import com.example.data.model.MovieNewsItem
@@ -311,6 +312,13 @@ class StreamViewModel(
         val targetUser = (username ?: userPreferences.letterboxdUsername).trim()
         if (targetUser.isBlank()) {
             if (!silent) _statusMessage.value = "Please enter a Letterboxd username."
+            return
+        }
+        val now = System.currentTimeMillis()
+        val lastSync = userPreferences.lastLetterboxdSyncTime
+        val thirtyMinutesMs = 30 * 60 * 1000L
+        if (silent && (now - lastSync) < thirtyMinutesMs) {
+            android.util.Log.d(TAG, "syncLetterboxdLive: Skipped silent sync (synced ${(now - lastSync) / 60000}m ago)")
             return
         }
         viewModelScope.launch(Dispatchers.IO) {
@@ -1473,12 +1481,14 @@ class StreamViewModel(
 
     /**
      * Supports multiline add where each non-empty line is treated as one title.
+     * Can add to either WATCHLIST or WATCHED vault.
      */
     fun addCustomWatchlistItemsBulk(
         multilineTitles: String, 
         associatedProviders: List<String>,
         userNotes: String? = null,
-        importSource: String? = null
+        importSource: String? = null,
+        targetStatus: String = MediaStatus.WATCHLIST.name
     ) {
         viewModelScope.launch {
             val titles = multilineTitles
@@ -1491,22 +1501,42 @@ class StreamViewModel(
             if (titles.isEmpty()) return@launch
 
             val providerString = if (associatedProviders.isEmpty()) null else associatedProviders.joinToString(",")
+            val isWatched = targetStatus == MediaStatus.WATCHED.name
+            val now = System.currentTimeMillis()
+
             titles.forEach { title ->
                 val item = MediaItem(
                     title = title,
-                    status = MediaStatus.WATCHLIST.name,
+                    status = if (isWatched) MediaStatus.WATCHED.name else MediaStatus.WATCHLIST.name,
                     providerIds = providerString,
                     userNotes = userNotes,
-                    importSource = importSource
+                    importSource = importSource,
+                    watchedAt = if (isWatched) now else null
                 )
-                repository.insertMediaItem(item)
+                val newId = repository.insertMediaItem(item)
+                if (isWatched) {
+                    repository.mediaDao.insertWatchSession(
+                        WatchSession(
+                            mediaItemId = newId,
+                            mediaItemTitle = title,
+                            providerId = associatedProviders.firstOrNull(),
+                            durationMinutes = 110,
+                            watchedAt = now,
+                            notes = userNotes
+                        )
+                    )
+                }
             }
 
-            enqueueTmdbSync(showMessage = false)
+            val destName = if (isWatched) "Watched Vault" else "Watchlist"
             _statusMessage.value = if (titles.size == 1) {
-                "\"${titles.first()}\" added to watchlist!"
+                "\"${titles.first()}\" added to $destName!"
             } else {
-                "Added ${titles.size} titles to watchlist. Matching from TMDB started."
+                "Added ${titles.size} titles to $destName."
+            }
+
+            if (!isWatched) {
+                enqueueTmdbSync(showMessage = false)
             }
         }
     }
@@ -1720,7 +1750,15 @@ class StreamViewModel(
         }
     }
 
-    fun triggerImmediateSync() {
+    fun triggerImmediateSync(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        val lastSync = userPreferences.lastImmediateSyncTime
+        val thirtyMinutesMs = 30 * 60 * 1000L
+        if (!force && (now - lastSync) < thirtyMinutesMs) {
+            android.util.Log.d(TAG, "triggerImmediateSync: Throttled (last synced ${(now - lastSync) / 60000}m ago)")
+            return
+        }
+        userPreferences.lastImmediateSyncTime = now
         syncPodcastRecommendations()
         syncWatchlistMetadata(forceAll = false)
         enqueueTmdbSync(showMessage = false)
@@ -1741,6 +1779,63 @@ class StreamViewModel(
         if (showMessage) {
             _statusMessage.value = "Fetching streaming availability from TMDB\u2026"
         }
+    }
+
+    fun markItemAsWatched(item: MediaItem, rating: Double? = null, serviceUsed: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val chosenProvider = serviceUsed ?: item.providersList.firstOrNull()
+            val now = System.currentTimeMillis()
+            val updated = item.copy(
+                status = MediaStatus.WATCHED.name,
+                watchedAt = now,
+                rating = rating ?: item.rating,
+                updatedAt = now
+            )
+            repository.updateMediaItem(updated)
+            repository.mediaDao.insertWatchSession(
+                WatchSession(
+                    mediaItemId = item.id,
+                    mediaItemTitle = item.title,
+                    providerId = chosenProvider,
+                    durationMinutes = 110,
+                    watchedAt = now,
+                    notes = if (rating != null && rating > 0.0) "Rated ${String.format(java.util.Locale.US, "%.1f", rating)}★ via Streamwise" else null
+                )
+            )
+            _statusMessage.value = "Moved \"${item.title}\" to Watched Vault."
+        }
+    }
+
+    fun moveItemToWatchlist(item: MediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.mediaDao.getMediaItemById(item.id) ?: item
+            val updated = current.copy(
+                status = MediaStatus.WATCHLIST.name,
+                watchedAt = null,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateMediaItem(updated)
+            _statusMessage.value = "Moved \"${item.title}\" back to Watchlist."
+        }
+    }
+
+    suspend fun generateWatchlistShareText(maxCount: Int = 10): String = withContext(Dispatchers.IO) {
+        val all = repository.allMediaItems.first()
+        val watchlist = all.filter { it.status == MediaStatus.WATCHLIST.name }
+        if (watchlist.isEmpty()) {
+            return@withContext "🍿 Check out Streamwise — my personal streaming watchlist companion!"
+        }
+        val sb = StringBuilder()
+        sb.appendLine("🍿 Streamwise Watchlist Picks:")
+        val sample = watchlist.take(maxCount)
+        sample.forEachIndexed { idx, item ->
+            val provs = item.providersList.joinToString(", ").ifEmpty { "On Demand" }
+            val ratingStr = item.rating?.let { " (${String.format(java.util.Locale.US, "%.1f", it)}★)" } ?: ""
+            sb.appendLine("${idx + 1}. ${item.title}$ratingStr — $provs")
+        }
+        sb.appendLine()
+        sb.append("Tracked with Streamwise: Smart Couch-First Movie Vault")
+        sb.toString()
     }
 
     fun deleteItem(item: MediaItem) {

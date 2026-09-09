@@ -56,14 +56,11 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Core Habit Loop Requirement 3:
         // Automatically check Room database for "INTENDING_TO_WATCH" items when the app returns to the foreground.
-        Log.d(TAG, "App returned to foreground: Executing check-in watcher loop and immediate sync.")
+        Log.d(TAG, "App returned to foreground: Checking for intended watch return.")
         viewModel.checkForIntendingToWatchOnResume()
         
-        // Zero-Touch Automation: Trigger immediate TMDB/Ollama sync on every resume to ensure data is fresh
-        viewModel.triggerImmediateSync()
-        
-        // Zero-Touch Casting: Start discovering local UPnP/DLNA devices on resume
-        viewModel.startDeviceDiscovery()
+        // Throttled sync: Only executes if >= 30 minutes have elapsed since last sync
+        viewModel.triggerImmediateSync(force = false)
     }
 
     override fun onNewIntent(intent: Intent) {

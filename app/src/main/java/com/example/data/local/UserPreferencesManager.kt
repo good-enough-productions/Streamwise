@@ -58,6 +58,10 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getLong(KEY_LAST_LETTERBOXD_SYNC_TIME, 0L)
         set(value) = prefs.edit().putLong(KEY_LAST_LETTERBOXD_SYNC_TIME, value).apply()
 
+    var lastImmediateSyncTime: Long
+        get() = prefs.getLong(KEY_LAST_IMMEDIATE_SYNC_TIME, 0L)
+        set(value) = prefs.edit().putLong(KEY_LAST_IMMEDIATE_SYNC_TIME, value).apply()
+
     var isGridView: Boolean
         get() = prefs.getBoolean(KEY_IS_GRID_VIEW, true)
         set(value) = prefs.edit().putBoolean(KEY_IS_GRID_VIEW, value).apply()
@@ -76,6 +80,7 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_LETTERBOXD_USERNAME = "letterboxd_username"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_LAST_LETTERBOXD_SYNC_TIME = "last_letterboxd_sync_time"
+        private const val KEY_LAST_IMMEDIATE_SYNC_TIME = "last_immediate_sync_time"
         private const val KEY_IS_GRID_VIEW = "is_grid_view"
     }
 }

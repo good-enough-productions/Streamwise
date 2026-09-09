@@ -2,6 +2,31 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.6.0] - 2026-09-09
+
+### Added
+- **Share & Multi-Format Export Suite (Resolves Issue #18)**:
+  - Top app bar Share icon now launches an interactive `ShareAndExportDialog` with 4 clear export options:
+    - 📤 **Share Recommendations**: Opens the native Android share chooser with formatted titles and streaming platform availability for easy sharing via SMS, Discord, Slack, etc.
+    - 📝 **Export Markdown (Obsidian)**: Generates linked Markdown notes directly into `Downloads/StreamwiseVault` for personal knowledge management and Obsidian vaults.
+    - 📊 **Export Letterboxd CSV**: Generates standard diary import CSV files for seamless Letterboxd sync.
+    - 📋 **Copy Picks to Clipboard**: Instantly copies a clean list of top recommendations to the system clipboard.
+- **Card Removal, 1-Tap Watched & Vault Destination Controls (Resolves Issue #20)**:
+  - Tapping the `X` button on any movie card now opens a `RemoveOrWatchedConfirmationDialog` clarifying the exact action:
+    - For Watchlist items: choice between `Mark as Watched` (moves to Watched Vault) vs `Delete` (permanently removes item).
+    - For Watched items: choice between `Move to Watchlist` (restores to active queue) vs `Delete`.
+  - Added dedicated 1-tap `[✓]` Watched button on `MediaItemCard` right beside the "Watch" button.
+  - Added `[✓ Mark as Watched]` / `[↶ Move to Watchlist]` actions inside `MovieDetailsBottomSheet`.
+  - Upgraded `AddMediaDialog` with a destination toggle allowing users to directly catalog films straight into the **Watched Vault** (with automatic watch session logging) or the **Watchlist**.
+
+### Fixed & Improved
+- **UI Responsiveness & Sync Throttling (Resolves Issue #19)**:
+  - Eliminated UI lag and recomposition stutter caused by unthrottled sync operations on app resume.
+  - Implemented 30-minute persistent cooldown throttling on `triggerImmediateSync()` and Letterboxd live RSS background fetches.
+  - Optimized `PosterGridItem` rendering from $O(N)$ allocations to $O(1)$ set lookups using precomputed `remember` provider sets.
+  - Removed redundant network thrashes when switching to the Watched Vault tab.
+
+
 ## [1.5.3] - 2026-09-06
 
 ### Added

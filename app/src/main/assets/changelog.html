@@ -20,6 +20,16 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.6.0</span> <span class="date">September 2026</span></h2>
+        <h3>Interactive Share Suite, Performance Throttling & 1-Tap Watched Controls (Issues #18, #19, #20)</h3>
+        <ul>
+            <li><strong>Interactive Share & Multi-Format Export Suite (Issue #18):</strong> Tapping the Top App Bar Share icon now presents an intuitive modal with 4 tailored actions: 📤 <em>Share Recommendations</em> (native Android system share chooser with formatted titles & streaming availability for messaging/socials), 📝 <em>Export Markdown (Obsidian)</em> (generates structured notes in <code>Downloads/StreamwiseVault</code>), 📊 <em>Export Letterboxd CSV</em> (standard diary import CSV), and 📋 <em>Copy Picks to Clipboard</em>.</li>
+            <li><strong>UI Responsiveness & Sync Throttling (Issue #19):</strong> Resolved performance degradation and UI hitching on app resume by implementing a 30-minute persistent cooldown on automatic background synchronization and Letterboxd RSS updates. Upgraded <code>PosterGridItem</code> rendering to use precomputed provider lookups, slashing redundant allocations on every layout pass.</li>
+            <li><strong>Card Removal & 1-Tap Watched Tracking (Issue #20):</strong> Tapping the <code>X</code> icon on any movie card now displays a confirmation dialog clarifying removal actions: choose between <code>[✓ Mark as Watched]</code> (moves to Watched Vault) and <code>[🗑 Delete]</code> (permanently removes). Added a direct 1-tap Watched button on cards and bottom sheets, plus a destination toggle in the Add Movie dialog to catalog films directly into the Watched Vault.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.5.9</span> <span class="date">September 2026</span></h2>
         <h3>Couch-First Poster Density, Letterboxd Sub-Navigation & Zero-Intermediary Deep Linking</h3>
         <ul>
