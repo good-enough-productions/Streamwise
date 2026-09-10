@@ -5450,30 +5450,31 @@ fun SettingsDialog(
                     .fillMaxWidth()
                     .heightIn(max = 520.dp)
             ) {
-                TabRow(
+                ScrollableTabRow(
                     selectedTabIndex = activeSubTab,
                     containerColor = Color.Transparent,
+                    edgePadding = 0.dp,
                     modifier = Modifier.padding(bottom = 12.dp)
                 ) {
                     Tab(
                         selected = activeSubTab == 0,
                         onClick = { activeSubTab = 0 },
-                        text = { Text("Profile", fontSize = 11.sp) }
+                        text = { Text("Profile", fontSize = 11.sp, maxLines = 1) }
                     )
                     Tab(
                         selected = activeSubTab == 1,
                         onClick = { activeSubTab = 1 },
-                        text = { Text("Services", fontSize = 11.sp) }
+                        text = { Text("Services", fontSize = 11.sp, maxLines = 1) }
                     )
                     Tab(
                         selected = activeSubTab == 2,
                         onClick = { activeSubTab = 2 },
-                        text = { Text("Guides", fontSize = 11.sp) }
+                        text = { Text("Guides", fontSize = 11.sp, maxLines = 1) }
                     )
                     Tab(
                         selected = activeSubTab == 3,
                         onClick = { activeSubTab = 3 },
-                        text = { Text("System", fontSize = 11.sp) }
+                        text = { Text("System", fontSize = 11.sp, maxLines = 1) }
                     )
                 }
 
