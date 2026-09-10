@@ -1781,13 +1781,18 @@ class StreamViewModel(
         }
     }
 
-    fun markItemAsWatched(item: MediaItem, rating: Double? = null, serviceUsed: String? = null) {
+    fun markItemAsWatched(
+        item: MediaItem,
+        rating: Double? = null,
+        serviceUsed: String? = null,
+        watchedDate: Long? = null
+    ) {
         viewModelScope.launch(Dispatchers.IO) {
             val chosenProvider = serviceUsed ?: item.providersList.firstOrNull()
             val now = System.currentTimeMillis()
             val updated = item.copy(
                 status = MediaStatus.WATCHED.name,
-                watchedAt = now,
+                watchedAt = watchedDate,
                 rating = rating ?: item.rating,
                 updatedAt = now
             )
@@ -1798,11 +1803,24 @@ class StreamViewModel(
                     mediaItemTitle = item.title,
                     providerId = chosenProvider,
                     durationMinutes = 110,
-                    watchedAt = now,
+                    watchedAt = watchedDate ?: now,
                     notes = if (rating != null && rating > 0.0) "Rated ${String.format(java.util.Locale.US, "%.1f", rating)}★ via Streamwise" else null
                 )
             )
             _statusMessage.value = "Moved \"${item.title}\" to Watched Vault."
+        }
+    }
+
+    fun updateWatchDate(item: MediaItem, newWatchedAt: Long?, rating: Double? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = repository.mediaDao.getMediaItemById(item.id) ?: item
+            val updated = current.copy(
+                watchedAt = newWatchedAt,
+                rating = rating ?: current.rating,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateMediaItem(updated)
+            _statusMessage.value = "Updated watch details for \"${item.title}\"."
         }
     }
 

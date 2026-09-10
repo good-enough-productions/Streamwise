@@ -356,8 +356,30 @@ Architecture updates addressing mobile visual density and couch-first discovery:
     - Watched items: `Move to Watchlist` (restores status to `WATCHLIST`) vs `Delete`.
 - **1-Tap Watched Shortcut**:
   - Direct `[✓]` button on `MediaItemCard` allowing instant 1-tap logging to the Watched Vault.
-- **Watched Destination in Add Media**:
-  - `AddMediaDialog` includes a destination selector (`[ Watchlist ]` vs `[ Watched Vault ]`), allowing direct cataloging of retroactively watched films with automatic session recording.
 
+## 11. Zero-Wrap UI Architecture & Flexible Watch Date Logging (v1.6.1)
 
+### 1. Two-Row Non-Wrapping Bottom Sheet Action Bar
+- **Root Cause & Solution**:
+  - Previously, four action buttons (`OutlinedButton`, `FilledTonalButton`, `Button`, and `IconButton`) shared a single horizontal row. Material 3 default button horizontal padding (24dp $\times$ 2 = 48dp) constrained text to $<30$dp, causing single-letter vertical text wrapping (e.g. `Let\nter\nbo\nxd`).
+  - Restructured into a clean 2-row layout:
+    - **Row 1**: Full-width, prominent primary action `Watch Now` button (48dp height).
+    - **Row 2**: Spacious secondary actions: `[✓ Watched]` (or `[↶ Watchlist]`), `[↗ Letterboxd]`, and `[🗑 Delete]` with compact horizontal padding (8dp) and explicit `maxLines = 1`, `softWrap = false`.
+  - Systematically audited and enforced `maxLines = 1`, `softWrap = false`, and `TextOverflow.Ellipsis` across all buttons, filter chips, navigation tab labels, and badge rows.
 
+### 2. Immediate Watched Transition & Race Condition Fix
+- **Callback Sequencing**:
+  - Previously, `MovieDetailsBottomSheet` called `onDismiss()` before `onMarkWatchedClick()`, setting `detailMovieItem = null` before the callback executed.
+  - Now, callbacks directly capture `val m = detailMovieItem` and set `movieToMarkWatched = m` and `detailMovieItem = null` atomically, eliminating null references.
+  - Calling `viewModel.markItemAsWatched(...)` immediately updates Room database (`status = WATCHED`), which emits through Room's reactive `allMediaItems` Flow.
+  - `HomeScreen` recalculates `watchlistItems` and `watchedItems` in real-time, removing the movie from the active queue and appending it to the vault instantly.
+
+### 3. Interactive Date & Rating Dialog (`MarkWatchedDialog`)
+- **Architecture**:
+  - `MarkWatchedDialog` presents flexible watch date logging:
+    - `No Date (Default)`: Sets `watchedAt = null`, grouping the film under "Undated Logs" without falling back to import timestamps.
+    - `April 2025`: 1-tap option matching the historical bulk of Letterboxd diary entries (~55% of watched titles).
+    - `Today`: Records current epoch timestamp.
+    - `Pick Date...`: Invokes native Android `DatePickerDialog` for arbitrary date selection.
+  - Optional star rating (1–5 stars) and viewing method/service attribution (Netflix, Max, Cinema, Physical Media).
+  - Movies already in the Watched Vault feature a dedicated Watch Date banner inside `MovieDetailsBottomSheet` with a `[Change]` button to edit dates and ratings at any time via `viewModel.updateWatchDate(item, newWatchedAt, rating)`.
