@@ -92,6 +92,8 @@ fun HomeScreen(
     val letterboxdSyncResult by viewModel.letterboxdSyncResult.collectAsState()
     val letterboxdFileImportResult by viewModel.letterboxdFileImportResult.collectAsState()
     val isSyncingPodcasts by viewModel.isSyncingPodcasts.collectAsState()
+    val isBackfillingTmdb by viewModel.isBackfillingTmdb.collectAsState()
+    val backfillProgress by viewModel.backfillProgress.collectAsState()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -583,6 +585,9 @@ fun HomeScreen(
                 onToggleBetaFeedback = { viewModel.setEnableBetaFeedback(it) },
                 onPickLetterboxdFile = { letterboxdFileLauncher.launch(arrayOf("*/*", "text/*", "text/csv", "application/zip")) },
                 onExportLetterboxdCsv = onExportForLetterboxd,
+                isBackfillingTmdb = isBackfillingTmdb,
+                backfillProgress = backfillProgress,
+                onBackfillTmdb = { viewModel.backfillTmdbMetadataForAll(forceAll = false) },
                 onDismiss = { showSettingsDialog = false }
             )
         }
@@ -5417,6 +5422,9 @@ fun SettingsDialog(
     onToggleBetaFeedback: (Boolean) -> Unit = {},
     onPickLetterboxdFile: () -> Unit = {},
     onExportLetterboxdCsv: () -> Unit = {},
+    isBackfillingTmdb: Boolean = false,
+    backfillProgress: String = "",
+    onBackfillTmdb: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var activeSubTab by remember { mutableStateOf(0) } // 0: Profile, 1: Services, 2: Guides & Docs, 3: Updates & System
@@ -5986,6 +5994,29 @@ fun SettingsDialog(
                                         shape = RoundedCornerShape(10.dp)
                                     ) {
                                         Text("Save TMDB Access", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                    Text(
+                                        "Backfill TMDB IDs across all items, resolve mismatched titles, and remove duplicate watchlist entries for films you have watched.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                    OutlinedButton(
+                                        onClick = onBackfillTmdb,
+                                        enabled = !isBackfillingTmdb && tmdbApiKey.isNotBlank(),
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        if (isBackfillingTmdb) {
+                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text(if (backfillProgress.isNotBlank()) backfillProgress else "Enriching TMDB IDs...", fontSize = 12.sp)
+                                        } else {
+                                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Enrich TMDB IDs & Deduplicate Library", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                        }
                                     }
                                 }
                             }

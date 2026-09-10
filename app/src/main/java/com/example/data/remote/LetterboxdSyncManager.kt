@@ -85,14 +85,14 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
             val parsedEntries = parseRssXml(xmlContent)
             Log.d(TAG, "Successfully parsed ${parsedEntries.size} items from Letterboxd RSS.")
 
-            val existingItems = mediaDao.getAllMediaItemsList().associateBy { it.title.trim().lowercase() }.toMutableMap()
+            val existingItems = mediaDao.getAllMediaItemsList().associateBy { TmdbMatchingHelper.normalizeTitle(it.title) }.toMutableMap()
             val newlyImported = mutableListOf<MediaItem>()
 
             for (entry in parsedEntries) {
-                val normalizedTitle = entry.title.trim().lowercase()
+                val normalizedTitle = TmdbMatchingHelper.normalizeTitle(entry.title)
                 if (normalizedTitle.isEmpty()) continue
 
-                val existing = existingItems[normalizedTitle]
+                val existing = existingItems[normalizedTitle] ?: existingItems[entry.title.trim().lowercase()]
                 if (existing != null) {
                     val hasNewerWatch = entry.watchedAt > (existing.watchedAt ?: 0L)
                     val hasNewRating = entry.ratingTenScale != null && existing.rating == null
@@ -132,6 +132,8 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                     newlyImported.add(insertedItem)
                 }
             }
+
+            mediaDao.deduplicateMediaItems()
 
             Log.d(TAG, "Imported ${newlyImported.size} new watched titles into Room DB.")
             return@withContext LetterboxdSyncResult(

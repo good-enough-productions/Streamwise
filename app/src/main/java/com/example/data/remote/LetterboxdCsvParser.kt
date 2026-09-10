@@ -74,7 +74,7 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
         var alreadyPresent = 0
         val sampleTitles = mutableListOf<String>()
 
-        val existingItems = mediaDao.getAllMediaItemsList().associateBy { it.title.trim().lowercase() }.toMutableMap()
+        val existingItems = mediaDao.getAllMediaItemsList().associateBy { TmdbMatchingHelper.normalizeTitle(it.title) }.toMutableMap()
 
         val zipInput = ZipInputStream(inputStream)
         var entry = zipInput.nextEntry
@@ -116,6 +116,8 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
             entry = zipInput.nextEntry
         }
 
+        mediaDao.deduplicateMediaItems()
+
         return LetterboxdFileImportResult(
             isSuccess = true,
             sourceName = zipName,
@@ -149,13 +151,13 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
             )
         }
 
-        val existingItems = mediaDao.getAllMediaItemsList().associateBy { it.title.trim().lowercase() }.toMutableMap()
+        val existingItems = mediaDao.getAllMediaItemsList().associateBy { TmdbMatchingHelper.normalizeTitle(it.title) }.toMutableMap()
         val header = lines.first().lowercase()
 
         val isDiary = header.contains("rewatch") || header.contains("watched date")
         val isWatchlist = !isDiary && (csvName.lowercase().contains("watchlist") || !header.contains("rating"))
 
-        return if (isDiary) {
+        val importResult = if (isDiary) {
             val res = processDiaryCsvRows(lines, existingItems)
             LetterboxdFileImportResult(
                 isSuccess = true,
@@ -178,6 +180,8 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
                 sampleTitles = res.samples.distinct().take(10)
             )
         }
+        mediaDao.deduplicateMediaItems()
+        return importResult
     }
 
     private data class RowProcessResult(
@@ -218,8 +222,8 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
             val title = tokens[nameIdx].trim()
             if (title.isBlank()) continue
 
-            val normKey = title.lowercase()
-            val existing = existingMap[normKey]
+            val normKey = TmdbMatchingHelper.normalizeTitle(title)
+            val existing = existingMap[normKey] ?: existingMap[title.lowercase().trim()]
 
             val dateStr = if (dateIdx >= 0 && dateIdx < tokens.size) tokens[dateIdx].trim() else ""
             val yearStr = if (yearIdx >= 0 && yearIdx < tokens.size) tokens[yearIdx].trim() else null
@@ -308,8 +312,8 @@ class LetterboxdCsvParser(private val mediaDao: MediaDao) {
             val title = tokens[nameIdx].trim()
             if (title.isBlank()) continue
 
-            val normKey = title.lowercase()
-            val existing = existingMap[normKey]
+            val normKey = TmdbMatchingHelper.normalizeTitle(title)
+            val existing = existingMap[normKey] ?: existingMap[title.lowercase().trim()]
 
             val yearStr = if (yearIdx >= 0 && yearIdx < tokens.size) tokens[yearIdx].trim() else null
             val uriStr = if (uriIdx >= 0 && uriIdx < tokens.size) tokens[uriIdx].trim() else null
