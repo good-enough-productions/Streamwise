@@ -2,6 +2,26 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.6.1] - 2026-09-10
+
+### Fixed
+- **Awkward Text Wrapping Everywhere**:
+  - Restructured the bottom action bar in `MovieDetailsBottomSheet` into a spacious 2-row layout: a prominent full-width **Watch Now** button on top, with **Watched / Watchlist**, **Letterboxd**, and **Delete** evenly spaced below.
+  - Enforced `maxLines = 1`, `softWrap = false`, and `TextOverflow.Ellipsis` across all buttons, filter chips, navigation labels, and badges throughout the app so text never breaks awkwardly into single-letter vertical columns.
+- **Immediate Watchlist-to-Watched Move**:
+  - Fixed a race condition in `MovieDetailsBottomSheet` where `onDismiss()` was called before the mark-as-watched callback, setting the selected movie reference to `null` and preventing the move from executing.
+  - Clicking "Watched" anywhere (bottom sheet, watchlist card, or removal confirmation) now immediately transitions the movie out of the Watchlist and into the Watched Vault in Room DB.
+
+### Added
+- **Interactive Mark Watched & Custom Date Dialog (`MarkWatchedDialog`)**:
+  - Tapping "Watched" or "Change Date" now launches a dedicated dialog with flexible date options:
+    - **No Date (Default)**: Leaves `watchedAt = null`, grouping under "Undated Logs" without artificially falling back to the import timestamp.
+    - **April 2025**: 1-tap option matching the bulk of back-catalog diary history (~55% of watched titles).
+    - **Today**: Instant current timestamp logging.
+    - **Pick Date...**: Launches native Android `DatePickerDialog` to select any custom calendar date.
+  - Optional star rating (1–5 stars) and viewing method/service selector (Netflix, Max, Theater, Blu-ray, etc.).
+  - Added "Change Date" editor banner directly inside `MovieDetailsBottomSheet` for movies already in the Watched Vault.
+
 ## [1.6.0] - 2026-09-09
 
 ### Added

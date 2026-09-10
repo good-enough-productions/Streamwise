@@ -20,6 +20,25 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.6.1</span> <span class="date">September 2026</span></h2>
+        <h3>Zero-Wrap UI Ergonomics, Immediate Watched Transitions & Custom Watch Date Logging</h3>
+        <ul>
+            <li><strong>Zero-Wrap Layout Optimization:</strong> Completely redesigned the action bar in <code>MovieDetailsBottomSheet</code> into two spacious rows: a prominent full-width <em>Watch Now</em> button on top, with <em>Watched</em>, <em>Letterboxd</em>, and <em>Delete</em> cleanly aligned underneath. Enforced strict non-wrapping rules (<code>maxLines = 1</code>, <code>softWrap = false</code>) across all buttons, filter chips, navigation tabs, and badge rows throughout the entire app so text never breaks into single-letter vertical columns.</li>
+            <li><strong>Immediate Watchlist-to-Watched Transition:</strong> Fixed a callback sequencing bug where closing the bottom sheet prematurely set the active movie reference to null, which prevented the mark-as-watched operation from executing. Movies now transition immediately from your active Watchlist into your Watched Vault.</li>
+            <li><strong>Interactive Watch Date & Rating Dialog (<code>MarkWatchedDialog</code>):</strong> Marking any movie as watched or editing its watch history presents flexible date logging options:
+                <ul>
+                    <li><em>No Date (Default):</em> Safely stores films as undated without artificially defaulting to import timestamps.</li>
+                    <li><em>April 2025:</em> 1-tap option matching the historical bulk of Letterboxd diary entries (~55% of watched titles).</li>
+                    <li><em>Today:</em> Instantly records the current timestamp.</li>
+                    <li><em>Pick Date...:</em> Launches Android's native calendar date picker to log any specific viewing date.</li>
+                </ul>
+                Includes optional 1–5 star ratings and streaming service/viewing method selection (Netflix, Max, Theater, Physical Media, etc.).
+            </li>
+            <li><strong>In-Vault Watch Date Viewer & Editor:</strong> Added a dedicated Watch Date banner inside movie details for films already in your Watched Vault with a <em>Change</em> button to adjust or clear dates anytime.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.6.0</span> <span class="date">September 2026</span></h2>
         <h3>Interactive Share Suite, Performance Throttling & 1-Tap Watched Controls (Issues #18, #19, #20)</h3>
         <ul>

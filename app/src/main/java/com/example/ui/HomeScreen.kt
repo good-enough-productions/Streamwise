@@ -110,6 +110,7 @@ fun HomeScreen(
     var showChangelogDialog by remember { mutableStateOf(false) }
     var showShareExportDialog by remember { mutableStateOf(false) }
     var itemPendingRemoval by remember { mutableStateOf<MediaItem?>(null) }
+    var movieToMarkWatched by remember { mutableStateOf<MediaItem?>(null) }
 
     // Android Document Picker launcher for Letterboxd CSV/ZIP files
     val letterboxdFileLauncher = rememberLauncherForActivityResult(
@@ -252,7 +253,7 @@ fun HomeScreen(
                             Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Watchlist")
                         }
                     },
-                    label = { Text("Watchlist", fontSize = if (isLandscape) 10.sp else 12.sp) },
+                    label = { Text("Watchlist", fontSize = if (isLandscape) 10.sp else 12.sp, maxLines = 1, softWrap = false) },
                     modifier = Modifier.testTag("tab_watchlist")
                 )
                 NavigationBarItem(
@@ -270,28 +271,28 @@ fun HomeScreen(
                                     } else {
                                         "${watchedItems.size}"
                                     }
-                                    Text(countText, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Text(countText, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                                 }
                             }
                         }) {
                             Icon(Icons.Default.Check, contentDescription = "Watched")
                         }
                     },
-                    label = { Text("Watched", fontSize = if (isLandscape) 10.sp else 12.sp) },
+                    label = { Text("Watched", fontSize = if (isLandscape) 10.sp else 12.sp, maxLines = 1, softWrap = false) },
                     modifier = Modifier.testTag("tab_watched")
                 )
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
                     icon = { Icon(Icons.Default.Subscriptions, contentDescription = "My Services") },
-                    label = { Text("My Services", fontSize = if (isLandscape) 10.sp else 12.sp) },
+                    label = { Text("My Services", fontSize = if (isLandscape) 10.sp else 12.sp, maxLines = 1, softWrap = false) },
                     modifier = Modifier.testTag("tab_services")
                 )
                 NavigationBarItem(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
                     icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Explore") },
-                    label = { Text("Explore", fontSize = if (isLandscape) 10.sp else 12.sp) },
+                    label = { Text("Explore", fontSize = if (isLandscape) 10.sp else 12.sp, maxLines = 1, softWrap = false) },
                     modifier = Modifier.testTag("tab_agent")
                 )
             }
@@ -345,7 +346,7 @@ fun HomeScreen(
                         onFilterToggle = { filterOnlyMyServices = it },
                         onWatchClick = { viewModel.launchAndIntendToWatch(context, it) },
                         onDeleteClick = { itemPendingRemoval = it },
-                        onMarkWatchedClick = { viewModel.markItemAsWatched(it) },
+                        onMarkWatchedClick = { movieToMarkWatched = it },
                         onSyncClick = { viewModel.triggerImmediateSync(force = true) },
                         tmdbApiKey = tmdbApiKey,
                         onOpenSettings = { showSettingsDialog = true },
@@ -444,8 +445,9 @@ fun HomeScreen(
                 item = itemToProcess,
                 onDismiss = { itemPendingRemoval = null },
                 onMarkAsWatched = {
-                    viewModel.markItemAsWatched(itemToProcess)
+                    val target = itemToProcess
                     itemPendingRemoval = null
+                    movieToMarkWatched = target
                 },
                 onMoveToWatchlist = {
                     viewModel.moveItemToWatchlist(itemToProcess)
@@ -454,6 +456,29 @@ fun HomeScreen(
                 onDeletePermanently = {
                     viewModel.deleteItem(itemToProcess)
                     itemPendingRemoval = null
+                }
+            )
+        }
+
+        // Mark as Watched & Watch Date Dialog
+        if (movieToMarkWatched != null) {
+            val itemToWatch = movieToMarkWatched!!
+            MarkWatchedDialog(
+                item = itemToWatch,
+                allProviders = allProviders,
+                onDismiss = { movieToMarkWatched = null },
+                onConfirm = { rating, serviceUsed, watchedDate ->
+                    if (itemToWatch.status == MediaStatus.WATCHED.name) {
+                        viewModel.updateWatchDate(itemToWatch, watchedDate, rating)
+                    } else {
+                        viewModel.markItemAsWatched(
+                            item = itemToWatch,
+                            rating = rating,
+                            serviceUsed = serviceUsed,
+                            watchedDate = watchedDate
+                        )
+                    }
+                    movieToMarkWatched = null
                 }
             )
         }
@@ -702,22 +727,29 @@ fun HomeScreen(
                 onCastClick = { device, item -> viewModel.castToDevice(device, item) },
                 onDismiss = { detailMovieItem = null },
                 onWatchClick = {
-                    viewModel.launchAndIntendToWatch(context, detailMovieItem!!)
+                    val m = detailMovieItem
                     detailMovieItem = null
+                    if (m != null) viewModel.launchAndIntendToWatch(context, m)
                 },
                 onDeleteClick = {
-                    itemPendingRemoval = detailMovieItem
+                    val m = detailMovieItem
                     detailMovieItem = null
+                    itemPendingRemoval = m
                 },
                 onMarkWatchedClick = {
                     val m = detailMovieItem
-                    if (m != null) viewModel.markItemAsWatched(m)
                     detailMovieItem = null
+                    movieToMarkWatched = m
                 },
                 onMoveToWatchlistClick = {
                     val m = detailMovieItem
-                    if (m != null) viewModel.moveItemToWatchlist(m)
                     detailMovieItem = null
+                    if (m != null) viewModel.moveItemToWatchlist(m)
+                },
+                onEditWatchDateClick = {
+                    val m = detailMovieItem
+                    detailMovieItem = null
+                    movieToMarkWatched = m
                 },
                 onDiscussInExplore = { prompt ->
                     detailMovieItem = null
@@ -2797,7 +2829,7 @@ fun WatchedTabContent(
             "alpha" -> filteredItems.sortedBy { it.title.lowercase() }
             "rating" -> filteredItems.sortedByDescending { WatchedAnalyticsCalculator.extractRating(it) ?: 0.0 }
             else -> filteredItems.sortedWith(
-                compareByDescending<MediaItem> { it.watchedAt ?: it.addedAt }
+                compareByDescending<MediaItem> { it.watchedAt ?: 0L }
                     .thenByDescending { it.id }
             )
         }
@@ -2807,8 +2839,8 @@ fun WatchedTabContent(
     val groupedItems = remember(processedItems) {
         val sdf = java.text.SimpleDateFormat("MMMM yyyy", Locale.US)
         processedItems.groupBy { item ->
-            val ts = item.watchedAt ?: item.addedAt
-            if (ts > 0) sdf.format(java.util.Date(ts)) else "Older Logs"
+            val ts = item.watchedAt
+            if (ts != null && ts > 0L) sdf.format(java.util.Date(ts)) else "Undated Logs"
         }
     }
 
@@ -3234,12 +3266,12 @@ fun WatchedMediaCard(
     onDeleteClick: () -> Unit,
     onRewatchClick: () -> Unit
 ) {
-    val watchDateStr = remember(item.watchedAt, item.addedAt) {
-        val ts = item.watchedAt ?: item.addedAt
-        if (ts > 0) {
+    val watchDateStr = remember(item.watchedAt) {
+        val ts = item.watchedAt
+        if (ts != null && ts > 0L) {
             val sdf = java.text.SimpleDateFormat("MMM d, yyyy", Locale.US)
             sdf.format(java.util.Date(ts))
-        } else "Logged"
+        } else "Undated"
     }
 
     val releaseYear = remember(item) {
@@ -3354,7 +3386,10 @@ fun WatchedMediaCard(
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(vertical = 3.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(vertical = 3.dp)
                 ) {
                     // Formatted Watch Date Badge (Issue #9)
                     Surface(
@@ -3373,10 +3408,12 @@ fun WatchedMediaCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Watched $watchDateStr",
+                                text = if (watchDateStr == "Undated") "Undated" else "Watched $watchDateStr",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -3393,7 +3430,9 @@ fun WatchedMediaCard(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -3410,7 +3449,9 @@ fun WatchedMediaCard(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -6443,6 +6484,7 @@ fun MovieDetailsBottomSheet(
     onDeleteClick: () -> Unit,
     onMarkWatchedClick: (() -> Unit)? = null,
     onMoveToWatchlistClick: (() -> Unit)? = null,
+    onEditWatchDateClick: (() -> Unit)? = null,
     onDiscussInExplore: ((String) -> Unit)? = null,
     onSetServiceUsed: ((String) -> Unit)? = null
 ) {
@@ -6522,8 +6564,69 @@ fun MovieDetailsBottomSheet(
                         Text(
                             text = statusLabel,
                             style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            maxLines = 1,
+                            softWrap = false
                         )
+                    }
+                }
+            }
+
+            // Watch Date Banner (For Watched Vault Movies)
+            if (item.status == MediaStatus.WATCHED.name) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            val dateText = if (item.watchedAt != null && item.watchedAt > 0L) {
+                                val sdf = java.text.SimpleDateFormat("MMMM d, yyyy", Locale.US)
+                                sdf.format(java.util.Date(item.watchedAt))
+                            } else {
+                                "Undated (No date logged)"
+                            }
+                            Text(
+                                text = "Watched: $dateText",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (onEditWatchDateClick != null) {
+                            TextButton(
+                                onClick = onEditWatchDateClick,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = "Change",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -6893,80 +6996,103 @@ fun MovieDetailsBottomSheet(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
 
-            // Action Items
-            Row(
+            // Action Items (2-row spacious layout ensuring zero text wrapping on all screens)
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Letterboxd / Web Source link (Issue #10)
-                val letterboxdUrl = if (!item.sharedUrl.isNullOrEmpty()) {
-                    item.sharedUrl
-                } else {
-                    "https://letterboxd.com/search/${android.net.Uri.encode(item.title)}/"
-                }
-                OutlinedButton(
-                    onClick = { uriHandler.openUri(letterboxdUrl) },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Letterboxd", fontSize = 12.sp)
-                }
-
-                if (item.status != MediaStatus.WATCHED.name && onMarkWatchedClick != null) {
-                    FilledTonalButton(
-                        onClick = {
-                            onDismiss()
-                            onMarkWatchedClick()
-                        },
-                        modifier = Modifier.weight(1.1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Watched", fontSize = 12.sp)
-                    }
-                } else if (item.status == MediaStatus.WATCHED.name && onMoveToWatchlistClick != null) {
-                    FilledTonalButton(
-                        onClick = {
-                            onDismiss()
-                            onMoveToWatchlistClick()
-                        },
-                        modifier = Modifier.weight(1.1f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Watchlist", fontSize = 12.sp)
-                    }
-                }
-
+                // Row 1: Primary Intent Action (Watch Now)
                 Button(
-                    onClick = {
-                        onDismiss()
-                        onWatchClick()
-                    },
-                    modifier = Modifier.weight(1.2f).testTag("detail_watch_now_button"),
+                    onClick = onWatchClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("detail_watch_now_button"),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Watch Now", fontSize = 12.sp)
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Watch Now",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                 }
 
-                IconButton(
-                    onClick = {
-                        onDismiss()
-                        onDeleteClick()
-                    },
-                    modifier = Modifier.size(48.dp),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
+                // Row 2: Secondary Controls (Watched/Watchlist, Letterboxd, Delete)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete title")
+                    if (item.status != MediaStatus.WATCHED.name && onMarkWatchedClick != null) {
+                        FilledTonalButton(
+                            onClick = onMarkWatchedClick,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Watched",
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    } else if (item.status == MediaStatus.WATCHED.name && onMoveToWatchlistClick != null) {
+                        FilledTonalButton(
+                            onClick = onMoveToWatchlistClick,
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Watchlist",
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+
+                    // Letterboxd / Web Source link (Issue #10)
+                    val letterboxdUrl = if (!item.sharedUrl.isNullOrEmpty()) {
+                        item.sharedUrl
+                    } else {
+                        "https://letterboxd.com/search/${android.net.Uri.encode(item.title)}/"
+                    }
+                    OutlinedButton(
+                        onClick = { uriHandler.openUri(letterboxdUrl) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Letterboxd",
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDeleteClick,
+                        modifier = Modifier.size(44.dp),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.85f),
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete title")
+                    }
                 }
             }
         }
@@ -8153,7 +8279,7 @@ fun RemoveOrWatchedConfirmationDialog(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Mark as Watched")
+                    Text("Mark as Watched", maxLines = 1, softWrap = false)
                 }
             } else {
                 Button(
@@ -8165,7 +8291,7 @@ fun RemoveOrWatchedConfirmationDialog(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Move to Watchlist")
+                    Text("Move to Watchlist", maxLines = 1, softWrap = false)
                 }
             }
         },
@@ -8180,11 +8306,333 @@ fun RemoveOrWatchedConfirmationDialog(
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(2.dp))
-                    Text("Delete")
+                    Text("Delete", maxLines = 1, softWrap = false)
                 }
                 TextButton(onClick = onDismiss) {
-                    Text("Cancel")
+                    Text("Cancel", maxLines = 1, softWrap = false)
                 }
+            }
+        }
+    )
+}
+
+// ==========================================
+// COMPOSABLE: Mark as Watched & Watch Date Dialog
+// ==========================================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MarkWatchedDialog(
+    item: MediaItem,
+    allProviders: List<StreamingProvider>,
+    onDismiss: () -> Unit,
+    onConfirm: (rating: Double?, serviceUsed: String?, watchedDate: Long?) -> Unit
+) {
+    val context = LocalContext.current
+    val isAlreadyWatched = item.status == MediaStatus.WATCHED.name
+
+    // Date options
+    // April 2025 anchor: where 610+ of the user's 1,108 watched movies are dated (April 15, 2025 12:00 UTC)
+    val april2025Timestamp = remember {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(2025, java.util.Calendar.APRIL, 15, 12, 0, 0)
+        cal.timeInMillis
+    }
+    val todayTimestamp = remember { System.currentTimeMillis() }
+
+    // Date Mode: "no_date" (default), "april_2025", "today", "custom"
+    var selectedDateMode by remember(item) {
+        mutableStateOf(
+            if (isAlreadyWatched) {
+                if (item.watchedAt == null || item.watchedAt == 0L) {
+                    "no_date"
+                } else {
+                    val sdf = java.text.SimpleDateFormat("yyyy-MM", Locale.US)
+                    if (sdf.format(java.util.Date(item.watchedAt)) == "2025-04") "april_2025" else "custom"
+                }
+            } else {
+                "no_date" // Default to No Date as requested
+            }
+        )
+    }
+    var customDateMillis by remember(item) {
+        mutableStateOf<Long?>(if (isAlreadyWatched && item.watchedAt != null && item.watchedAt > 0L) item.watchedAt else null)
+    }
+
+    val cal = remember { java.util.Calendar.getInstance() }
+    val initialDate = customDateMillis ?: todayTimestamp
+    cal.timeInMillis = initialDate
+
+    val datePickerDialog = remember(context) {
+        android.app.DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val selectedCal = java.util.Calendar.getInstance()
+                selectedCal.set(year, month, dayOfMonth, 12, 0, 0)
+                customDateMillis = selectedCal.timeInMillis
+                selectedDateMode = "custom"
+            },
+            cal.get(java.util.Calendar.YEAR),
+            cal.get(java.util.Calendar.MONTH),
+            cal.get(java.util.Calendar.DAY_OF_MONTH)
+        )
+    }
+
+    // Rating state
+    var selectedRating by remember(item) { mutableStateOf(item.rating ?: 0.0) }
+
+    // Service Used state
+    var selectedService by remember(item) {
+        mutableStateOf(item.providersList.firstOrNull() ?: "")
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(
+                    text = if (isAlreadyWatched) "Edit Watch Details" else "Mark as Watched",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    softWrap = false
+                )
+                Text(
+                    text = item.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // SECTION 1: WATCH DATE SELECTION
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Watch Date",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Option 1: No Date (Default)
+                        FilterChip(
+                            selected = selectedDateMode == "no_date",
+                            onClick = { selectedDateMode = "no_date" },
+                            label = { Text("No Date (Default)", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                            leadingIcon = {
+                                if (selectedDateMode == "no_date") {
+                                    Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp))
+                                }
+                            }
+                        )
+
+                        // Option 2: April 2025 (Bulk back-catalog)
+                        FilterChip(
+                            selected = selectedDateMode == "april_2025",
+                            onClick = { selectedDateMode = "april_2025" },
+                            label = { Text("April 2025", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                            leadingIcon = {
+                                if (selectedDateMode == "april_2025") {
+                                    Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp))
+                                }
+                            }
+                        )
+
+                        // Option 3: Today
+                        FilterChip(
+                            selected = selectedDateMode == "today",
+                            onClick = { selectedDateMode = "today" },
+                            label = { Text("Today", fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                            leadingIcon = {
+                                if (selectedDateMode == "today") {
+                                    Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp))
+                                }
+                            }
+                        )
+
+                        // Option 4: Custom Date Picker
+                        val customLabel = if (selectedDateMode == "custom" && customDateMillis != null) {
+                            val sdf = java.text.SimpleDateFormat("MMM d, yyyy", Locale.US)
+                            sdf.format(java.util.Date(customDateMillis!!))
+                        } else {
+                            "Pick Date..."
+                        }
+                        FilterChip(
+                            selected = selectedDateMode == "custom",
+                            onClick = {
+                                datePickerDialog.show()
+                            },
+                            label = { Text(customLabel, fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (selectedDateMode == "custom") Icons.Default.Check else Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        )
+                    }
+                }
+
+                // SECTION 2: RATING (1-5 STARS OR UNRATED)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Star Rating",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                        if (selectedRating > 0.0) {
+                            Text(
+                                text = "${String.format(Locale.US, "%.1f", selectedRating)} ★",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFFFD700),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        } else {
+                            Text(
+                                text = "Unrated",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        (1..5).forEach { starIndex ->
+                            val starValue = starIndex.toDouble()
+                            val isFilled = selectedRating >= starValue
+                            IconButton(
+                                onClick = {
+                                    selectedRating = if (selectedRating == starValue) 0.0 else starValue
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = "$starIndex Stars",
+                                    tint = if (isFilled) Color(0xFFFFD700) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // SECTION 3: SERVICE USED / WATCH METHOD
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Where did you watch it?",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+
+                    val availableServiceIds = remember(item, allProviders) {
+                        val list = mutableListOf<Pair<String, String>>()
+                        // Item providers
+                        item.providersList.forEach { id ->
+                            val name = allProviders.find { it.id == id }?.name ?: id.replaceFirstChar { it.uppercase() }
+                            list.add(id to name)
+                        }
+                        // Active subscribed providers not in item list
+                        allProviders.filter { it.isActive && !item.providersList.contains(it.id) }.forEach { p ->
+                            list.add(p.id to p.name)
+                        }
+                        // Common viewing options
+                        if (list.none { it.first == "cinema" }) list.add("cinema" to "Theater / Cinema")
+                        if (list.none { it.first == "physical" }) list.add("physical" to "Blu-ray / Disc")
+                        list
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedService.isEmpty(),
+                            onClick = { selectedService = "" },
+                            label = { Text("None / Other", fontSize = 11.sp, maxLines = 1, softWrap = false) }
+                        )
+                        availableServiceIds.forEach { (id, name) ->
+                            FilterChip(
+                                selected = selectedService.equals(id, ignoreCase = true),
+                                onClick = { selectedService = if (selectedService.equals(id, ignoreCase = true)) "" else id },
+                                label = { Text(name, fontSize = 11.sp, maxLines = 1, softWrap = false) },
+                                leadingIcon = {
+                                    if (selectedService.equals(id, ignoreCase = true)) {
+                                        Icon(Icons.Default.Check, null, modifier = Modifier.size(12.dp))
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val finalDate = when (selectedDateMode) {
+                        "no_date" -> null
+                        "april_2025" -> april2025Timestamp
+                        "today" -> todayTimestamp
+                        "custom" -> customDateMillis
+                        else -> null
+                    }
+                    val finalService = if (selectedService.isNotBlank()) selectedService else null
+                    val finalRating = if (selectedRating > 0.0) selectedRating else null
+                    onConfirm(finalRating, finalService, finalDate)
+                },
+                modifier = Modifier.padding(start = 4.dp)
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isAlreadyWatched) "Save Details" else "Move to Watched",
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", maxLines = 1, softWrap = false)
             }
         }
     )
