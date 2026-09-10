@@ -64,6 +64,16 @@ class StreamViewModel(
 
     init {
         com.example.data.model.PodcastEpisodeCatalog.initialize(application.applicationContext)
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deduplicateMediaItems()
+            val key = userPreferences.tmdbApiKey.ifEmpty { BuildConfig.TMDB_API_KEY }
+            if (key.isNotEmpty() && key != "MY_TMDB_API_KEY") {
+                val unlinked = repository.mediaDao.getAllMediaItemsList().count { it.tmdbId.isNullOrBlank() }
+                if (unlinked > 0) {
+                    backfillTmdbMetadataForAll(forceAll = false)
+                }
+            }
+        }
     }
 
     private val TAG = "StreamViewModel"
@@ -127,6 +137,13 @@ class StreamViewModel(
     // Spotlight Collapsed Setting
     private val _isSpotlightCollapsed = MutableStateFlow(userPreferences.isSpotlightCollapsed)
     val isSpotlightCollapsed: StateFlow<Boolean> = _isSpotlightCollapsed.asStateFlow()
+
+    // TMDB ID Backfill State
+    private val _isBackfillingTmdb = MutableStateFlow(false)
+    val isBackfillingTmdb: StateFlow<Boolean> = _isBackfillingTmdb.asStateFlow()
+
+    private val _backfillProgress = MutableStateFlow("")
+    val backfillProgress: StateFlow<String> = _backfillProgress.asStateFlow()
 
     fun toggleSpotlightCollapsed() {
         val newVal = !_isSpotlightCollapsed.value
@@ -562,7 +579,8 @@ class StreamViewModel(
             if (json.optBoolean("success", false)) {
                 val recs = json.optJSONArray("recommendations") ?: JSONArray()
                 val allItems = repository.mediaDao.getAllMediaItemsList()
-                val existingMap = allItems.associateBy { it.title.lowercase().trim() }.toMutableMap()
+                val existingByNormTitle = allItems.associateBy { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }.toMutableMap()
+                val existingByTmdbId = allItems.filter { !it.tmdbId.isNullOrBlank() }.associateBy { it.tmdbId!!.trim() }.toMutableMap()
 
                 val runtimeKey = userPreferences.tmdbApiKey
                 val buildTimeKey = com.example.BuildConfig.TMDB_API_KEY
@@ -602,77 +620,106 @@ class StreamViewModel(
                         if (verdict.isNotBlank()) append(" ($verdict)")
                     }.trim()
 
-                    val normKey = cleanTitle.lowercase().trim()
-                    val existing = existingMap[normKey] ?: existingMap[rawTitle.lowercase().trim()]
+                    val normKey = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(cleanTitle)
+                    val existing = existingByNormTitle[normKey] ?: existingByNormTitle[com.example.data.remote.TmdbMatchingHelper.normalizeTitle(rawTitle)]
                     if (existing != null) {
                         val currentNotes = existing.userNotes ?: ""
                         if (!currentNotes.contains(podcast) && podcast.isNotBlank()) {
                             val newNotes = if (currentNotes.isBlank()) tagNotes else "$currentNotes • $tagNotes"
                             val updated = existing.copy(
                                 importSource = existing.importSource ?: sourceTag,
-                                userNotes = newNotes.take(300),
+                                userNotes = newNotes.take(400),
                                 updatedAt = System.currentTimeMillis()
                             )
                             repository.updateMediaItem(updated)
-                            existingMap[normKey] = updated
+                            existingByNormTitle[normKey] = updated
+                            if (!updated.tmdbId.isNullOrBlank()) existingByTmdbId[updated.tmdbId!!.trim()] = updated
                             updatedCount++
                         }
                     } else {
                         // Gating requirement: Must be verified on TMDB before adding as a movie
                         if (key.isNotEmpty() && key != "MY_TMDB_API_KEY") {
-                            var match: com.example.data.remote.TmdbSearchResult? = null
-                            try {
-                                val searchResp = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, cleanTitle)
-                                match = searchResp.results.firstOrNull()
-                                if (match == null && cleanTitle.contains(":")) {
-                                    val prefix = cleanTitle.substringBefore(":").trim()
-                                    if (prefix.length >= 3) {
-                                        match = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, prefix).results.firstOrNull()
-                                    }
-                                }
-                            } catch (e: Exception) { null }
+                            val match = com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                                com.example.data.remote.TmdbClient.tmdbApiService,
+                                key,
+                                cleanTitle,
+                                null
+                            )
 
                             if (match != null) {
                                 val tmdbId = match.id.toString()
-                                val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
-                                val genres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
-                                val releaseDate = match.releaseDate
+                                val canonicalNorm = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(match.title)
+                                val existingMatch = existingByTmdbId[tmdbId] ?: existingByNormTitle[canonicalNorm]
 
-                                var providersString: String? = null
-                                try {
-                                    val provResp = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(match.id, key)
-                                    val us = provResp.results?.get("US")
-                                    val list = mutableListOf<com.example.data.remote.TmdbProvider>()
-                                    us?.flatrate?.let { list.addAll(it) }
-                                    us?.free?.let { list.addAll(it) }
-                                    us?.ads?.let { list.addAll(it) }
-                                    providersString = mapTmdbProviders(list)
-                                } catch (e: Exception) { }
+                                if (existingMatch != null) {
+                                    // Movie is ALREADY in the library!
+                                    // If already WATCHED, do NOT add to watchlist, just enrich notes & TMDB metadata!
+                                    val currentNotes = existingMatch.userNotes ?: ""
+                                    val newNotes = if (currentNotes.contains(podcast) && podcast.isNotBlank()) currentNotes
+                                                   else if (currentNotes.isBlank()) tagNotes else "$currentNotes • $tagNotes"
+                                    val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: existingMatch.imageUrl
+                                    val genres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ") ?: existingMatch.genres
+                                    val updated = existingMatch.copy(
+                                        title = match.title,
+                                        tmdbId = tmdbId,
+                                        imageUrl = poster,
+                                        rating = match.voteAverage ?: existingMatch.rating,
+                                        overview = match.overview?.ifBlank { existingMatch.overview } ?: existingMatch.overview,
+                                        genres = genres,
+                                        releaseDate = match.releaseDate ?: existingMatch.releaseDate,
+                                        userNotes = newNotes.take(400),
+                                        importSource = existingMatch.importSource ?: sourceTag,
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                    repository.updateMediaItem(updated)
+                                    existingByTmdbId[tmdbId] = updated
+                                    existingByNormTitle[canonicalNorm] = updated
+                                    updatedCount++
+                                } else {
+                                    val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
+                                    val genres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
+                                    val releaseDate = match.releaseDate
 
-                                val newItem = MediaItem(
-                                    title = match.title,
-                                    status = MediaStatus.WATCHLIST.name,
-                                    tmdbId = tmdbId,
-                                    imageUrl = poster,
-                                    rating = match.voteAverage,
-                                    overview = match.overview,
-                                    genres = genres,
-                                    releaseDate = releaseDate,
-                                    providerIds = providersString ?: "none",
-                                    importSource = sourceTag,
-                                    userNotes = tagNotes,
-                                    addedAt = System.currentTimeMillis(),
-                                    updatedAt = System.currentTimeMillis()
-                                )
-                                val newId = repository.insertMediaItem(newItem)
-                                existingMap[match.title.lowercase().trim()] = newItem.copy(id = newId)
-                                existingMap[normKey] = newItem.copy(id = newId)
-                                addedCount++
+                                    var providersString: String? = null
+                                    try {
+                                        val provResp = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(match.id, key)
+                                        val us = provResp.results?.get("US")
+                                        val list = mutableListOf<com.example.data.remote.TmdbProvider>()
+                                        us?.flatrate?.let { list.addAll(it) }
+                                        us?.free?.let { list.addAll(it) }
+                                        us?.ads?.let { list.addAll(it) }
+                                        providersString = mapTmdbProviders(list)
+                                    } catch (e: Exception) { }
+
+                                    val newItem = MediaItem(
+                                        title = match.title,
+                                        status = MediaStatus.WATCHLIST.name,
+                                        tmdbId = tmdbId,
+                                        imageUrl = poster,
+                                        rating = match.voteAverage,
+                                        overview = match.overview,
+                                        genres = genres,
+                                        releaseDate = releaseDate,
+                                        providerIds = providersString ?: "none",
+                                        importSource = sourceTag,
+                                        userNotes = tagNotes,
+                                        addedAt = System.currentTimeMillis(),
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                    val newId = repository.insertMediaItem(newItem)
+                                    val saved = newItem.copy(id = newId)
+                                    existingByTmdbId[tmdbId] = saved
+                                    existingByNormTitle[canonicalNorm] = saved
+                                    existingByNormTitle[normKey] = saved
+                                    addedCount++
+                                }
                             }
                             // If match == null, DISCARD! Never insert unmatched podcast episodes!
                         }
                     }
                 }
+
+                repository.deduplicateMediaItems()
 
                 _statusMessage.value = "✓ Synced ${recs.length()} podcast recs: +$addedCount Watchlist, ~$updatedCount Vault updated!"
                 return@withLock addedCount
@@ -718,17 +765,12 @@ class StreamViewModel(
                 }
 
                 if (key.isNotEmpty() && key != "MY_TMDB_API_KEY") {
-                    var match: com.example.data.remote.TmdbSearchResult? = null
-                    try {
-                        val searchResp = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, cleaned)
-                        match = searchResp.results.firstOrNull()
-                        if (match == null && cleaned.contains(":")) {
-                            val prefix = cleaned.substringBefore(":").trim()
-                            if (prefix.length >= 3) {
-                                match = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, prefix).results.firstOrNull()
-                            }
-                        }
-                    } catch (e: Exception) { null }
+                    val match = com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                        com.example.data.remote.TmdbClient.tmdbApiService,
+                        key,
+                        cleaned,
+                        item.releaseDate
+                    )
 
                     if (match != null) {
                         val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
@@ -1636,13 +1678,46 @@ class StreamViewModel(
 
                     val cleanTitle = MediaTitleSanitizer.cleanCandidateTitle(item.title)
                     try {
-                        val searchResp = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, cleanTitle)
-                        var match = searchResp.results.firstOrNull()
-                        if (match == null && cleanTitle.contains(":")) {
-                            val prefix = cleanTitle.substringBefore(":").trim()
-                            if (prefix.length >= 3) {
-                                match = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(key, prefix).results.firstOrNull()
+                        val existingMovieId = item.tmdbId?.toIntOrNull()
+                        val match: com.example.data.remote.TmdbSearchResult? = if (existingMovieId != null && existingMovieId > 0) {
+                            try {
+                                val details = com.example.data.remote.TmdbClient.tmdbApiService.getMovieDetails(existingMovieId, key)
+                                val normClean = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(cleanTitle)
+                                val normDetails = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(details.title ?: "")
+                                if (normClean == normDetails || normDetails.contains(normClean) || normClean.contains(normDetails)) {
+                                    com.example.data.remote.TmdbSearchResult(
+                                        id = details.id,
+                                        title = details.title ?: item.title,
+                                        overview = details.overview ?: item.overview,
+                                        posterPath = details.posterPath,
+                                        voteAverage = details.voteAverage ?: item.rating,
+                                        releaseDate = details.releaseDate ?: item.releaseDate,
+                                        genreIds = details.genres?.map { it.id }
+                                    )
+                                } else {
+                                    // Mismatched TMDB ID (e.g. "Network" wrongly had "The Social Network"): re-search smartly
+                                    com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                                        com.example.data.remote.TmdbClient.tmdbApiService,
+                                        key,
+                                        cleanTitle,
+                                        item.releaseDate
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                                    com.example.data.remote.TmdbClient.tmdbApiService,
+                                    key,
+                                    cleanTitle,
+                                    item.releaseDate
+                                )
                             }
+                        } else {
+                            com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                                com.example.data.remote.TmdbClient.tmdbApiService,
+                                key,
+                                cleanTitle,
+                                item.releaseDate
+                            )
                         }
 
                         if (match != null) {
@@ -1682,8 +1757,12 @@ class StreamViewModel(
                         } else {
                             // Try TV search if not found in movies
                             try {
-                                val tvResp = com.example.data.remote.TmdbClient.tmdbApiService.searchTv(key, cleanTitle)
-                                val tvMatch = tvResp.results.firstOrNull()
+                                val tvMatch = com.example.data.remote.TmdbMatchingHelper.searchTvSmart(
+                                    com.example.data.remote.TmdbClient.tmdbApiService,
+                                    key,
+                                    cleanTitle,
+                                    item.releaseDate
+                                )
                                 if (tvMatch != null) {
                                     val tvId = tvMatch.id
                                     var tvProvString: String? = null
@@ -1740,12 +1819,122 @@ class StreamViewModel(
                     kotlinx.coroutines.delay(120)
                 }
 
+                repository.deduplicateMediaItems()
                 _statusMessage.value = "Synced $updatedCount titles with TMDB streaming availability!"
             } catch (e: Exception) {
-                android.util.Log.e(TAG, "Error in direct TMDB sync: ${e.message}", e)
-                _statusMessage.value = "TMDB sync encountered an issue: ${e.message}"
+                _statusMessage.value = "Sync error: ${e.message}"
             } finally {
                 isSyncing = false
+            }
+        }
+    }
+
+    /**
+     * Sweeps the entire library (including all WATCHED history) to ensure every item has a
+     * verified TMDB ID, canonical title, poster, rating, and genres, then deduplicates.
+     */
+    fun backfillTmdbMetadataForAll(forceAll: Boolean = false) {
+        if (_isBackfillingTmdb.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _isBackfillingTmdb.value = true
+            try {
+                val runtimeKey = userPreferences.tmdbApiKey
+                val buildTimeKey = com.example.BuildConfig.TMDB_API_KEY
+                val key = if (runtimeKey.isNotEmpty() && runtimeKey != "MY_TMDB_API_KEY") runtimeKey else buildTimeKey
+
+                if (key.isEmpty() || key == "MY_TMDB_API_KEY") {
+                    _statusMessage.value = "Please configure your TMDB API Key in Settings first."
+                    return@launch
+                }
+
+                val allItems = repository.mediaDao.getAllMediaItemsList()
+                val targetItems = if (forceAll) {
+                    allItems
+                } else {
+                    allItems.filter { 
+                        it.tmdbId.isNullOrBlank() || 
+                        it.imageUrl.isNullOrBlank() ||
+                        (it.status == MediaStatus.WATCHLIST.name && it.importSource?.contains("Podcast") == true)
+                    }
+                }
+
+                if (targetItems.isEmpty()) {
+                    _statusMessage.value = "All library titles already linked with TMDB IDs."
+                    return@launch
+                }
+
+                _statusMessage.value = "Enriching TMDB IDs for ${targetItems.size} titles..."
+                var enriched = 0
+                val genreMap = try {
+                    com.example.data.remote.TmdbClient.tmdbApiService.getGenreList(key).genres.associate { it.id to it.name }
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+
+                for ((idx, item) in targetItems.withIndex()) {
+                    if (idx % 20 == 0 || idx == targetItems.size - 1) {
+                        _backfillProgress.value = "TMDB Linking: ${idx + 1}/${targetItems.size}"
+                    }
+
+                    kotlinx.coroutines.delay(60)
+
+                    try {
+                        val match = com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                            com.example.data.remote.TmdbClient.tmdbApiService,
+                            key,
+                            item.title,
+                            item.releaseDate
+                        )
+
+                        if (match != null) {
+                            val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
+                            val genres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ") ?: item.genres
+                            val updated = item.copy(
+                                title = match.title,
+                                tmdbId = match.id.toString(),
+                                imageUrl = poster ?: item.imageUrl,
+                                rating = match.voteAverage ?: item.rating,
+                                overview = match.overview?.ifBlank { item.overview } ?: item.overview,
+                                genres = genres,
+                                releaseDate = match.releaseDate ?: item.releaseDate,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            repository.updateMediaItem(updated)
+                            enriched++
+                        } else {
+                            val tvMatch = com.example.data.remote.TmdbMatchingHelper.searchTvSmart(
+                                com.example.data.remote.TmdbClient.tmdbApiService,
+                                key,
+                                item.title,
+                                item.releaseDate
+                            )
+                            if (tvMatch != null) {
+                                val tvPoster = tvMatch.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
+                                val tvGenres = tvMatch.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ") ?: item.genres
+                                val updated = item.copy(
+                                    title = tvMatch.name,
+                                    tmdbId = tvMatch.id.toString(),
+                                    imageUrl = tvPoster ?: item.imageUrl,
+                                    rating = tvMatch.voteAverage ?: item.rating,
+                                    overview = tvMatch.overview?.ifBlank { item.overview } ?: item.overview,
+                                    genres = tvGenres,
+                                    releaseDate = tvMatch.firstAirDate ?: item.releaseDate,
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                                repository.updateMediaItem(updated)
+                                enriched++
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Backfill error on ${item.title}: ${e.message}")
+                    }
+                }
+
+                val removed = repository.deduplicateMediaItems()
+                _statusMessage.value = "✓ TMDB sync complete: $enriched linked, $removed duplicates cleaned into Watched!"
+            } finally {
+                _isBackfillingTmdb.value = false
+                _backfillProgress.value = ""
             }
         }
     }

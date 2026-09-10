@@ -106,6 +106,8 @@ class AvailabilitySyncWorker(
                     return Result.retry()
                 }
 
+                var syncedTitle: String = item.title
+                var syncedReleaseDate: String? = item.releaseDate
                 var syncedProviders: String? = item.providerIds
                 var syncedOverview: String? = item.overview
                 var syncedRating: Double? = item.rating
@@ -116,17 +118,72 @@ class AvailabilitySyncWorker(
 
                 try {
                     Log.d(TAG, "Syncing metadata for: \"${item.title}\" (Current TMDB ID: $syncedTmdbId)")
-                    // 1. Search for TMDB movie ID
-                    val searchResponse = com.example.data.remote.TmdbClient.tmdbApiService.searchMovie(apiKey, item.title)
-                    val match = searchResponse.results.firstOrNull()
-                    if (match != null) {
-                        val movieId = match.id
-                        Log.d(TAG, "Found match for \"${item.title}\": ID $movieId, Genres: ${match.genreIds}")
-                        syncedTmdbId = movieId.toString()
-                        syncedOverview = match.overview ?: item.overview
-                        syncedRating = match.voteAverage ?: item.rating
-                        syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+                    val existingMovieId = syncedTmdbId?.toIntOrNull()
+                    var movieId: Int? = null
 
+                    if (existingMovieId != null && existingMovieId > 0) {
+                        var isMatched = false
+                        try {
+                            val details = com.example.data.remote.TmdbClient.tmdbApiService.getMovieDetails(existingMovieId, apiKey)
+                            val normItem = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(item.title)
+                            val normDetails = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(details.title ?: "")
+                            if (normItem == normDetails || normDetails.contains(normItem) || normItem.contains(normDetails)) {
+                                isMatched = true
+                                movieId = existingMovieId
+                                if (!details.title.isNullOrBlank()) syncedTitle = details.title
+                                if (!details.overview.isNullOrBlank()) syncedOverview = details.overview
+                                if (details.voteAverage != null && details.voteAverage > 0.0) syncedRating = details.voteAverage
+                                if (!details.posterPath.isNullOrBlank()) syncedPosterUrl = "https://image.tmdb.org/t/p/w500${details.posterPath}"
+                                if (!details.releaseDate.isNullOrBlank()) syncedReleaseDate = details.releaseDate
+                                if (!details.genres.isNullOrEmpty()) syncedGenres = details.genres.joinToString(", ") { it.name }
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not fetch direct movie details for TMDB ID $existingMovieId: ${e.message}")
+                        }
+
+                        if (!isMatched) {
+                            // Mismatched TMDB ID (e.g. "Network" previously mapped to "The Social Network"): re-search smartly
+                            val match = com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                                com.example.data.remote.TmdbClient.tmdbApiService,
+                                apiKey,
+                                item.title,
+                                item.releaseDate
+                            )
+                            if (match != null) {
+                                movieId = match.id
+                                syncedTmdbId = movieId.toString()
+                                syncedTitle = match.title
+                                syncedReleaseDate = match.releaseDate ?: item.releaseDate
+                                syncedOverview = match.overview ?: item.overview
+                                syncedRating = match.voteAverage ?: item.rating
+                                syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+                                Log.d(TAG, "Corrected mismatched ID for \"${item.title}\" -> ID $movieId, Canonical: \"$syncedTitle\"")
+                            } else {
+                                movieId = null
+                            }
+                        }
+                    } else {
+                        val match = com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                            com.example.data.remote.TmdbClient.tmdbApiService,
+                            apiKey,
+                            item.title,
+                            item.releaseDate
+                        )
+                        if (match != null) {
+                            movieId = match.id
+                            syncedTmdbId = movieId.toString()
+                            syncedTitle = match.title
+                            syncedReleaseDate = match.releaseDate ?: item.releaseDate
+                            syncedOverview = match.overview ?: item.overview
+                            syncedRating = match.voteAverage ?: item.rating
+                            syncedPosterUrl = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
+                            Log.d(TAG, "Smart matched \"${item.title}\" -> ID $movieId, Canonical: \"$syncedTitle\"")
+                        } else {
+                            movieId = null
+                        }
+                    }
+
+                    if (movieId != null) {
                         // 2. Fetch Providers for TMDB Movie ID
                         val providerResponse = com.example.data.remote.TmdbClient.tmdbApiService.getWatchProviders(movieId, apiKey)
                         val usCountry = providerResponse.results?.get("US")
@@ -135,7 +192,7 @@ class AvailabilitySyncWorker(
                         usCountry?.free?.let { usProvidersList.addAll(it) }
                         usCountry?.ads?.let { usProvidersList.addAll(it) }
 
-                        Log.d(TAG, "TMDB Providers for \"${item.title}\": ${usProvidersList.joinToString { it.providerName }}")
+                        Log.d(TAG, "TMDB Providers for \"$syncedTitle\": ${usProvidersList.joinToString { it.providerName }}")
 
                         if (usProvidersList.isNotEmpty()) {
                             syncedProviders = mapTmdbProvidersToLocal(usProvidersList)
@@ -186,9 +243,6 @@ class AvailabilitySyncWorker(
                                 Log.d(TAG, "Triggered availability notification for: \"${item.title}\" on ${firstProv?.name} (Free/Active check)")
                             }
                         }
-
-                        // Extract genres from search result
-                        syncedGenres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ")
 
                         // 3. Synthesis Agent Research: Fetch Keywords, Cast, and Genres
                         try {
@@ -247,6 +301,8 @@ class AvailabilitySyncWorker(
 
                 // Update the Room database record with retrieved availability IDs and promote state
                 val updatedItem = item.copy(
+                    title = syncedTitle,
+                    releaseDate = syncedReleaseDate,
                     status = if (item.status == MediaStatus.PENDING_METADATA.name) MediaStatus.WATCHLIST.name else item.status,
                     providerIds = syncedProviders,
                     overview = syncedOverview,
@@ -259,8 +315,11 @@ class AvailabilitySyncWorker(
                 )
 
                 repository.updateMediaItem(updatedItem)
-                Log.d(TAG, "Successfully synced availability for \"${item.title}\": $syncedProviders")
+                Log.d(TAG, "Successfully synced availability for \"$syncedTitle\": $syncedProviders")
             }
+
+            // Deduplicate to clean up any twin records or duplicate TMDB IDs
+            repository.deduplicateMediaItems()
 
             return Result.success()
 

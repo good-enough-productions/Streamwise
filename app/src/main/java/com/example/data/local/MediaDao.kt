@@ -66,19 +66,88 @@ interface MediaDao {
     @Transaction
     suspend fun deduplicateMediaItems(): Int {
         val all = getAllMediaItemsList()
-        val duplicates = all.groupBy { it.title.trim().lowercase() }
-        val idsToDelete = mutableListOf<Long>()
-        for ((_, group) in duplicates) {
+        val idsToDelete = mutableSetOf<Long>()
+        val itemsToUpdate = mutableListOf<MediaItem>()
+
+        fun mergeGroup(group: List<MediaItem>): Pair<MediaItem, List<Long>> {
+            val isWatched = group.any { it.status == MediaStatus.WATCHED.name }
+            val bestWatchedAt = group.mapNotNull { it.watchedAt }.maxOrNull()
+
+            val sorted = group.sortedWith(
+                compareByDescending<MediaItem> { it.status == MediaStatus.WATCHED.name }
+                    .thenByDescending { !it.tmdbId.isNullOrBlank() }
+                    .thenByDescending { !it.imageUrl.isNullOrBlank() }
+                    .thenByDescending { !it.providerIds.isNullOrBlank() && it.providerIds != "none" }
+                    .thenByDescending { (it.rating ?: 0.0) > 0.0 }
+                    .thenBy { it.id }
+            )
+            val primary = sorted.first()
+            val losers = sorted.drop(1)
+
+            val richestTmdbId = group.firstOrNull { !it.tmdbId.isNullOrBlank() }?.tmdbId ?: primary.tmdbId
+            val richestImage = group.firstOrNull { !it.imageUrl.isNullOrBlank() }?.imageUrl ?: primary.imageUrl
+            val richestOverview = group.firstOrNull { !it.overview.isNullOrBlank() && !it.overview.startsWith("Imported") }?.overview
+                ?: group.firstOrNull { !it.overview.isNullOrBlank() }?.overview
+                ?: primary.overview
+            val richestRating = group.mapNotNull { it.rating }.firstOrNull { it > 0.0 } ?: primary.rating
+            val richestGenres = group.firstOrNull { !it.genres.isNullOrBlank() }?.genres ?: primary.genres
+            val richestProviders = group.firstOrNull { !it.providerIds.isNullOrBlank() && it.providerIds != "none" }?.providerIds
+                ?: primary.providerIds
+            val richestReleaseDate = group.firstOrNull { !it.releaseDate.isNullOrBlank() }?.releaseDate ?: primary.releaseDate
+            val canonicalTitle = if (primary.title.isNotBlank()) primary.title else group.first().title
+
+            val allNotes = group.mapNotNull { it.userNotes?.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+            val mergedNotes = if (allNotes.isNotEmpty()) allNotes.joinToString(" • ").take(500) else primary.userNotes
+
+            val allSources = group.mapNotNull { it.importSource?.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+            val mergedSource = if (allSources.isNotEmpty()) allSources.joinToString(", ").take(200) else primary.importSource
+
+            val merged = primary.copy(
+                title = canonicalTitle,
+                status = if (isWatched) MediaStatus.WATCHED.name else primary.status,
+                watchedAt = if (isWatched) (bestWatchedAt ?: primary.watchedAt ?: primary.addedAt) else primary.watchedAt,
+                tmdbId = richestTmdbId,
+                imageUrl = richestImage,
+                overview = richestOverview,
+                rating = richestRating,
+                genres = richestGenres,
+                providerIds = richestProviders,
+                releaseDate = richestReleaseDate,
+                userNotes = mergedNotes,
+                importSource = mergedSource,
+                updatedAt = System.currentTimeMillis()
+            )
+
+            return Pair(merged, losers.map { it.id })
+        }
+
+        // Pass 1: Deduplicate by non-blank TMDB ID
+        val tmdbGroups = all.filter { !it.tmdbId.isNullOrBlank() && it.tmdbId != "0" }.groupBy { it.tmdbId!!.trim() }
+        for ((_, group) in tmdbGroups) {
             if (group.size > 1) {
-                val sorted = group.sortedWith(
-                    compareByDescending<MediaItem> { it.status == MediaStatus.WATCHED.name }
-                        .thenByDescending { !it.imageUrl.isNullOrBlank() }
-                        .thenByDescending { !it.tmdbId.isNullOrBlank() }
-                        .thenByDescending { !it.providerIds.isNullOrBlank() }
-                        .thenBy { it.id }
-                )
-                idsToDelete.addAll(sorted.drop(1).map { it.id })
+                val (merged, loserIds) = mergeGroup(group)
+                itemsToUpdate.add(merged)
+                idsToDelete.addAll(loserIds)
             }
+        }
+
+        // Pass 2: Deduplicate remaining items by normalized title
+        val remaining = all.filter { !idsToDelete.contains(it.id) }
+        val titleGroups = remaining.groupBy { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
+        for ((normTitle, group) in titleGroups) {
+            if (normTitle.isNotBlank() && group.size > 1) {
+                val (merged, loserIds) = mergeGroup(group)
+                itemsToUpdate.add(merged)
+                idsToDelete.addAll(loserIds)
+            }
+        }
+
+        if (itemsToUpdate.isNotEmpty()) {
+            updateMediaItems(itemsToUpdate)
         }
         if (idsToDelete.isNotEmpty()) {
             idsToDelete.chunked(500).forEach { chunk ->

@@ -154,9 +154,14 @@ interface TmdbApiService {
 @JsonClass(generateAdapter = true)
 data class TmdbMovieDetails(
     @Json(name = "id") val id: Int,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "overview") val overview: String? = null,
+    @Json(name = "poster_path") val posterPath: String? = null,
+    @Json(name = "vote_average") val voteAverage: Double? = null,
     @Json(name = "runtime") val runtime: Int? = null,
     @Json(name = "release_date") val releaseDate: String? = null,
-    @Json(name = "status") val status: String? = null
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "genres") val genres: List<TmdbGenre>? = null
 )
 
 @JsonClass(generateAdapter = true)
