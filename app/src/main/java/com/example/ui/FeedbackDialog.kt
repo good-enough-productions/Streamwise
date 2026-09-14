@@ -95,6 +95,8 @@ fun FeedbackDialog(
     var delegateToJules by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var updateStatusText by remember { mutableStateOf("v1.6.2 (Current)") }
+    var isCheckingUpdates by remember { mutableStateOf(false) }
 
     // Capture screenshot on dialog open
     LaunchedEffect(Unit) {
@@ -309,6 +311,59 @@ fun FeedbackDialog(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
+                        }
+                    }
+
+                    // In-App Version & Update Checker Card
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "APP VERSION",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = updateStatusText,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    isCheckingUpdates = true
+                                    updateStatusText = "Checking releases..."
+                                    coroutineScope.launch {
+                                        val info = com.example.util.UpdateChecker.checkLatestRelease("good-enough-productions/Streamwise")
+                                        isCheckingUpdates = false
+                                        if (info != null && info.isNewer) {
+                                            updateStatusText = "New ${info.tagName} available!"
+                                            com.example.util.UpdateChecker.launchDownload(context, info.downloadUrl)
+                                        } else if (info != null) {
+                                            updateStatusText = "Up to date (${info.tagName})"
+                                        } else {
+                                            updateStatusText = "v1.6.2 (Up to date)"
+                                        }
+                                    }
+                                },
+                                enabled = !isCheckingUpdates
+                            ) {
+                                Text(
+                                    text = if (isCheckingUpdates) "Checking..." else "Check for Updates",
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+                            }
                         }
                     }
                 }
