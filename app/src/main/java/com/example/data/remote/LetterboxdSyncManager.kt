@@ -85,14 +85,41 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
             val parsedEntries = parseRssXml(xmlContent)
             Log.d(TAG, "Successfully parsed ${parsedEntries.size} items from Letterboxd RSS.")
 
-            val existingItems = mediaDao.getAllMediaItemsList().associateBy { TmdbMatchingHelper.normalizeTitle(it.title) }.toMutableMap()
+            // Build lookup map: normalized title -> best matching DB item.
+            // When multiple DB items share a normalized title (e.g. re-watched films or
+            // same title / different year), prefer the WATCHED entry so status-upgrade
+            // logic fires correctly for the right row.
+            val allDbItems = mediaDao.getAllMediaItemsList()
+            val existingItems: MutableMap<String, MediaItem> = mutableMapOf()
+            for (dbItem in allDbItems) {
+                val key = TmdbMatchingHelper.normalizeTitle(dbItem.title)
+                if (key.isBlank()) continue
+                val prev = existingItems[key]
+                // Prefer WATCHED over WATCHLIST; otherwise keep whichever was added more recently
+                if (prev == null
+                    || (prev.status != MediaStatus.WATCHED.name && dbItem.status == MediaStatus.WATCHED.name)
+                    || (prev.status == dbItem.status && (dbItem.addedAt ?: 0L) > (prev.addedAt ?: 0L))
+                ) {
+                    existingItems[key] = dbItem
+                }
+                // Also index by "normalizedTitle|year" for year-aware disambiguation
+                val yearKey = if (!dbItem.releaseDate.isNullOrBlank()) "$key|${dbItem.releaseDate!!.take(4)}" else null
+                if (yearKey != null && !existingItems.containsKey(yearKey)) {
+                    existingItems[yearKey] = dbItem
+                }
+            }
             val newlyImported = mutableListOf<MediaItem>()
 
             for (entry in parsedEntries) {
                 val normalizedTitle = TmdbMatchingHelper.normalizeTitle(entry.title)
                 if (normalizedTitle.isEmpty()) continue
 
-                val existing = existingItems[normalizedTitle] ?: existingItems[entry.title.trim().lowercase()]
+                // Try year-aware match first (e.g. "cape fear|1991"), then title-only
+                val yearAwareKey = if (!entry.year.isNullOrBlank()) "$normalizedTitle|${entry.year}" else null
+                val existing = (if (yearAwareKey != null) existingItems[yearAwareKey] else null)
+                    ?: existingItems[normalizedTitle]
+                    ?: existingItems[entry.title.trim().lowercase()]
+
                 if (existing != null) {
                     val hasNewerWatch = entry.watchedAt > (existing.watchedAt ?: 0L)
                     val hasNewRating = entry.ratingTenScale != null && existing.rating == null
@@ -100,18 +127,28 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                     val needsStatusUpgrade = existing.status != MediaStatus.WATCHED.name
 
                     if (needsStatusUpgrade || hasNewerWatch || hasNewRating || hasNewNotes) {
+                        // Preserve original import source (e.g. podcast) alongside the RSS sync note
+                        val combinedSource = if (!existing.importSource.isNullOrBlank() &&
+                            !existing.importSource.contains("Letterboxd Live RSS")
+                        ) {
+                            "${existing.importSource}, Letterboxd Live RSS (@$cleanUser)"
+                        } else {
+                            "Letterboxd Live RSS (@$cleanUser)"
+                        }
                         val updated = existing.copy(
                             status = MediaStatus.WATCHED.name,
                             watchedAt = if (hasNewerWatch || existing.watchedAt == null) entry.watchedAt else existing.watchedAt,
                             rating = entry.ratingTenScale ?: existing.rating,
                             userNotes = entry.notes ?: existing.userNotes,
-                            importSource = "Letterboxd Live RSS (@$cleanUser)",
+                            importSource = combinedSource,
                             releaseDate = existing.releaseDate ?: entry.year?.takeIf { it.isNotBlank() },
                             overview = existing.overview ?: "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}."
                         )
                         mediaDao.updateMediaItem(updated)
                         existingItems[normalizedTitle] = updated
+                        if (yearAwareKey != null) existingItems[yearAwareKey] = updated
                         newlyImported.add(updated)
+                        Log.d(TAG, "Promoted '${entry.title}' from ${existing.status} → WATCHED (watchedAt=${entry.dateString})")
                     }
                 } else {
                     val item = MediaItem(
@@ -129,7 +166,9 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                     val insertedId = mediaDao.insertMediaItem(item)
                     val insertedItem = item.copy(id = insertedId)
                     existingItems[normalizedTitle] = insertedItem
+                    if (yearAwareKey != null) existingItems[yearAwareKey] = insertedItem
                     newlyImported.add(insertedItem)
+                    Log.d(TAG, "Inserted new WATCHED '${entry.title}' (${entry.year}) watchedAt=${entry.dateString}")
                 }
             }
 

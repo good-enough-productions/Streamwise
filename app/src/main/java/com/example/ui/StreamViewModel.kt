@@ -333,8 +333,8 @@ class StreamViewModel(
         }
         val now = System.currentTimeMillis()
         val lastSync = userPreferences.lastLetterboxdSyncTime
-        val thirtyMinutesMs = 30 * 60 * 1000L
-        if (silent && (now - lastSync) < thirtyMinutesMs) {
+        val fourHoursMs = 4 * 60 * 60 * 1000L
+        if (silent && (now - lastSync) < fourHoursMs) {
             android.util.Log.d(TAG, "syncLetterboxdLive: Skipped silent sync (synced ${(now - lastSync) / 60000}m ago)")
             return
         }
