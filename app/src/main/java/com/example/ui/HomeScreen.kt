@@ -2921,7 +2921,6 @@ fun WatchedTabContent(
                 selected = watchedSubTab == "analytics",
                 onClick = { 
                     watchedSubTab = "analytics"
-                    showAnalyticsSheet = true
                 },
                 text = {
                     Text(
@@ -2934,6 +2933,34 @@ fun WatchedTabContent(
             )
         }
 
+        if (watchedSubTab == "analytics") {
+            WatchedAnalyticsContent(
+                analytics = watchedAnalytics,
+                allProviders = allProviders,
+                selectedEra = selectedEra,
+                onSelectEra = { era ->
+                    selectedEra = if (selectedEra == era) null else era
+                    if (selectedEra != null) watchedSubTab = "diary"
+                },
+                selectedGenre = selectedGenre,
+                onSelectGenre = { genre ->
+                    selectedGenre = if (selectedGenre == genre) null else genre
+                    if (selectedGenre != null) watchedSubTab = "diary"
+                },
+                selectedService = selectedService,
+                onSelectService = { service ->
+                    selectedService = if (selectedService == service) null else service
+                    if (selectedService != null) watchedSubTab = "diary"
+                },
+                onEnrichVaultRatings = onEnrichVaultRatings,
+                isEnrichingVault = isEnrichingVault,
+                vaultEnrichProgress = vaultEnrichProgress,
+                onClose = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 4.dp)
+            )
+        } else {
         // Slim Sticky Top Bar: Search, Sort, View Switcher & Quick Analytics Button (Issue #16)
         Row(
             modifier = Modifier
@@ -3233,6 +3260,7 @@ fun WatchedTabContent(
                     }
                 }
             }
+        }
         }
 
         if (showAnalyticsSheet) {

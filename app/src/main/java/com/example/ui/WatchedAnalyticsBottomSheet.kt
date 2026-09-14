@@ -44,57 +44,93 @@ fun WatchedAnalyticsBottomSheet(
         containerColor = MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp),
         dragHandle = { BottomSheetDefaults.DragHandle() }
     ) {
-        Column(
+        WatchedAnalyticsContent(
+            analytics = analytics,
+            allProviders = allProviders,
+            selectedEra = selectedEra,
+            onSelectEra = onSelectEra,
+            selectedGenre = selectedGenre,
+            onSelectGenre = onSelectGenre,
+            selectedService = selectedService,
+            onSelectService = onSelectService,
+            onEnrichVaultRatings = onEnrichVaultRatings,
+            isEnrichingVault = isEnrichingVault,
+            vaultEnrichProgress = vaultEnrichProgress,
+            onClose = onDismiss,
             modifier = Modifier
                 .fillMaxWidth()
                 .navigationBarsPadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+        )
+    }
+}
+
+@Composable
+fun WatchedAnalyticsContent(
+    analytics: WatchedAnalytics,
+    allProviders: List<StreamingProvider>,
+    selectedEra: String?,
+    onSelectEra: (String?) -> Unit,
+    selectedGenre: String?,
+    onSelectGenre: (String?) -> Unit,
+    selectedService: String?,
+    onSelectService: (String?) -> Unit,
+    onEnrichVaultRatings: (() -> Unit)? = null,
+    isEnrichingVault: Boolean = false,
+    vaultEnrichProgress: String = "",
+    onClose: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Header
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(40.dp)
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.Analytics,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-                    Column {
-                        Text(
-                            text = "Cinephile Analytics",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Breakdown of ${analytics.totalFilms} logged titles",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.Analytics,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
-                IconButton(onClick = onDismiss) {
+                Column {
+                    Text(
+                        text = "Cinephile Analytics",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Breakdown of ${analytics.totalFilms} logged titles",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+            if (onClose != null) {
+                IconButton(onClick = onClose) {
                     Icon(Icons.Default.Close, contentDescription = "Close")
                 }
             }
+        }
 
-            // --- 4 KPI Highlights ---
+        // --- 4 KPI Highlights ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -856,17 +892,18 @@ fun WatchedAnalyticsBottomSheet(
                 }
             }
 
-            Button(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text("Close & Apply Filters")
+            if (onClose != null) {
+                Button(
+                    onClick = onClose,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Close & Apply Filters")
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
         }
-    }
 }
 
 @Composable
