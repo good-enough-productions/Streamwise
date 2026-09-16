@@ -372,6 +372,7 @@ fun HomeScreen(
                             allProviders = allProviders,
                             watchlistItems = watchlistItems,
                             onMovieClick = { detailMovieItem = it },
+                            onProviderClick = { showServiceDetailProvider = it },
                             onDeleteClick = { itemPendingRemoval = it },
                             onSyncClick = {
                                 viewModel.syncLetterboxdLive(silent = false)
@@ -599,9 +600,15 @@ fun HomeScreen(
                 provider = showServiceDetailProvider!!,
                 stats = providerStats,
                 watchlistItems = watchlistItems,
+                watchedItems = watchedItems,
                 onSelectMovie = { movie ->
-                    showServiceDetailProvider = null
                     detailMovieItem = movie
+                },
+                onWatchMovie = { movie ->
+                    viewModel.launchAndIntendToWatch(context, movie)
+                },
+                onMarkWatched = { movie ->
+                    movieToMarkWatched = movie
                 },
                 onUpdateProvider = { updated ->
                     viewModel.updateStreamingProvider(updated)
@@ -769,6 +776,9 @@ fun HomeScreen(
                         detailMovieItem = updated
                         viewModel.setServiceUsed(updated, providerId)
                     }
+                },
+                onSelectProvider = { provider ->
+                    showServiceDetailProvider = provider
                 }
             )
         }
@@ -2784,6 +2794,7 @@ fun WatchedTabContent(
     allProviders: List<StreamingProvider>,
     watchlistItems: List<MediaItem> = emptyList(),
     onMovieClick: (MediaItem) -> Unit,
+    onProviderClick: (StreamingProvider) -> Unit = {},
     onDeleteClick: (MediaItem) -> Unit,
     onSyncClick: () -> Unit,
     isSyncingToSheet: Boolean = false,
@@ -2801,7 +2812,6 @@ fun WatchedTabContent(
     var selectedGenre by remember { mutableStateOf<String?>(null) }
     var selectedEra by remember { mutableStateOf<String?>(null) }
     var selectedService by remember { mutableStateOf<String?>(null) }
-    var showAnalyticsSheet by remember { mutableStateOf(false) }
     var viewMode by remember { mutableStateOf("timeline") } // "timeline" or "grid"
     var isOverviewExpanded by remember { mutableStateOf(false) }
 
@@ -2937,6 +2947,8 @@ fun WatchedTabContent(
             WatchedAnalyticsContent(
                 analytics = watchedAnalytics,
                 allProviders = allProviders,
+                watchedItems = watchedItems,
+                watchlistItems = watchlistItems,
                 selectedEra = selectedEra,
                 onSelectEra = { era ->
                     selectedEra = if (selectedEra == era) null else era
@@ -2952,10 +2964,13 @@ fun WatchedTabContent(
                     selectedService = if (selectedService == service) null else service
                     if (selectedService != null) watchedSubTab = "diary"
                 },
+                onMovieClick = onMovieClick,
+                onProviderClick = onProviderClick,
+                onViewInDiary = { watchedSubTab = "diary" },
                 onEnrichVaultRatings = onEnrichVaultRatings,
                 isEnrichingVault = isEnrichingVault,
                 vaultEnrichProgress = vaultEnrichProgress,
-                onClose = null,
+                onClose = { watchedSubTab = "diary" },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(top = 4.dp)
@@ -3054,7 +3069,9 @@ fun WatchedTabContent(
 
             // Quick Cinema Analytics Icon Button
             IconButton(
-                onClick = { showAnalyticsSheet = true },
+                onClick = {
+                    watchedSubTab = if (watchedSubTab == "analytics") "diary" else "analytics"
+                },
                 modifier = Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(10.dp))
@@ -3168,7 +3185,7 @@ fun WatchedTabContent(
                         avgRating = avgRating,
                         watchedAnalytics = watchedAnalytics,
                         topGenres = topGenres,
-                        onOpenAnalytics = { showAnalyticsSheet = true },
+                        onOpenAnalytics = { watchedSubTab = "analytics" },
                         onPickLetterboxdFile = onPickLetterboxdFile,
                         onExportLetterboxdCsv = onExportLetterboxdCsv,
                         onSyncLetterboxdLive = onSyncLetterboxdLive,
@@ -3199,7 +3216,7 @@ fun WatchedTabContent(
                         avgRating = avgRating,
                         watchedAnalytics = watchedAnalytics,
                         topGenres = topGenres,
-                        onOpenAnalytics = { showAnalyticsSheet = true },
+                        onOpenAnalytics = { watchedSubTab = "analytics" },
                         onPickLetterboxdFile = onPickLetterboxdFile,
                         onExportLetterboxdCsv = onExportLetterboxdCsv,
                         onSyncLetterboxdLive = onSyncLetterboxdLive,
@@ -3261,29 +3278,6 @@ fun WatchedTabContent(
                 }
             }
         }
-        }
-
-        if (showAnalyticsSheet) {
-            WatchedAnalyticsBottomSheet(
-                analytics = watchedAnalytics,
-                allProviders = allProviders,
-                selectedEra = selectedEra,
-                onSelectEra = { era ->
-                    selectedEra = if (selectedEra == era) null else era
-                },
-                selectedGenre = selectedGenre,
-                onSelectGenre = { genre ->
-                    selectedGenre = if (selectedGenre == genre) null else genre
-                },
-                selectedService = selectedService,
-                onSelectService = { service ->
-                    selectedService = if (selectedService == service) null else service
-                },
-                onEnrichVaultRatings = onEnrichVaultRatings,
-                isEnrichingVault = isEnrichingVault,
-                vaultEnrichProgress = vaultEnrichProgress,
-                onDismiss = { showAnalyticsSheet = false }
-            )
         }
     }
 }
@@ -4776,7 +4770,10 @@ fun ServiceDetailBottomSheet(
     provider: StreamingProvider,
     stats: ProviderUsageStats?,
     watchlistItems: List<MediaItem> = emptyList(),
+    watchedItems: List<MediaItem> = emptyList(),
     onSelectMovie: (MediaItem) -> Unit = {},
+    onWatchMovie: ((MediaItem) -> Unit)? = null,
+    onMarkWatched: ((MediaItem) -> Unit)? = null,
     onUpdateProvider: (StreamingProvider) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -4786,6 +4783,9 @@ fun ServiceDetailBottomSheet(
     var renewalDayInput by remember(provider) { mutableStateOf(provider.renewalDayOfMonth?.toString() ?: "") }
     var isActive by remember(provider) { mutableStateOf(provider.isActive) }
     var subscribedSince by remember(provider) { mutableStateOf(provider.subscribedSince) }
+    var libraryTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched History
+    var librarySearchQuery by remember { mutableStateOf("") }
+    var isLibraryExpanded by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -5008,20 +5008,40 @@ fun ServiceDetailBottomSheet(
                 }
             }
 
-            // Watchlist Queue on this Service
+            // Service Library Section: Watchlist & Watched History with Search, Filter & Quick Actions
             val availableWatchlist = remember(watchlistItems, provider.id) {
                 watchlistItems.filter { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
+            }
+            val availableWatched = remember(watchedItems, provider.id) {
+                watchedItems.filter {
+                    it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) }
+                }
+            }
+
+            val currentLibraryList = if (libraryTab == 0) availableWatchlist else availableWatched
+            val filteredLibraryList = remember(currentLibraryList, librarySearchQuery) {
+                if (librarySearchQuery.isBlank()) currentLibraryList
+                else currentLibraryList.filter {
+                    it.title.contains(librarySearchQuery, ignoreCase = true) ||
+                    it.genres?.contains(librarySearchQuery, ignoreCase = true) == true
+                }
+            }
+            val displayedTitles = if (isLibraryExpanded || librarySearchQuery.isNotBlank()) {
+                filteredLibraryList
+            } else {
+                filteredLibraryList.take(10)
             }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // Header & Library Tabs
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -5031,12 +5051,9 @@ fun ServiceDetailBottomSheet(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
+                            Text(text = "🎬", fontSize = 16.sp)
                             Text(
-                                text = "🎬",
-                                fontSize = 16.sp
-                            )
-                            Text(
-                                text = "Watchlist on ${provider.name}",
+                                text = "Library on ${provider.name}",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -5046,7 +5063,7 @@ fun ServiceDetailBottomSheet(
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                         ) {
                             Text(
-                                text = "${availableWatchlist.size} Titles",
+                                text = "${currentLibraryList.size} Titles",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -5055,17 +5072,103 @@ fun ServiceDetailBottomSheet(
                         }
                     }
 
-                    if (availableWatchlist.isEmpty()) {
+                    // Segmented Tabs: Watchlist vs Watched
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                            .padding(2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (libraryTab == 0) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { libraryTab = 0 }
+                        ) {
+                            Text(
+                                text = "Watchlist (${availableWatchlist.size})",
+                                fontSize = 11.sp,
+                                fontWeight = if (libraryTab == 0) FontWeight.Bold else FontWeight.Medium,
+                                color = if (libraryTab == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 6.dp)
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (libraryTab == 1) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { libraryTab = 1 }
+                        ) {
+                            Text(
+                                text = "Watched (${availableWatched.size})",
+                                fontSize = 11.sp,
+                                fontWeight = if (libraryTab == 1) FontWeight.Bold else FontWeight.Medium,
+                                color = if (libraryTab == 1) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 6.dp)
+                            )
+                        }
+                    }
+
+                    // Search input for service titles
+                    if (currentLibraryList.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = librarySearchQuery,
+                            onValueChange = { librarySearchQuery = it },
+                            placeholder = { Text("Filter ${provider.name} titles...", fontSize = 12.sp) },
+                            singleLine = true,
+                            leadingIcon = {
+                                Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                            },
+                            trailingIcon = {
+                                if (librarySearchQuery.isNotEmpty()) {
+                                    IconButton(
+                                        onClick = { librarySearchQuery = "" },
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
+                                        Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(14.dp))
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
+                            textStyle = MaterialTheme.typography.bodySmall,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = DarkInputBackground,
+                                unfocusedContainerColor = DarkInputBackground,
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = DarkBorderOutline,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            )
+                        )
+                    }
+
+                    if (filteredLibraryList.isEmpty()) {
                         Text(
-                            text = "No movies currently on your watchlist are available to stream on ${provider.name}.",
+                            text = if (librarySearchQuery.isNotBlank()) {
+                                "No titles matching \"$librarySearchQuery\" found on ${provider.name}."
+                            } else if (libraryTab == 0) {
+                                "No movies currently on your watchlist are available to stream on ${provider.name}."
+                            } else {
+                                "No watched movies logged from ${provider.name} yet."
+                            },
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.outline
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(vertical = 4.dp)
                         )
                     } else {
-                        availableWatchlist.take(10).forEach { item ->
+                        displayedTitles.forEach { item ->
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onSelectMovie(item) }
@@ -5073,37 +5176,121 @@ fun ServiceDetailBottomSheet(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text(
-                                        text = item.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
                                         modifier = Modifier.weight(1f)
-                                    )
-                                    if (item.rating != null && item.rating > 0.0) {
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "★ ${String.format(Locale.US, "%.1f", item.rating)}",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
+                                    ) {
+                                        if (!item.imageUrl.isNullOrBlank()) {
+                                            coil.compose.AsyncImage(
+                                                model = item.imageUrl,
+                                                contentDescription = item.title,
+                                                modifier = Modifier
+                                                    .size(width = 28.dp, height = 40.dp)
+                                                    .clip(RoundedCornerShape(4.dp)),
+                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                        }
+
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = item.title,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            val releaseYear = item.releaseYear ?: WatchedAnalyticsCalculator.extractReleaseYear(item)
+                                            val genreSnippet = item.genres?.split(",")?.firstOrNull()?.trim()
+                                            val metaStr = listOfNotNull(
+                                                if (releaseYear != null && releaseYear > 0) "$releaseYear" else null,
+                                                genreSnippet
+                                            ).joinToString(" • ")
+                                            if (metaStr.isNotEmpty()) {
+                                                Text(
+                                                    text = metaStr,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        val rating = item.rating ?: WatchedAnalyticsCalculator.extractRating(item)
+                                        if (rating != null && rating > 0.0) {
+                                            Text(
+                                                text = "★ ${String.format(Locale.US, "%.1f", rating)}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(end = 4.dp)
+                                            )
+                                        }
+
+                                        if (onWatchMovie != null) {
+                                            IconButton(
+                                                onClick = { onWatchMovie(item) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.PlayArrow,
+                                                    contentDescription = "Stream on ${provider.name}",
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+
+                                        if (libraryTab == 0 && onMarkWatched != null) {
+                                            IconButton(
+                                                onClick = { onMarkWatched(item) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = "Mark as Watched",
+                                                    tint = MaterialTheme.colorScheme.secondary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
-                        if (availableWatchlist.size > 10) {
-                            Text(
-                                text = "+ ${availableWatchlist.size - 10} more titles on this service",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(top = 2.dp)
-                            )
+
+                        if (filteredLibraryList.size > 10 && librarySearchQuery.isBlank()) {
+                            TextButton(
+                                onClick = { isLibraryExpanded = !isLibraryExpanded },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 2.dp),
+                                contentPadding = PaddingValues(vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isLibraryExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isLibraryExpanded) "Show Less" else "Show All ${filteredLibraryList.size} Titles",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     }
                 }
@@ -6546,7 +6733,8 @@ fun MovieDetailsBottomSheet(
     onMoveToWatchlistClick: (() -> Unit)? = null,
     onEditWatchDateClick: (() -> Unit)? = null,
     onDiscussInExplore: ((String) -> Unit)? = null,
-    onSetServiceUsed: ((String) -> Unit)? = null
+    onSetServiceUsed: ((String) -> Unit)? = null,
+    onSelectProvider: ((StreamingProvider) -> Unit)? = null
 ) {
     val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
 
@@ -6767,6 +6955,9 @@ fun MovieDetailsBottomSheet(
                             } else {
                                 MaterialTheme.colorScheme.surfaceVariant
                             },
+                            modifier = if (provider != null && onSelectProvider != null) {
+                                Modifier.clickable { onSelectProvider(provider) }
+                            } else Modifier
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -6785,6 +6976,15 @@ fun MovieDetailsBottomSheet(
                                     fontWeight = FontWeight.Bold,
                                     color = if (isSubscribed) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                if (provider != null && onSelectProvider != null) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = "Inspect ${provider.name}",
+                                        tint = if (isSubscribed) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                             }
                         }
                     }
