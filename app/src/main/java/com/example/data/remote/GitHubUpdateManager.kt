@@ -1,4 +1,4 @@
-﻿package com.example.data.remote
+package com.example.data.remote
 
 import android.content.Context
 import android.content.Intent
@@ -45,16 +45,19 @@ class GitHubUpdateManager(private val context: Context) {
     private val repoOwner = "good-enough-productions"
     private val repoNames = listOf("Streamwise", "master-hub")
 
-    suspend fun checkForUpdates(currentVersionName: String): UpdateStatus = withContext(Dispatchers.IO) {
+    suspend fun checkForUpdates(currentVersionName: String, githubToken: String? = null): UpdateStatus = withContext(Dispatchers.IO) {
         _updateStatus.value = UpdateStatus.Checking
         try {
             for (repo in repoNames) {
                 val url = "https://api.github.com/repos/$repoOwner/$repo/releases"
-                val request = Request.Builder()
+                val requestBuilder = Request.Builder()
                     .url(url)
                     .header("Accept", "application/vnd.github.v3+json")
                     .header("User-Agent", "Streamwise-App")
-                    .build()
+                if (!githubToken.isNullOrBlank()) {
+                    requestBuilder.header("Authorization", "Bearer $githubToken")
+                }
+                val request = requestBuilder.build()
 
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
@@ -151,6 +154,17 @@ class GitHubUpdateManager(private val context: Context) {
 
     fun triggerPackageInstaller(apkFile: File) {
         try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    val settingsIntent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(settingsIntent)
+                    return
+                }
+            }
+
             val contentUri: Uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",

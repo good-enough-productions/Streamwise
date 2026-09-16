@@ -1,6 +1,7 @@
 package com.example.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -8,9 +9,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,8 +20,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.MediaItem
 import com.example.data.model.StreamingProvider
+import com.example.data.util.BlindSpotStat
 import com.example.data.util.WatchedAnalytics
+import com.example.data.util.WatchedAnalyticsCalculator
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,12 +32,16 @@ import java.util.Locale
 fun WatchedAnalyticsBottomSheet(
     analytics: WatchedAnalytics,
     allProviders: List<StreamingProvider>,
+    watchedItems: List<MediaItem> = emptyList(),
+    watchlistItems: List<MediaItem> = emptyList(),
     selectedEra: String?,
     onSelectEra: (String?) -> Unit,
     selectedGenre: String?,
     onSelectGenre: (String?) -> Unit,
     selectedService: String?,
     onSelectService: (String?) -> Unit,
+    onMovieClick: (MediaItem) -> Unit = {},
+    onProviderClick: ((StreamingProvider) -> Unit)? = null,
     onEnrichVaultRatings: (() -> Unit)? = null,
     isEnrichingVault: Boolean = false,
     vaultEnrichProgress: String = "",
@@ -47,12 +56,16 @@ fun WatchedAnalyticsBottomSheet(
         WatchedAnalyticsContent(
             analytics = analytics,
             allProviders = allProviders,
+            watchedItems = watchedItems,
+            watchlistItems = watchlistItems,
             selectedEra = selectedEra,
             onSelectEra = onSelectEra,
             selectedGenre = selectedGenre,
             onSelectGenre = onSelectGenre,
             selectedService = selectedService,
             onSelectService = onSelectService,
+            onMovieClick = onMovieClick,
+            onProviderClick = onProviderClick,
             onEnrichVaultRatings = onEnrichVaultRatings,
             isEnrichingVault = isEnrichingVault,
             vaultEnrichProgress = vaultEnrichProgress,
@@ -68,18 +81,24 @@ fun WatchedAnalyticsBottomSheet(
 fun WatchedAnalyticsContent(
     analytics: WatchedAnalytics,
     allProviders: List<StreamingProvider>,
+    watchedItems: List<MediaItem> = emptyList(),
+    watchlistItems: List<MediaItem> = emptyList(),
     selectedEra: String?,
     onSelectEra: (String?) -> Unit,
     selectedGenre: String?,
     onSelectGenre: (String?) -> Unit,
     selectedService: String?,
     onSelectService: (String?) -> Unit,
+    onMovieClick: (MediaItem) -> Unit = {},
+    onProviderClick: ((StreamingProvider) -> Unit)? = null,
     onEnrichVaultRatings: (() -> Unit)? = null,
     isEnrichingVault: Boolean = false,
     vaultEnrichProgress: String = "",
+    onViewInDiary: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var activeBlindSpotForDialog by remember { mutableStateOf<BlindSpotStat?>(null) }
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
@@ -123,7 +142,17 @@ fun WatchedAnalyticsContent(
                     )
                 }
             }
-            if (onClose != null) {
+            if (onViewInDiary != null) {
+                OutlinedButton(
+                    onClick = onViewInDiary,
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Diary", fontSize = 12.sp)
+                }
+            } else if (onClose != null) {
                 IconButton(onClick = onClose) {
                     Icon(Icons.Default.Close, contentDescription = "Close")
                 }
@@ -131,37 +160,39 @@ fun WatchedAnalyticsContent(
         }
 
         // --- 4 KPI Highlights ---
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AnalyticsKpiCard(
-                    title = "Watched",
-                    value = "${analytics.totalFilms}",
-                    subtitle = "Films",
-                    modifier = Modifier.weight(1f)
-                )
-                AnalyticsKpiCard(
-                    title = "Screen Time",
-                    value = "~${analytics.totalHours}h",
-                    subtitle = "Total Hours",
-                    modifier = Modifier.weight(1f)
-                )
-                AnalyticsKpiCard(
-                    title = "Avg Rating",
-                    value = if (analytics.ratedCount > 0) "★ ${String.format(Locale.US, "%.1f", analytics.avgRating)}" else "Unrated",
-                    subtitle = "${analytics.ratedCount} of ${analytics.totalFilms} rated",
-                    valueColor = Color(0xFFFFD700),
-                    modifier = Modifier.weight(1f)
-                )
-                AnalyticsKpiCard(
-                    title = "Velocity",
-                    value = "~${String.format(Locale.US, "%.1f", analytics.monthlyVelocity)}",
-                    subtitle = "Films / mo",
-                    valueColor = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            AnalyticsKpiCard(
+                title = "Watched",
+                value = "${analytics.totalFilms}",
+                subtitle = "Films",
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onViewInDiary?.invoke() }
+            )
+            AnalyticsKpiCard(
+                title = "Screen Time",
+                value = "~${analytics.totalHours}h",
+                subtitle = "Total Hours",
+                modifier = Modifier.weight(1f)
+            )
+            AnalyticsKpiCard(
+                title = "Avg Rating",
+                value = if (analytics.ratedCount > 0) "★ ${String.format(Locale.US, "%.1f", analytics.avgRating)}" else "Unrated",
+                subtitle = "${analytics.ratedCount} of ${analytics.totalFilms} rated",
+                valueColor = Color(0xFFFFD700),
+                modifier = Modifier.weight(1f)
+            )
+            AnalyticsKpiCard(
+                title = "Velocity",
+                value = "~${String.format(Locale.US, "%.1f", analytics.monthlyVelocity)}",
+                subtitle = "Films / mo",
+                valueColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+        }
 
             // --- SECTION 1: Release Eras & Decades ---
             Card(
@@ -349,19 +380,37 @@ fun WatchedAnalyticsContent(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .horizontalScroll(rememberScrollState()),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             dir.sampleTitles.forEach { title ->
+                                                val movie = (watchedItems + watchlistItems).find { it.title.equals(title, ignoreCase = true) }
+                                                    ?: (watchedItems + watchlistItems).find { it.title.contains(title, ignoreCase = true) }
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
-                                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+                                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                                                    modifier = Modifier.clickable {
+                                                        if (movie != null) onMovieClick(movie)
+                                                    }
                                                 ) {
-                                                    Text(
-                                                        text = title,
-                                                        fontSize = 10.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Movie,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(11.dp)
+                                                        )
+                                                        Text(
+                                                            text = title,
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -461,19 +510,37 @@ fun WatchedAnalyticsContent(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .horizontalScroll(rememberScrollState()),
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             actor.sampleTitles.forEach { title ->
+                                                val movie = (watchedItems + watchlistItems).find { it.title.equals(title, ignoreCase = true) }
+                                                    ?: (watchedItems + watchlistItems).find { it.title.contains(title, ignoreCase = true) }
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
-                                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+                                                    color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f)),
+                                                    modifier = Modifier.clickable {
+                                                        if (movie != null) onMovieClick(movie)
+                                                    }
                                                 ) {
-                                                    Text(
-                                                        text = title,
-                                                        fontSize = 10.sp,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Person,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.secondary,
+                                                            modifier = Modifier.size(11.dp)
+                                                        )
+                                                        Text(
+                                                            text = title,
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -568,27 +635,101 @@ fun WatchedAnalyticsContent(
 
                                     if (spot.matchingWatchlistCount > 0) {
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                            modifier = Modifier.fillMaxWidth()
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable { activeBlindSpotForDialog = spot }
                                         ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.BookmarkAdded,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                                Text(
-                                                    "Ready to explore: ${spot.matchingWatchlistCount} on your Watchlist (${spot.sampleWatchlistTitles.joinToString(", ")})",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Medium,
-                                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                                )
+                                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.BookmarkAdded,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                        Text(
+                                                            "Ready to explore: ${spot.matchingWatchlistCount} on your Watchlist",
+                                                            style = MaterialTheme.typography.labelMedium,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                        )
+                                                    }
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                                    ) {
+                                                        Text(
+                                                            "View All",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
+                                                        Icon(
+                                                            Icons.AutoMirrored.Filled.ArrowForward,
+                                                            contentDescription = null,
+                                                            tint = MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                    }
+                                                }
+
+                                                if (spot.sampleWatchlistTitles.isNotEmpty()) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .horizontalScroll(rememberScrollState()),
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                    ) {
+                                                        spot.sampleWatchlistTitles.forEach { title ->
+                                                            val matchingItem = spot.matchingWatchlistItems.find { it.title.equals(title, ignoreCase = true) }
+                                                                ?: watchlistItems.find { it.title.equals(title, ignoreCase = true) }
+                                                                ?: watchlistItems.find { it.title.contains(title, ignoreCase = true) }
+                                                            Surface(
+                                                                shape = RoundedCornerShape(6.dp),
+                                                                color = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp),
+                                                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                                                modifier = Modifier.clickable {
+                                                                    if (matchingItem != null) {
+                                                                        onMovieClick(matchingItem)
+                                                                    } else {
+                                                                        activeBlindSpotForDialog = spot
+                                                                    }
+                                                                }
+                                                            ) {
+                                                                Row(
+                                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        Icons.Default.PlayCircleOutline,
+                                                                        contentDescription = null,
+                                                                        tint = MaterialTheme.colorScheme.primary,
+                                                                        modifier = Modifier.size(12.dp)
+                                                                    )
+                                                                    Text(
+                                                                        text = title,
+                                                                        fontSize = 11.sp,
+                                                                        fontWeight = FontWeight.Medium,
+                                                                        color = MaterialTheme.colorScheme.onSurface
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -738,13 +879,20 @@ fun WatchedAnalyticsContent(
                     } else {
                         analytics.serviceBreakdown.forEach { s ->
                             val isSelected = selectedService == s.providerId
+                            val provider = allProviders.find { it.id.equals(s.providerId, ignoreCase = true) || it.name.equals(s.displayName, ignoreCase = true) }
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent,
                                 border = if (isSelected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { onSelectService(s.providerId) }
+                                    .clickable {
+                                        if (provider != null && onProviderClick != null) {
+                                            onProviderClick(provider)
+                                        } else {
+                                            onSelectService(if (isSelected) null else s.providerId)
+                                        }
+                                    }
                             ) {
                                 Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Row(
@@ -752,12 +900,29 @@ fun WatchedAnalyticsContent(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text(
-                                            text = s.displayName,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text(
+                                                text = s.displayName,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                            if (provider != null) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                                                    modifier = Modifier.clickable { onProviderClick?.invoke(provider) }
+                                                ) {
+                                                    Text(
+                                                        "Inspect Library ➔",
+                                                        fontSize = 9.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
                                         Text(
                                             text = "${s.count} films (${String.format(Locale.US, "%.1f", s.percentage)}%)",
                                             style = MaterialTheme.typography.labelSmall,
@@ -892,7 +1057,17 @@ fun WatchedAnalyticsContent(
                 }
             }
 
-            if (onClose != null) {
+            if (onViewInDiary != null && (selectedEra != null || selectedGenre != null || selectedService != null)) {
+                Button(
+                    onClick = onViewInDiary,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("View Filtered Films in Diary")
+                }
+            } else if (onClose != null) {
                 Button(
                     onClick = onClose,
                     modifier = Modifier.fillMaxWidth(),
@@ -904,6 +1079,142 @@ fun WatchedAnalyticsContent(
 
             Spacer(modifier = Modifier.height(16.dp))
         }
+
+    if (activeBlindSpotForDialog != null) {
+        BlindSpotExplorerDialog(
+            spot = activeBlindSpotForDialog!!,
+            allProviders = allProviders,
+            onMovieClick = onMovieClick,
+            onDismiss = { activeBlindSpotForDialog = null }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BlindSpotExplorerDialog(
+    spot: BlindSpotStat,
+    allProviders: List<StreamingProvider>,
+    onMovieClick: (MediaItem) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = spot.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "${spot.matchingWatchlistItems.size} on Watchlist",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = spot.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (spot.matchingWatchlistItems.isEmpty()) {
+                    Text(
+                        "No titles currently on your watchlist match this gap.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                } else {
+                    spot.matchingWatchlistItems.forEach { item ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDismiss()
+                                    onMovieClick(item)
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = item.title,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                    val year = WatchedAnalyticsCalculator.extractReleaseYear(item)
+                                    val rating = item.rating
+                                    val metaText = buildString {
+                                        if (year != null) append(year)
+                                        if (rating != null && rating > 0.0) {
+                                            if (isNotEmpty()) append(" • ")
+                                            append("★ ${String.format(Locale.US, "%.1f", rating)}")
+                                        }
+                                        if (!item.genres.isNullOrBlank()) {
+                                            if (isNotEmpty()) append(" • ")
+                                            append(item.genres)
+                                        }
+                                    }
+                                    if (metaText.isNotBlank()) {
+                                        Text(
+                                            text = metaText,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = "View Details",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 @Composable

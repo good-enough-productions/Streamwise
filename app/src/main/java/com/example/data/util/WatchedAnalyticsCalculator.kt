@@ -54,7 +54,8 @@ data class BlindSpotStat(
     val description: String,       // "Only 1.2% of your logged vault."
     val representationPercentage: Float,
     val matchingWatchlistCount: Int,
-    val sampleWatchlistTitles: List<String>
+    val sampleWatchlistTitles: List<String>,
+    val matchingWatchlistItems: List<MediaItem> = emptyList()
 )
 
 data class WatchedAnalytics(
@@ -500,7 +501,8 @@ object WatchedAnalyticsCalculator {
                     description = "Only ${String.format(Locale.US, "%.1f", pre1970Pct)}% of your logged vault spans Hollywood's golden age, classic noir, and mid-century cinema.",
                     representationPercentage = pre1970Pct,
                     matchingWatchlistCount = matchingWatchlist.size,
-                    sampleWatchlistTitles = matchingWatchlist.map { it.title }.take(3)
+                    sampleWatchlistTitles = matchingWatchlist.map { it.title }.take(3),
+                    matchingWatchlistItems = matchingWatchlist
                 )
             )
         }
@@ -517,7 +519,8 @@ object WatchedAnalyticsCalculator {
                     description = "Only ${String.format(Locale.US, "%.1f", seventiesPct)}% of your films represent the gritty 1970s auteur wave (Scorsese, Coppola, Lumet, Friedkin).",
                     representationPercentage = seventiesPct,
                     matchingWatchlistCount = matchingWatchlist.size,
-                    sampleWatchlistTitles = matchingWatchlist.map { it.title }.take(3)
+                    sampleWatchlistTitles = matchingWatchlist.map { it.title }.take(3),
+                    matchingWatchlistItems = matchingWatchlist
                 )
             )
         }
@@ -534,7 +537,8 @@ object WatchedAnalyticsCalculator {
                     description = "Westerns represent only ${String.format(Locale.US, "%.1f", westernPct)}% of your logged titles.",
                     representationPercentage = westernPct,
                     matchingWatchlistCount = matchingWatchlist.size,
-                    sampleWatchlistTitles = matchingWatchlist.map { it.title }.take(3)
+                    sampleWatchlistTitles = matchingWatchlist.map { it.title }.take(3),
+                    matchingWatchlistItems = matchingWatchlist
                 )
             )
         }
@@ -551,7 +555,8 @@ object WatchedAnalyticsCalculator {
                     description = "Documentaries account for just ${String.format(Locale.US, "%.1f", docPct)}% of your vault.",
                     representationPercentage = docPct,
                     matchingWatchlistCount = matchingWatchlist.size,
-                    sampleWatchlistTitles = matchingWatchlist.map { it.title }.take(3)
+                    sampleWatchlistTitles = matchingWatchlist.map { it.title }.take(3),
+                    matchingWatchlistItems = matchingWatchlist
                 )
             )
         }

@@ -426,7 +426,7 @@ class StreamViewModel(
 
     fun checkForUpdates() {
         viewModelScope.launch {
-            gitHubUpdateManager.checkForUpdates(BuildConfig.VERSION_NAME)
+            gitHubUpdateManager.checkForUpdates(BuildConfig.VERSION_NAME, githubToken.value)
         }
     }
 
