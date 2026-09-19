@@ -12,13 +12,14 @@ import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.TimeUnit
 
+import java.util.concurrent.ConcurrentHashMap
+
 object OllamaClient {
-    private var currentHost: String? = null
-    private var apiService: OllamaApiService? = null
+    private val serviceCache = ConcurrentHashMap<String, OllamaApiService>()
 
     /**
      * Fast non-blocking reachability test for the local Ollama daemon before executing queries.
-     * Prevents worker/coroutine thread blocking when laptop is asleep or off-network.
+     * Prevents worker/coroutine thread blocking when a node is asleep or off-network.
      */
     suspend fun isHostReachable(host: String, timeoutMs: Int = 2000): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -38,13 +39,23 @@ object OllamaClient {
         }
     }
 
+    /**
+     * Query /api/tags to detect models and verify API readiness with a quick timeout.
+     */
+    suspend fun getTagsSafely(host: String): OllamaTagsResponse? = withContext(Dispatchers.IO) {
+        try {
+            val api = getApiService(host)
+            api.getTags()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     fun getApiService(host: String): OllamaApiService {
         val normalizedHost = if (host.startsWith("http")) host else "http://$host:11434/"
         val finalHost = if (normalizedHost.endsWith("/")) normalizedHost else "$normalizedHost/"
 
-        if (currentHost == finalHost && apiService != null) {
-            return apiService!!
-        }
+        serviceCache[finalHost]?.let { return it }
 
         val moshi = Moshi.Builder()
             .addLast(KotlinJsonAdapterFactory())
@@ -67,8 +78,8 @@ object OllamaClient {
             .client(okHttpClient)
             .build()
 
-        currentHost = finalHost
-        apiService = retrofit.create(OllamaApiService::class.java)
-        return apiService!!
+        val service = retrofit.create(OllamaApiService::class.java)
+        serviceCache[finalHost] = service
+        return service
     }
 }

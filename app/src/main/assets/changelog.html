@@ -20,6 +20,18 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.6.2</span> <span class="date">September 2026</span></h2>
+        <h3>Multi-Machine AI Mesh Auto-Discovery, Dynamic Model Failover & Olivia Hardware Attribution</h3>
+        <ul>
+            <li><strong>Autonomous Multi-Machine AI Mesh Coordinator (<code>AiMeshCoordinator</code>):</strong> Transformed StreamWise from a single-host Ollama client into an intelligent multi-node AI mesh consumer. Automatically routes synthesis and chat requests to Desktop Fry (<code>192.168.86.27:11434</code>, Qwen 2.5 Coder 7B @ 48.2 tok/s) as the primary compute anchor, with instant non-blocking failover to Laptop Maze (<code>192.168.86.217:11434</code>, Gemma 4 @ 26.5 tok/s) when roaming or if the desktop is unreachable.</li>
+            <li><strong>Dynamic Model Detection via <code>/api/tags</code>:</strong> Eliminated hardcoded model assumptions (e.g. <code>gemma4:e2b</code>) that previously triggered 404 errors on heterogeneous nodes. StreamWise now queries node capabilities dynamically, selecting the optimal loaded model (Qwen 2.5 Coder 7B on Fry, Gemma 4 on Maze) without manual configuration.</li>
+            <li><strong>Live Mesh Node Monitor & Latency Probing:</strong> Added an interactive "AI Mesh Coordinator" control deck in Settings (Tab 3: System & Updates). Features real-time latency pinging, active model badges, and connection indicators (🟢 Online vs 🔴 Offline) for both workstation nodes.</li>
+            <li><strong>Olivia Hardware Attribution:</strong> Cinematic assistant conversations now transparently cite the active synthesis node and model (e.g., <em>"Synthesized by Olivia via Desktop Fry [qwen2.5-coder:7b]"</em>).</li>
+            <li><strong>Mesh-Aware Background Availability Sync:</strong> Upgraded <code>AvailabilitySyncWorker</code> to resolve the active mesh node before generating personalized watchlist cards, ensuring background synthesis runs on the fastest local hardware.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.6.1</span> <span class="date">September 2026</span></h2>
         <h3>Zero-Wrap UI Ergonomics, Immediate Watched Transitions & Custom Watch Date Logging</h3>
         <ul>

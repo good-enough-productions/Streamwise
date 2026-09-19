@@ -21,19 +21,22 @@ Streamwise is a self-evolving Android application designed to track your cinemat
 
 ---
 
-## 🤖 The "Olivia" Agent & Local AI
-Olivia provides "Agentic Research Strategies" for every movie on your watchlist. She runs locally on your machine for maximum privacy.
+## 🤖 The "Olivia" Agent & Multi-Machine AI Mesh
+Olivia provides deep cinematic research strategies and film analysis for every title on your watchlist, powered by a private, multi-machine local AI mesh.
 
-### Setup Ollama (Local Brain)
-1. **Install Ollama:** Download from [ollama.com](https://ollama.com).
-2. **Download Model:** Open your terminal and run:
-   ```bash
-   ollama run gemma4:e2b
-   ```
-3. **Configure the App:**
-   - Go to the **Settings** (Gear icon) in the app.
-   - Enter your laptop's **Local IP Address** (e.g., `192.168.86.217`).
-   - Olivia will now start researching your movies in the background!
+### Mesh Node Architecture:
+1. **Desktop Fry (Primary Compute Anchor):**
+   - Address: `192.168.86.27:11434`
+   - Model: `qwen2.5-coder:7b` (High throughput @ 48.2 tok/s)
+   - Handles heavy contextual synthesis, deep-wiki research cards, and conversational analysis.
+2. **Laptop Maze (Edge Field Unit):**
+   - Address: `192.168.86.217:11434`
+   - Model: `gemma4:e2b` / `gemma4:26b` (@ 26.5 tok/s)
+   - Instant failover unit when roaming on Wi-Fi or when the desktop anchor is asleep.
+3. **Dynamic Discovery & Hardware Attribution:**
+   - Streamwise queries node capabilities via `/api/tags` and dynamically routes requests using the loaded model.
+   - Assistant responses cite the physical machine that generated them (e.g. `Synthesized by Olivia via Desktop Fry [qwen2.5-coder:7b]`).
+   - Interactive latency pinging, active model badges, and connection tests are available in Settings (Tab 3: Updates & System).
 
 ---
 
