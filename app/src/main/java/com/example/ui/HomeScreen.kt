@@ -546,6 +546,11 @@ fun HomeScreen(
         // Settings Dialog (Overlay)
         if (showSettingsDialog) {
             val ollamaHost by viewModel.ollamaHost.collectAsState()
+            val meshPrimaryHost by viewModel.meshPrimaryHost.collectAsState()
+            val meshSecondaryHost by viewModel.meshSecondaryHost.collectAsState()
+            val meshFryStatus by viewModel.meshFryStatus.collectAsState()
+            val meshMazeStatus by viewModel.meshMazeStatus.collectAsState()
+            val isProbingMesh by viewModel.isProbingMesh.collectAsState()
             val githubToken by viewModel.githubToken.collectAsState()
             val watchmodeApiKey by viewModel.watchmodeApiKey.collectAsState()
             val geminiApiKey by viewModel.geminiApiKey.collectAsState()
@@ -574,6 +579,14 @@ fun HomeScreen(
                 onSaveWatchmodeApiKey = { viewModel.saveWatchmodeApiKey(it) },
                 ollamaHost = ollamaHost,
                 onSaveOllamaHost = { viewModel.saveOllamaHost(it) },
+                meshPrimaryHost = meshPrimaryHost,
+                onSaveMeshPrimaryHost = { viewModel.saveMeshPrimaryHost(it) },
+                meshSecondaryHost = meshSecondaryHost,
+                onSaveMeshSecondaryHost = { viewModel.saveMeshSecondaryHost(it) },
+                meshFryStatus = meshFryStatus,
+                meshMazeStatus = meshMazeStatus,
+                isProbingMesh = isProbingMesh,
+                onProbeMesh = { viewModel.probeAiMesh() },
                 githubToken = githubToken,
                 onSaveGithubToken = { viewModel.saveGithubToken(it) },
                 googleSheetWebhookUrl = googleSheetWebhookUrl,
@@ -5625,6 +5638,14 @@ fun SettingsDialog(
     onSaveWatchmodeApiKey: (String) -> Unit,
     ollamaHost: String,
     onSaveOllamaHost: (String) -> Unit,
+    meshPrimaryHost: String = "192.168.86.27",
+    onSaveMeshPrimaryHost: (String) -> Unit = {},
+    meshSecondaryHost: String = "192.168.86.217",
+    onSaveMeshSecondaryHost: (String) -> Unit = {},
+    meshFryStatus: com.example.data.remote.MeshNodeStatus? = null,
+    meshMazeStatus: com.example.data.remote.MeshNodeStatus? = null,
+    isProbingMesh: Boolean = false,
+    onProbeMesh: () -> Unit = {},
     githubToken: String,
     onSaveGithubToken: (String) -> Unit,
     googleSheetWebhookUrl: String = "",
@@ -6084,6 +6105,8 @@ fun SettingsDialog(
                         var geminiInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
                         var wmInput by remember(watchmodeApiKey) { mutableStateOf(watchmodeApiKey) }
                         var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
+                        var fryInput by remember(meshPrimaryHost) { mutableStateOf(meshPrimaryHost) }
+                        var mazeInput by remember(meshSecondaryHost) { mutableStateOf(meshSecondaryHost) }
                         var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
                         var showTmdb by remember { mutableStateOf(false) }
                         var showGemini by remember { mutableStateOf(false) }
@@ -6314,20 +6337,39 @@ fun SettingsDialog(
                                 }
                             }
 
-                            // Local AI (Ollama Host) Section
+                            // AI Mesh Multi-Machine Coordinator (Desktop Fry & Laptop Maze)
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Private Offline Assistant (Ollama)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Connects to your home computer running Ollama to chat with Olivia privately on your home network.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("AI Mesh Coordinator", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                            Text("Multi-Machine Local Compute", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                        }
+                                        Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                                            Text("Mesh Auto-Failover", fontSize = 10.sp, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 4.dp))
+                                        }
+                                    }
+
+                                    Text(
+                                        "Automatically routes heavy synthesis to Desktop Fry (Qwen 2.5 Coder 7B @ 48 tok/s) and fails over to Laptop Maze (Gemma 4 @ 26 tok/s).",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+
+                                    // Node 1: Desktop Fry
                                     OutlinedTextField(
-                                        value = hostInput,
-                                        onValueChange = { hostInput = it },
-                                        label = { Text("Ollama Host IP") },
-                                        placeholder = { Text("e.g. 192.168.1.100") },
+                                        value = fryInput,
+                                        onValueChange = { fryInput = it },
+                                        label = { Text("Primary Node (Desktop Fry)") },
+                                        placeholder = { Text("192.168.86.27") },
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -6337,12 +6379,74 @@ fun SettingsDialog(
                                         ),
                                         modifier = Modifier.fillMaxWidth()
                                     )
-                                    Button(
-                                        onClick = { onSaveOllamaHost(hostInput) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        Text("Save Offline Host", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+
+                                    // Node 2: Laptop Maze
+                                    OutlinedTextField(
+                                        value = mazeInput,
+                                        onValueChange = { mazeInput = it },
+                                        label = { Text("Secondary Node (Laptop Maze)") },
+                                        placeholder = { Text("192.168.86.217") },
+                                        singleLine = true,
+                                        colors = OutlinedTextFieldDefaults.colors(
+                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                            focusedContainerColor = DarkInputBackground,
+                                            unfocusedContainerColor = DarkInputBackground
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = {
+                                                onSaveMeshPrimaryHost(fryInput)
+                                                onSaveMeshSecondaryHost(mazeInput)
+                                                onSaveOllamaHost(fryInput)
+                                            },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("Save Mesh IPs", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        OutlinedButton(
+                                            onClick = onProbeMesh,
+                                            enabled = !isProbingMesh,
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            if (isProbingMesh) {
+                                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                Text("Test Mesh Nodes", fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+
+                                    // Live Mesh Node Status Results
+                                    if (meshFryStatus != null || meshMazeStatus != null) {
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                        meshFryStatus?.let { fry ->
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Text(if (fry.isOnline) "🟢" else "🔴", fontSize = 12.sp)
+                                                Text(
+                                                    if (fry.isOnline) "Fry: Online (${fry.latencyMs}ms) · ${fry.activeModel}" else "Fry (${fry.host}): Offline / Asleep",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = if (fry.isOnline) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (fry.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                        }
+                                        meshMazeStatus?.let { maze ->
+                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Text(if (maze.isOnline) "🟢" else "🔴", fontSize = 12.sp)
+                                                Text(
+                                                    if (maze.isOnline) "Maze: Online (${maze.latencyMs}ms) · ${maze.activeModel}" else "Maze (${maze.host}): Offline / Asleep",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = if (maze.isOnline) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (maze.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }

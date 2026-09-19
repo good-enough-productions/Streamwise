@@ -85,13 +85,15 @@ class AvailabilitySyncWorker(
                 "No history yet"
             }
 
-            val ollamaHost = userPrefs?.ollamaHost ?: "192.168.86.217"
-            // Fast reachability check to prevent 60-second socket timeouts when laptop is sleeping/off-network
-            var isOllamaAvailable = OllamaClient.isHostReachable(ollamaHost, timeoutMs = 2000)
+            val primaryHost = userPrefs?.meshPrimaryHost ?: "192.168.86.27"
+            val secondaryHost = userPrefs?.meshSecondaryHost ?: "192.168.86.217"
+            // Dynamic multi-machine AI mesh resolution (Desktop Fry -> Laptop Maze)
+            var activeMeshResult = com.example.data.remote.AiMeshCoordinator.resolveActiveNode(primaryHost, secondaryHost)
+            var isOllamaAvailable = activeMeshResult != null
             if (!isOllamaAvailable) {
-                Log.i(TAG, "Local Ollama host ($ollamaHost) is currently unreachable. Using offline template synthesis for this sync run.")
+                Log.i(TAG, "AI Mesh nodes ($primaryHost / $secondaryHost) unreachable. Using offline template synthesis for this sync run.")
             } else {
-                Log.i(TAG, "Local Ollama host ($ollamaHost) is reachable.")
+                Log.i(TAG, "AI Mesh active node: ${activeMeshResult?.node?.name} [${activeMeshResult?.model}] at ${activeMeshResult?.node?.host}")
             }
 
             val watchmodeKey = userPrefs?.watchmodeApiKey ?: ""
@@ -252,10 +254,10 @@ class AvailabilitySyncWorker(
                             val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
                             val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
 
-                            // Synthesis 2.0: Use local Ollama (Gemma) for personalized research if host is reachable
-                            val localSynthesis = if (isOllamaAvailable) {
+                            // Synthesis 2.0: Use AI Mesh (Fry/Maze) for personalized research if available
+                            val localSynthesis = if (isOllamaAvailable && activeMeshResult != null) {
                                 val synth = generatePersonalizedSynthesis(
-                                    host = ollamaHost,
+                                    meshResult = activeMeshResult!!,
                                     movieTitle = item.title,
                                     overview = syncedOverview,
                                     keywords = topKeywords,
@@ -330,7 +332,7 @@ class AvailabilitySyncWorker(
     }
 
     private suspend fun generatePersonalizedSynthesis(
-        host: String,
+        meshResult: com.example.data.remote.MeshResolutionResult,
         movieTitle: String,
         overview: String?,
         keywords: String,
@@ -338,7 +340,6 @@ class AvailabilitySyncWorker(
         history: String
     ): String? {
         return try {
-            val api = OllamaClient.getApiService(host)
             val prompt = """
                 You are an advanced cinematic research agent called "Olivia". 
                 Generate a structured research card for the movie: "$movieTitle".
@@ -365,12 +366,13 @@ class AvailabilitySyncWorker(
             """.trimIndent()
 
             val request = OllamaChatRequest(
+                model = meshResult.model,
                 messages = listOf(OllamaChatMessage(role = "user", content = prompt))
             )
-            val response = api.chat(request)
+            val response = meshResult.apiService.chat(request)
             response.message.content
         } catch (e: Exception) {
-            Log.w(TAG, "Ollama synthesis call failed: ${e.message}. Falling back to template synthesis.")
+            Log.w(TAG, "AI Mesh (${meshResult.node.name}) synthesis call failed: ${e.message}. Falling back to template synthesis.")
             null
         }
     }

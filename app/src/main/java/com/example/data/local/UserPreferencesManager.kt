@@ -18,6 +18,18 @@ class UserPreferencesManager(context: Context) {
         get() = prefs.getString(KEY_OLLAMA_HOST, "192.168.86.217") ?: "192.168.86.217"
         set(value) { prefs.edit().putString(KEY_OLLAMA_HOST, value.trim()).apply() }
 
+    var meshPrimaryHost: String
+        get() = prefs.getString(KEY_MESH_PRIMARY_HOST, "192.168.86.27") ?: "192.168.86.27"
+        set(value) { prefs.edit().putString(KEY_MESH_PRIMARY_HOST, value.trim()).apply() }
+
+    var meshSecondaryHost: String
+        get() = prefs.getString(KEY_MESH_SECONDARY_HOST, "192.168.86.217") ?: "192.168.86.217"
+        set(value) { prefs.edit().putString(KEY_MESH_SECONDARY_HOST, value.trim()).apply() }
+
+    var preferMeshCoordinator: Boolean
+        get() = prefs.getBoolean(KEY_PREFER_MESH_COORDINATOR, true)
+        set(value) { prefs.edit().putBoolean(KEY_PREFER_MESH_COORDINATOR, value).apply() }
+
     var githubToken: String
         get() = prefs.getString(KEY_GITHUB_TOKEN, "") ?: ""
         set(value) { prefs.edit().putString(KEY_GITHUB_TOKEN, value.trim()).apply() }
@@ -72,6 +84,9 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_GEMINI_API_KEY = "gemini_api_key"
         private const val KEY_WATCHMODE_API_KEY = "watchmode_api_key"
         private const val KEY_OLLAMA_HOST = "ollama_host"
+        private const val KEY_MESH_PRIMARY_HOST = "mesh_primary_host"
+        private const val KEY_MESH_SECONDARY_HOST = "mesh_secondary_host"
+        private const val KEY_PREFER_MESH_COORDINATOR = "prefer_mesh_coordinator"
         private const val KEY_GITHUB_TOKEN = "github_token"
         private const val KEY_DARK_MODE = "dark_mode"
         private const val KEY_ENABLE_BETA_FEEDBACK = "enable_beta_feedback"
