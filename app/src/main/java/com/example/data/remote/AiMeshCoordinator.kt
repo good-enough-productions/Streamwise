@@ -12,7 +12,8 @@ data class MeshNodeStatus(
     val latencyMs: Long = 0,
     val activeModel: String = "",
     val availableModels: List<String> = emptyList(),
-    val role: String = ""
+    val role: String = "",
+    val isUserActive: Boolean = false
 )
 
 data class MeshResolutionResult(
@@ -53,6 +54,25 @@ object AiMeshCoordinator {
                 else -> modelNames.first()
             }
 
+            // Probe Desktop Idle Sentry on port 11435 to detect if user is actively using the machine
+            var isUserActive = false
+            try {
+                val url = java.net.URL("http://${cleanHost}:11435/activity")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 400
+                conn.readTimeout = 400
+                conn.requestMethod = "GET"
+                if (conn.responseCode == 200) {
+                    val body = conn.inputStream.bufferedReader().readText()
+                    if (body.contains("\"user_active\": true") || body.contains("PAUSED_USER_ACTIVE")) {
+                        isUserActive = true
+                    }
+                }
+                conn.disconnect()
+            } catch (e: Exception) {
+                // Sentry not running or port unreachable
+            }
+
             MeshNodeStatus(
                 name = name,
                 host = cleanHost,
@@ -60,7 +80,8 @@ object AiMeshCoordinator {
                 latencyMs = elapsed,
                 activeModel = chosenModel,
                 availableModels = modelNames,
-                role = role
+                role = role,
+                isUserActive = isUserActive
             )
         } else {
             MeshNodeStatus(
@@ -84,7 +105,8 @@ object AiMeshCoordinator {
             role = "Heavy Anchor",
             preferredModel = "qwen2.5-coder:7b"
         )
-        if (fry.isOnline) {
+        // Only route to Desktop Fry if online AND user is NOT actively using the desktop
+        if (fry.isOnline && !fry.isUserActive) {
             val api = OllamaClient.getApiService(primaryHost)
             return@withContext MeshResolutionResult(fry, api, fry.activeModel)
         }

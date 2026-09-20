@@ -14,8 +14,8 @@ android {
     applicationId = "com.aistudio.streammanager.qpwoei"
     minSdk = 24
     targetSdk = 36
-    versionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 162
-    versionName = project.findProperty("versionName")?.toString() ?: "1.6.2"
+    versionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 163
+    versionName = project.findProperty("versionName")?.toString() ?: "1.6.3"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
