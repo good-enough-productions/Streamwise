@@ -20,6 +20,15 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.6.3</span> <span class="date">September 2026</span></h2>
+        <h3>Desktop GPU Display Sentry & Active User Monitor Protection</h3>
+        <ul>
+            <li><strong>Desktop Active User Detection & Auto-Failover:</strong> Integrated proactive probing of Desktop Fry's Idle Sentry on port <code>11435</code>. When the user is actively using the desktop workstation (idle &lt; 120s), StreamWise automatically avoids routing inference to Desktop Fry to prevent GPU display resets, driver timeouts (TDR), or monitor blackouts. Requests seamlessly divert to Laptop Maze without interrupting desktop performance.</li>
+            <li><strong>Interactive Paused Badging:</strong> Settings Tab 3 now clearly indicates if Desktop Fry is in active use with a distinct <code>⏸️ Fry: Online (Paused - User Active)</code> badge.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.6.2</span> <span class="date">September 2026</span></h2>
         <h3>Multi-Machine AI Mesh Auto-Discovery, Dynamic Model Failover & Olivia Hardware Attribution</h3>
         <ul>

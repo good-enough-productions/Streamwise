@@ -6427,9 +6427,11 @@ fun SettingsDialog(
                                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                         meshFryStatus?.let { fry ->
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Text(if (fry.isOnline) "🟢" else "🔴", fontSize = 12.sp)
+                                                Text(if (fry.isOnline && !fry.isUserActive) "🟢" else if (fry.isOnline && fry.isUserActive) "⏸️" else "🔴", fontSize = 12.sp)
                                                 Text(
-                                                    if (fry.isOnline) "Fry: Online (${fry.latencyMs}ms) · ${fry.activeModel}" else "Fry (${fry.host}): Offline / Asleep",
+                                                    if (fry.isOnline && fry.isUserActive) "Fry: Online (Paused - User Active) · ${fry.activeModel}"
+                                                    else if (fry.isOnline) "Fry: Online (${fry.latencyMs}ms) · ${fry.activeModel}"
+                                                    else "Fry (${fry.host}): Offline / Asleep",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     fontWeight = if (fry.isOnline) FontWeight.Bold else FontWeight.Normal,
                                                     color = if (fry.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
