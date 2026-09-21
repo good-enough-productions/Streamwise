@@ -2,7 +2,20 @@
 
 All notable changes to Streamwise will be documented in this file.
 
-## [1.6.1] - 2026-09-10
+## [1.6.4] - 2026-09-21
+
+### Fixed
+- **Zero-Data Loss & User-Protected Watchlist Integrity**:
+  - Eliminated the aggressive purge bug where unlinked or rate-limited custom titles (e.g. *Pressure*) were silently deleted from the database during startup sweeps (`scrubAndEnrichUnmatchedTitles`) and background metadata updates (`syncWatchlistMetadata`).
+  - Added `MediaItem.isUserProtected`: user-curated items (with personal notes, custom streaming provider tags, or added manually via the Add dialog) are strictly immune from automated scrubbing or deletion.
+  - Replaced unmatchable purge branches with non-destructive fallback state updates (`status = WATCHLIST`, standard movie poster placeholder), guaranteeing that every film the user logs stays permanently in the library.
+- **Provider Preservation & Union Merging**:
+  - Fixed an issue where TMDB sync returning no US availability (`providers = "none"`) overwrote the user's manual provider checkboxes (e.g. Criterion Channel).
+  - TMDB sync now non-destructively merges detected streaming platforms with existing user provider tags, preserving manual service assignments across all background sync runs.
+- **Smart Year Extraction in Title Matching**:
+  - Upgraded `TmdbMatchingHelper.searchMovieSmart` and `searchTvSmart` to automatically detect and extract release years from title queries containing years in parentheses (e.g., `Pressure (2015)`).
+
+## [1.6.3] - 2026-09-15
 
 ### Fixed
 - **Awkward Text Wrapping Everywhere**:
