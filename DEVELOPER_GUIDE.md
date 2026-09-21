@@ -36,6 +36,20 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 - **Periodic Sync**: Uses `AvailabilitySyncWorker.WORK_NAME` scheduled via `enqueueUniquePeriodicWork` every 4 hours.
 - **Manual/Immediate Sync**: Uses `AvailabilitySyncWorker.ONE_TIME_WORK_NAME` with `ExistingWorkPolicy.REPLACE`. Never share the unique work name between periodic and one-time tasks.
 
+## 3b. Zero-Data Loss & User-Protected Media Architecture
+
+- **The `isUserProtected` Guarantee (`MediaItem.isUserProtected`)**:
+  - A `MediaItem` is classified as **user-protected** if:
+    1. It has personal notes (`!item.userNotes.isNullOrBlank()`).
+    2. It has custom assigned streaming providers (`!item.providerIds.isNullOrBlank() && item.providerIds != "none"`).
+    3. It originated from a manual or user-facing source (`importSource` is "Manual Entry", "User Added", "Shared Link", "Letterboxd", or blank).
+  - User-protected items are strictly immune from automated scrubbing (`scrubAndEnrichUnmatchedTitles`), title sanitization purges (`MediaTitleSanitizer.isNonMovieEpisode`), or unmatchable TMDB API sweeps.
+- **Non-Destructive Provider Unioning**:
+  - When TMDB watch provider queries return results or `"none"`, `StreamViewModel` merges detected providers with existing user-assigned providers (`(existingList + tmdbList).distinct().joinToString(",")`).
+  - Manual provider tags assigned via `AddMediaDialog` or movie details are never wiped out when TMDB metadata is delayed or lacks regional streaming data.
+- **Non-Destructive Watchlist Fallbacks**:
+  - If a movie or TV show fails TMDB resolution (due to rate-limits, unlisted titles, or connectivity), the background routine sets `status = WATCHLIST` with fallback provider `"none"` and standard placeholder artwork, never issuing `repository.deleteMediaItem(item)`.
+
 ## 4. Explore AI & Cinephile Insights Architecture
 
 - **SynthesizedMovieInsights**: Automatically parses YAML frontmatter (`focus_topics`, `featured_cast`, `agent_synthesis_date`) and markdown bullet points into interactive topic pills, cast badges, and styled insight cards. Includes direct handoff action to Explore chat.

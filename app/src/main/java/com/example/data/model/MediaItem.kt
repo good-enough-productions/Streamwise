@@ -44,4 +44,25 @@ data class MediaItem(
     // 4-digit release year extracted from releaseDate or fallback title
     val releaseYear: Int?
         get() = releaseDate?.take(4)?.toIntOrNull()
+
+    /**
+     * Determines whether this item was manually created by the user, has user-curated notes/tags,
+     * or originated from a non-automated source. User-protected items are NEVER deleted by background
+     * integrity sweeps, deduplication scripts, or unmatchable TMDB queries.
+     */
+    val isUserProtected: Boolean
+        get() {
+            if (!userNotes.isNullOrBlank()) return true
+            if (!providerIds.isNullOrBlank() && providerIds != "none") return true
+            val src = importSource?.trim() ?: ""
+            if (src.equals("Manual Entry", ignoreCase = true) ||
+                src.equals("User Added", ignoreCase = true) ||
+                src.startsWith("Letterboxd", ignoreCase = true) ||
+                src.startsWith("Gemini", ignoreCase = true) ||
+                src.startsWith("Shared Link", ignoreCase = true) ||
+                src.isBlank()) {
+                return true
+            }
+            return false
+        }
 }

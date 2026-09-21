@@ -137,12 +137,14 @@ object TmdbMatchingHelper {
         rawTitle: String,
         targetYear: String? = null
     ): TmdbSearchResult? {
-        val cleanTitle = MediaTitleSanitizer.cleanCandidateTitle(rawTitle)
+        val extractedYear = Regex("""\b(19\d\d|20\d\d)\b""").find(rawTitle)?.groupValues?.get(1)
+        val cleanCandidate = MediaTitleSanitizer.cleanCandidateTitle(rawTitle)
+        val cleanTitle = cleanCandidate.replace(Regex("""\s*\(\s*(?:19|20)\d\d\s*\)\s*$"""), "").trim().ifBlank { cleanCandidate }
         if (cleanTitle.isBlank() || MediaTitleSanitizer.isNonMovieEpisode(cleanTitle)) {
             return null
         }
 
-        val cleanYear = targetYear?.trim()?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+        val cleanYear = (targetYear?.trim()?.take(4) ?: extractedYear)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
 
         // Attempt 1: Search with year if available
         if (cleanYear != null) {
@@ -192,12 +194,14 @@ object TmdbMatchingHelper {
         rawTitle: String,
         targetYear: String? = null
     ): TmdbTvSearchResult? {
-        val cleanTitle = MediaTitleSanitizer.cleanCandidateTitle(rawTitle)
+        val extractedYear = Regex("""\b(19\d\d|20\d\d)\b""").find(rawTitle)?.groupValues?.get(1)
+        val cleanCandidate = MediaTitleSanitizer.cleanCandidateTitle(rawTitle)
+        val cleanTitle = cleanCandidate.replace(Regex("""\s*\(\s*(?:19|20)\d\d\s*\)\s*$"""), "").trim().ifBlank { cleanCandidate }
         if (cleanTitle.isBlank() || MediaTitleSanitizer.isNonMovieEpisode(cleanTitle)) {
             return null
         }
 
-        val cleanYear = targetYear?.trim()?.take(4)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
+        val cleanYear = (targetYear?.trim()?.take(4) ?: extractedYear)?.takeIf { it.length == 4 && it.all { c -> c.isDigit() } }
 
         try {
             val resp = apiService.searchTv(apiKey, cleanTitle, cleanYear)

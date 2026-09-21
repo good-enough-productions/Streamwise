@@ -119,4 +119,34 @@ class MediaItemUnitTest {
         assertEquals(1, maxCount)
         assertEquals(0, appleCount)
     }
+
+    @Test
+    fun isUserProtected_userNotes_isProtected() {
+        val item = MediaItem(title = "Pressure", userNotes = "Must watch on Criterion", importSource = "Podcast: The Big Picture")
+        assertTrue(item.isUserProtected)
+    }
+
+    @Test
+    fun isUserProtected_assignedProviders_isProtected() {
+        val item = MediaItem(title = "Pressure", providerIds = "criterion", importSource = "Podcast: The Big Picture")
+        assertTrue(item.isUserProtected)
+    }
+
+    @Test
+    fun isUserProtected_manualEntryOrBlankSource_isProtected() {
+        val item1 = MediaItem(title = "Pressure", importSource = "Manual Entry")
+        assertTrue(item1.isUserProtected)
+
+        val item2 = MediaItem(title = "Pressure", importSource = null)
+        assertTrue(item2.isUserProtected)
+
+        val item3 = MediaItem(title = "Pressure", importSource = "")
+        assertTrue(item3.isUserProtected)
+    }
+
+    @Test
+    fun isUserProtected_pureAutomatedPodcastImportWithoutUserTouch_notProtected() {
+        val item = MediaItem(title = "Mailbag: 2024 Draft", importSource = "Podcast: The Big Picture", providerIds = null, userNotes = null)
+        org.junit.Assert.assertFalse(item.isUserProtected)
+    }
 }

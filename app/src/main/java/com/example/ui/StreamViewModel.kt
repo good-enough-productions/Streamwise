@@ -766,46 +766,53 @@ class StreamViewModel(
         var enrichedCount = 0
 
         for (item in watchlistItems) {
-            // 1. Immediately delete any title that is a known non-movie episode pattern
-            if (MediaTitleSanitizer.isNonMovieEpisode(item.title)) {
+            // 1. User-created and user-curated items are strictly protected from background purges
+            if (item.isUserProtected) {
+                continue
+            }
+
+            // 2. Immediately delete confirmed non-movie episode patterns from legacy podcast sync
+            if (item.tmdbId.isNullOrBlank() && MediaTitleSanitizer.isNonMovieEpisode(item.title)) {
                 itemsToDelete.add(item)
                 continue
             }
 
-            // 2. If item has no TMDB ID or image:
+            // 3. If unlinked item has no TMDB ID or image:
             if (item.tmdbId.isNullOrEmpty() || item.imageUrl.isNullOrEmpty()) {
                 val cleaned = MediaTitleSanitizer.cleanCandidateTitle(item.title)
-                if (MediaTitleSanitizer.isNonMovieEpisode(cleaned)) {
+                if (item.tmdbId.isNullOrBlank() && MediaTitleSanitizer.isNonMovieEpisode(cleaned)) {
                     itemsToDelete.add(item)
                     continue
                 }
 
                 if (key.isNotEmpty() && key != "MY_TMDB_API_KEY") {
-                    val match = com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
-                        com.example.data.remote.TmdbClient.tmdbApiService,
-                        key,
-                        cleaned,
-                        item.releaseDate
-                    )
-
-                    if (match != null) {
-                        val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
-                        val genres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ") ?: item.genres
-                        val updated = item.copy(
-                            title = match.title,
-                            tmdbId = match.id.toString(),
-                            imageUrl = poster ?: item.imageUrl,
-                            releaseDate = match.releaseDate ?: item.releaseDate,
-                            rating = match.voteAverage ?: item.rating,
-                            overview = match.overview?.ifBlank { item.overview } ?: item.overview,
-                            genres = genres,
-                            updatedAt = System.currentTimeMillis()
+                    try {
+                        val match = com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                            com.example.data.remote.TmdbClient.tmdbApiService,
+                            key,
+                            cleaned,
+                            item.releaseDate
                         )
-                        repository.updateMediaItem(updated)
-                        enrichedCount++
-                    } else {
-                        // Could not match to TMDB and has no metadata -> delete from watchlist
-                        itemsToDelete.add(item)
+
+                        if (match != null) {
+                            val poster = match.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" }
+                            val genres = match.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ") ?: item.genres
+                            val updated = item.copy(
+                                title = match.title,
+                                tmdbId = match.id.toString(),
+                                imageUrl = poster ?: item.imageUrl,
+                                releaseDate = match.releaseDate ?: item.releaseDate,
+                                rating = match.voteAverage ?: item.rating,
+                                overview = match.overview?.ifBlank { item.overview } ?: item.overview,
+                                genres = genres,
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            repository.updateMediaItem(updated)
+                            enrichedCount++
+                        }
+                        // If no match found: NEVER delete! Retain item gracefully in the database.
+                    } catch (e: Exception) {
+                        android.util.Log.w(TAG, "Startup enrichment failed for ${item.title}: ${e.message}")
                     }
                 }
             }
@@ -1568,11 +1575,15 @@ class StreamViewModel(
     fun addCustomWatchlistItem(title: String, associatedProviders: List<String>) {
         viewModelScope.launch {
             if (title.isBlank()) return@launch
+            val extractedYear = Regex("""\b(19\d\d|20\d\d)\b""").find(title)?.groupValues?.get(1)
+            val cleanTitle = title.replace(Regex("""\s*\(\s*(?:19|20)\d\d\s*\)\s*$"""), "").trim()
             val providerString = if (associatedProviders.isEmpty()) null else associatedProviders.joinToString(",")
             val item = MediaItem(
-                title = title.trim(),
+                title = cleanTitle.ifBlank { title.trim() },
                 status = MediaStatus.WATCHLIST.name,
-                providerIds = providerString
+                providerIds = providerString,
+                importSource = "Manual Entry",
+                releaseDate = extractedYear
             )
             repository.insertMediaItem(item)
             enqueueTmdbSync(showMessage = false)
@@ -1603,15 +1614,19 @@ class StreamViewModel(
 
             val providerString = if (associatedProviders.isEmpty()) null else associatedProviders.joinToString(",")
             val isWatched = targetStatus == MediaStatus.WATCHED.name
+            val resolvedSource = importSource?.trim()?.ifBlank { null } ?: "Manual Entry"
             val now = System.currentTimeMillis()
 
             titles.forEach { title ->
+                val extractedYear = Regex("""\b(19\d\d|20\d\d)\b""").find(title)?.groupValues?.get(1)
+                val cleanTitle = title.replace(Regex("""\s*\(\s*(?:19|20)\d\d\s*\)\s*$"""), "").trim()
                 val item = MediaItem(
-                    title = title,
+                    title = cleanTitle.ifBlank { title },
                     status = if (isWatched) MediaStatus.WATCHED.name else MediaStatus.WATCHLIST.name,
                     providerIds = providerString,
-                    userNotes = userNotes,
-                    importSource = importSource,
+                    userNotes = userNotes?.trim()?.ifBlank { null },
+                    importSource = resolvedSource,
+                    releaseDate = extractedYear,
                     watchedAt = if (isWatched) now else null
                 )
                 val newId = repository.insertMediaItem(item)
@@ -1619,11 +1634,11 @@ class StreamViewModel(
                     repository.mediaDao.insertWatchSession(
                         WatchSession(
                             mediaItemId = newId,
-                            mediaItemTitle = title,
+                            mediaItemTitle = cleanTitle.ifBlank { title },
                             providerId = associatedProviders.firstOrNull(),
                             durationMinutes = 110,
                             watchedAt = now,
-                            notes = userNotes
+                            notes = userNotes?.trim()?.ifBlank { null }
                         )
                     )
                 }
@@ -1631,7 +1646,12 @@ class StreamViewModel(
 
             val destName = if (isWatched) "Watched Vault" else "Watchlist"
             _statusMessage.value = if (titles.size == 1) {
-                "\"${titles.first()}\" added to $destName!"
+                val displayTitle = titles.first()
+                if (!isWatched && associatedProviders.isEmpty()) {
+                    "\"$displayTitle\" added to $destName (viewable in All Saved)!"
+                } else {
+                    "\"$displayTitle\" added to $destName!"
+                }
             } else {
                 "Added ${titles.size} titles to $destName."
             }
@@ -1729,8 +1749,8 @@ class StreamViewModel(
 
                 var updatedCount = 0
                 for (item in targetItems) {
-                    if (MediaTitleSanitizer.isNonMovieEpisode(item.title) ||
-                        MediaTitleSanitizer.isNonMovieEpisode(MediaTitleSanitizer.cleanCandidateTitle(item.title))) {
+                    if (!item.isUserProtected && (MediaTitleSanitizer.isNonMovieEpisode(item.title) ||
+                        MediaTitleSanitizer.isNonMovieEpisode(MediaTitleSanitizer.cleanCandidateTitle(item.title)))) {
                         repository.deleteMediaItem(item)
                         continue
                     }
@@ -1799,10 +1819,18 @@ class StreamViewModel(
                             val rating = match.voteAverage ?: item.rating
                             val overview = match.overview?.ifBlank { item.overview } ?: item.overview
 
+                            val resolvedProviders = if (providersString == null || providersString == "none") {
+                                if (!item.providerIds.isNullOrBlank() && item.providerIds != "none") item.providerIds else "none"
+                            } else {
+                                val existingList = item.providersList
+                                val tmdbList = providersString.split(",").map { it.trim() }.filter { it.isNotEmpty() && it != "none" }
+                                (existingList + tmdbList).distinct().joinToString(",").ifEmpty { "none" }
+                            }
+
                             val updated = item.copy(
                                 title = match.title,
                                 tmdbId = movieId.toString(),
-                                providerIds = providersString ?: item.providerIds,
+                                providerIds = resolvedProviders,
                                 imageUrl = poster,
                                 rating = rating,
                                 overview = overview,
@@ -1840,10 +1868,18 @@ class StreamViewModel(
                                     val tvGenres = tvMatch.genreIds?.mapNotNull { genreMap[it] }?.joinToString(", ") ?: item.genres
                                     val tvPoster = tvMatch.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: item.imageUrl
 
+                                    val resolvedTvProviders = if (tvProvString == null || tvProvString == "none") {
+                                        if (!item.providerIds.isNullOrBlank() && item.providerIds != "none") item.providerIds else "none"
+                                    } else {
+                                        val existingList = item.providersList
+                                        val tmdbList = tvProvString.split(",").map { it.trim() }.filter { it.isNotEmpty() && it != "none" }
+                                        (existingList + tmdbList).distinct().joinToString(",").ifEmpty { "none" }
+                                    }
+
                                     val updated = item.copy(
                                         title = tvMatch.name,
                                         tmdbId = tvId.toString(),
-                                        providerIds = tvProvString ?: item.providerIds,
+                                        providerIds = resolvedTvProviders,
                                         imageUrl = tvPoster,
                                         rating = tvMatch.voteAverage ?: item.rating,
                                         overview = tvMatch.overview?.ifBlank { item.overview } ?: item.overview,
@@ -1856,20 +1892,23 @@ class StreamViewModel(
                                     updatedCount++
                                 } else {
                                     // Could not match to TMDB movie or TV:
-                                    if (item.imageUrl.isNullOrBlank() || item.tmdbId.isNullOrBlank()) {
-                                        // Purge non-movie / unmatchable item from watchlist
-                                        repository.deleteMediaItem(item)
-                                    } else {
-                                        val fallback = item.copy(
-                                            status = MediaStatus.WATCHLIST.name,
-                                            providerIds = item.providerIds ?: "none",
-                                            updatedAt = System.currentTimeMillis()
-                                        )
-                                        repository.updateMediaItem(fallback)
-                                    }
+                                    // NEVER delete user items or unmatchable titles!
+                                    // Gracefully preserve them in the watchlist with fallback status.
+                                    val fallback = item.copy(
+                                        status = MediaStatus.WATCHLIST.name,
+                                        providerIds = item.providerIds ?: "none",
+                                        updatedAt = System.currentTimeMillis()
+                                    )
+                                    repository.updateMediaItem(fallback)
                                 }
                             } catch (e: Exception) {
                                 android.util.Log.w(TAG, "TV search failed for ${item.title}: ${e.message}")
+                                val fallback = item.copy(
+                                    status = MediaStatus.WATCHLIST.name,
+                                    providerIds = item.providerIds ?: "none",
+                                    updatedAt = System.currentTimeMillis()
+                                )
+                                repository.updateMediaItem(fallback)
                             }
                         }
                     } catch (e: Exception) {

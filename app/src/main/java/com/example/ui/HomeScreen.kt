@@ -1144,20 +1144,20 @@ fun WatchlistTabContent(
     val readyCount = remember(watchlistItems, activeProviderIds, freeProviderIds) {
         watchlistItems.count { item ->
             item.status != MediaStatus.WATCHED.name &&
-            !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title) &&
+            (item.isUserProtected || !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) &&
             (item.tmdbId == null || item.providersList.any { activeProviderIds.contains(it) || freeProviderIds.contains(it) })
         }
     }
     val totalSavedCount = remember(watchlistItems) {
         watchlistItems.count { item ->
             item.status != MediaStatus.WATCHED.name &&
-            !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)
+            (item.isUserProtected || !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title))
         }
     }
     val podcastCount = remember(watchlistItems) {
         watchlistItems.count { item ->
             item.status != MediaStatus.WATCHED.name &&
-            !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title) &&
+            (item.isUserProtected || !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) &&
             com.example.data.model.PodcastEpisodeCatalog.isCoveredOnAnyPodcast(item.title, item.importSource, item.userNotes)
         }
     }
@@ -1213,8 +1213,8 @@ fun WatchlistTabContent(
             // Exclude already watched from immediate watchlist
             if (item.status == MediaStatus.WATCHED.name) return@filter false
 
-            // Reject non-movie episodes from ever showing in the watchlist feed
-            if (com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) {
+            // Reject non-movie episodes from ever showing in the watchlist feed (unless user-protected)
+            if (!item.isUserProtected && com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) {
                 return@filter false
             }
 

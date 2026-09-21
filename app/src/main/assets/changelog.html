@@ -20,6 +20,17 @@
     <h1>Streamwise Release Changelog</h1>
 
     <div class="change-section">
+        <h2><span class="version-badge">v1.6.4</span> <span class="date">September 2026</span></h2>
+        <h3>Zero-Data Loss Architecture, User-Protected Watchlist & Smart Provider Union</h3>
+        <ul>
+            <li><strong>Zero-Data Loss Guarantee (<code>isUserProtected</code>):</strong> Titles logged manually or curated with personal notes/provider tags are strictly immune from automated scrubbing or unmatchable purge sweeps. Eliminated the aggressive purge logic where unlinked titles (like <em>Pressure</em>) were deleted if TMDB queries encountered rate-limiting or delayed metadata.</li>
+            <li><strong>Non-Destructive Watchlist Fallbacks:</strong> Rather than being deleted, unlinked titles gracefully remain in your library with clean placeholder art, status = WATCHLIST, and preserved custom tags.</li>
+            <li><strong>Non-Destructive Provider Union:</strong> Background TMDB sync now merges detected streaming platforms with your manual checkboxes rather than overwriting custom tags with <code>none</code> when TMDB availability lags behind.</li>
+            <li><strong>Parenthetical Year Extraction:</strong> Entering titles like <code>Pressure (2015)</code> automatically isolates the query title and uses the year for disambiguated TMDB matching.</li>
+        </ul>
+    </div>
+
+    <div class="change-section">
         <h2><span class="version-badge">v1.6.3</span> <span class="date">September 2026</span></h2>
         <h3>Desktop GPU Display Sentry & Active User Monitor Protection</h3>
         <ul>
