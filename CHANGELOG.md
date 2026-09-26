@@ -126,7 +126,7 @@ All notable changes to Streamwise will be documented in this file.
 - **GitHub OTA Auto-Updater & Third-Party Aggregator Support**:
   - `GitHubUpdateManager.kt` checks GitHub Releases API for new releases (`v1.4.0`, etc.).
   - Shows update status, release notes, and download progress bar.
-  - Uses `FileProvider` (`com.aistudio.streammanager.qpwoei.fileprovider`) and `REQUEST_INSTALL_PACKAGES` permission to hand off APKs directly to Android's `PackageInstaller`.
+  - Uses `FileProvider` (`com.goodenoughproductions.streamwise.fileprovider`) and `REQUEST_INSTALL_PACKAGES` permission to hand off APKs directly to Android's `PackageInstaller`.
   - Releases are ready for public third-party sideloading tools like Obtainium.
 - **Expanded 19 Streaming Providers Coverage**:
   - Full catalog and DB support across AMC+, Apple TV+, BritBox, Criterion Channel, Disney+, Fandango at Home, Freevee, Hoopla, Hulu, Kanopy, Max (HBO), MGM+, Netflix, Paramount+, Peacock, Pluto TV, Prime Video, Starz, and Tubi.

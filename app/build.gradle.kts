@@ -11,7 +11,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.streammanager.qpwoei"
+    applicationId = "com.goodenoughproductions.streamwise"
     minSdk = 24
     targetSdk = 36
     versionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 164

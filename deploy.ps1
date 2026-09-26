@@ -8,5 +8,5 @@ Write-Host "Device: $serial"
 & $adb -s $serial install -r $apk
 if ($LASTEXITCODE -ne 0) { Write-Error "Install failed"; exit 1 }
 
-& $adb -s $serial shell am start -n "com.aistudio.streammanager.qpwoei/com.example.MainActivity"
+& $adb -s $serial shell am start -n "com.goodenoughproductions.streamwise/com.example.MainActivity"
 Write-Host "Done. App launched."
