@@ -164,5 +164,8 @@ Streamwise features an optional private AI film companion that can run against l
 
 ---
 
-## 📄 License
-This project is licensed under the [MIT License](LICENSE) — free to use, modify, and distribute.
+## 📄 License & Trademark Notice
+
+- **Source Code**: The code in this repository is open for personal use, inspection, local building, and community contributions under the [MIT License with Trademark & Platform Distribution Reservations](LICENSE).
+- **Trademark & Brand Protection**: The name **Streamwise**, logos, app iconography, and visual identity are exclusive trademarks of **Good Enough Productions**. Re-distributing, republishing, or commercializing this application on mobile app stores (including the Google Play Store) under the Streamwise name or branding is strictly prohibited without prior written authorization.
+- **Official Distribution**: Official releases are published exclusively by Good Enough Productions on [GitHub](https://github.com/good-enough-productions/Streamwise/releases) and (in the future) on the Google Play Store.

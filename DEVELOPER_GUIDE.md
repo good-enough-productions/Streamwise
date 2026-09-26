@@ -28,7 +28,7 @@ cd apps/streamwise
 ```powershell
 adb devices -l
 adb -s <phone_serial> install -r -d app/build/outputs/apk/debug/app-debug.apk
-adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.example.MainActivity
+adb -s <phone_serial> shell am start -n com.goodenoughproductions.streamwise/com.example.MainActivity
 ```
 
 ## 3. WorkManager vs. ViewModel Sync Rules
@@ -101,7 +101,7 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 
 ## 11. GitHub OTA Auto-Updater & Documentation Sync
 
-- **Updater Architecture**: `GitHubUpdateManager.kt` checks GitHub Releases API via OkHttp coroutines, parses release tags (`v1.4.0`), downloads APKs to internal cache with live progress callback, and invokes the Android `PackageInstaller` via `FileProvider` (`com.aistudio.streammanager.qpwoei.fileprovider`).
+- **Updater Architecture**: `GitHubUpdateManager.kt` checks GitHub Releases API via OkHttp coroutines, parses release tags (`v1.4.0`), downloads APKs to internal cache with live progress callback, and invokes the Android `PackageInstaller` via `FileProvider` (`com.goodenoughproductions.streamwise.fileprovider`).
 - **In-App Web Asset Viewers**: `HtmlAssetViewerDialog` embeds Android `WebView` to render local assets (`user_guide.html` and `changelog.html`) offline with dark-theme CSS formatting.
 
 ## 12. Letterboxd Two-Way Synchronization Pipeline (v1.5.0)

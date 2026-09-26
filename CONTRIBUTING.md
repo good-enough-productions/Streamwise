@@ -89,6 +89,19 @@ If you'd like to contribute code, documentation, or unit tests, here is how to g
 
 ---
 
+---
+
+## 📜 Contributor License Agreement & Ownership (DCO)
+
+To ensure Streamwise can continue to be maintained long-term, distributed on official app stores (e.g. Google Play), and protected against legal disputes or clone squatting, all contributions are accepted under the following terms:
+
+By submitting a Pull Request, issue, or patch to this repository, you certify that:
+1. **Originality**: The contribution represents your own original work (or you possess the explicit legal rights and permissions to submit it).
+2. **Grant of Rights**: You grant **Good Enough Productions** a perpetual, irrevocable, worldwide, royalty-free, and transferable license to use, reproduce, modify, adapt, publish, distribute, sub-license, and commercialize your contribution as an integrated part of the Streamwise software across all distribution platforms (including the Google Play Store and official binary releases).
+3. **Trademark Respect**: You acknowledge that the name "Streamwise", associated logos, and branding remain the exclusive intellectual property and trademark of Good Enough Productions.
+
+---
+
 ## 🤝 Community Culture
 
 Streamwise is a passion project built on enthusiasm for cinema and great indie software.  
