@@ -85,13 +85,17 @@ class AvailabilitySyncWorker(
                 "No history yet"
             }
 
-            val primaryHost = userPrefs?.meshPrimaryHost ?: "192.168.86.27"
-            val secondaryHost = userPrefs?.meshSecondaryHost ?: "192.168.86.217"
-            // Dynamic multi-machine AI mesh resolution (Desktop Fry -> Laptop Maze)
-            var activeMeshResult = com.example.data.remote.AiMeshCoordinator.resolveActiveNode(primaryHost, secondaryHost)
+            val primaryHost = userPrefs?.meshPrimaryHost ?: ""
+            val secondaryHost = userPrefs?.meshSecondaryHost ?: ""
+            // Dynamic multi-machine AI mesh resolution
+            var activeMeshResult = if (primaryHost.isNotBlank() || secondaryHost.isNotBlank()) {
+                com.example.data.remote.AiMeshCoordinator.resolveActiveNode(primaryHost, secondaryHost)
+            } else {
+                null
+            }
             var isOllamaAvailable = activeMeshResult != null
             if (!isOllamaAvailable) {
-                Log.i(TAG, "AI Mesh nodes ($primaryHost / $secondaryHost) unreachable. Using offline template synthesis for this sync run.")
+                Log.i(TAG, "No local AI Mesh nodes configured or reachable. Using offline template synthesis for this sync run.")
             } else {
                 Log.i(TAG, "AI Mesh active node: ${activeMeshResult?.node?.name} [${activeMeshResult?.model}] at ${activeMeshResult?.node?.host}")
             }
@@ -254,7 +258,7 @@ class AvailabilitySyncWorker(
                             val topKeywords = keywordsResponse.keywords.take(5).joinToString(", ") { it.name }
                             val topCast = creditsResponse.cast.take(3).joinToString(", ") { it.name }
 
-                            // Synthesis 2.0: Use AI Mesh (Fry/Maze) for personalized research if available
+                            // Synthesis 2.0: Use AI Mesh (Primary/Secondary nodes) for personalized research if available
                             val localSynthesis = if (isOllamaAvailable && activeMeshResult != null) {
                                 val synth = generatePersonalizedSynthesis(
                                     meshResult = activeMeshResult!!,
@@ -341,7 +345,7 @@ class AvailabilitySyncWorker(
     ): String? {
         return try {
             val prompt = """
-                You are an advanced cinematic research agent called "Olivia". 
+                You are a knowledgeable cinematic research assistant. 
                 Generate a structured research card for the movie: "$movieTitle".
                 
                 Context provided:

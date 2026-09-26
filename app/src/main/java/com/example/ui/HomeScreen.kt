@@ -99,7 +99,7 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Explore
-    var exploreSubTab by remember { mutableStateOf(0) } // 0: AI & Taste, 1: Olivia AI, 2: Podcasts, 3: Film News
+    var exploreSubTab by remember { mutableStateOf(0) } // 0: AI & Taste, 1: AI Companion, 2: Podcasts, 3: Film News
     var filterOnlyMyServices by remember { mutableStateOf(true) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -300,15 +300,15 @@ fun HomeScreen(
             }
         },
         floatingActionButton = {
-            // Suppress global feedback FAB when actively chatting with Olivia to prevent overlapping input controls
-            val isChattingWithOlivia = selectedTab == 3 && exploreSubTab == 1
+            // Suppress global feedback FAB when actively chatting with AI to prevent overlapping input controls
+            val isChattingWithAi = selectedTab == 3 && exploreSubTab == 1
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.navigationBarsPadding()
             ) {
                 // Global Beta Feedback FAB (hidden during active chat conversation)
-                if (enableBetaFeedback && !isChattingWithOlivia) {
+                if (enableBetaFeedback && !isChattingWithAi) {
                     FloatingFeedbackButton(
                         onClick = { showFeedbackDialog = true }
                     )
@@ -548,8 +548,8 @@ fun HomeScreen(
             val ollamaHost by viewModel.ollamaHost.collectAsState()
             val meshPrimaryHost by viewModel.meshPrimaryHost.collectAsState()
             val meshSecondaryHost by viewModel.meshSecondaryHost.collectAsState()
-            val meshFryStatus by viewModel.meshFryStatus.collectAsState()
-            val meshMazeStatus by viewModel.meshMazeStatus.collectAsState()
+            val meshPrimaryStatus by viewModel.meshPrimaryStatus.collectAsState()
+            val meshSecondaryStatus by viewModel.meshSecondaryStatus.collectAsState()
             val isProbingMesh by viewModel.isProbingMesh.collectAsState()
             val githubToken by viewModel.githubToken.collectAsState()
             val watchmodeApiKey by viewModel.watchmodeApiKey.collectAsState()
@@ -583,8 +583,8 @@ fun HomeScreen(
                 onSaveMeshPrimaryHost = { viewModel.saveMeshPrimaryHost(it) },
                 meshSecondaryHost = meshSecondaryHost,
                 onSaveMeshSecondaryHost = { viewModel.saveMeshSecondaryHost(it) },
-                meshFryStatus = meshFryStatus,
-                meshMazeStatus = meshMazeStatus,
+                meshPrimaryStatus = meshPrimaryStatus,
+                meshSecondaryStatus = meshSecondaryStatus,
                 isProbingMesh = isProbingMesh,
                 onProbeMesh = { viewModel.probeAiMesh() },
                 githubToken = githubToken,
@@ -4301,7 +4301,7 @@ fun AddMediaDialog(
                     value = userNotes,
                     onValueChange = { userNotes = it },
                     label = { Text("Personal Notes (Optional)") },
-                    placeholder = { Text("e.g. Danny recommended this") },
+                    placeholder = { Text("e.g. Recommended by a friend") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -5638,12 +5638,12 @@ fun SettingsDialog(
     onSaveWatchmodeApiKey: (String) -> Unit,
     ollamaHost: String,
     onSaveOllamaHost: (String) -> Unit,
-    meshPrimaryHost: String = "192.168.86.27",
+    meshPrimaryHost: String = "",
     onSaveMeshPrimaryHost: (String) -> Unit = {},
-    meshSecondaryHost: String = "192.168.86.217",
+    meshSecondaryHost: String = "",
     onSaveMeshSecondaryHost: (String) -> Unit = {},
-    meshFryStatus: com.example.data.remote.MeshNodeStatus? = null,
-    meshMazeStatus: com.example.data.remote.MeshNodeStatus? = null,
+    meshPrimaryStatus: com.example.data.remote.MeshNodeStatus? = null,
+    meshSecondaryStatus: com.example.data.remote.MeshNodeStatus? = null,
     isProbingMesh: Boolean = false,
     onProbeMesh: () -> Unit = {},
     githubToken: String,
@@ -5773,17 +5773,19 @@ fun SettingsDialog(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text("Letterboxd Account & Sync", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                        ) {
-                                            Text(
-                                                "@${lbInput.ifBlank { "scriptedmind" }}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
+                                        if (lbInput.isNotBlank()) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                            ) {
+                                                Text(
+                                                    "@${lbInput}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
                                         }
                                     }
                                     Text("Bidirectional syncing: Import watchlist/watched CSV/ZIP, sync live RSS, and export to Letterboxd import format.", style = MaterialTheme.typography.bodySmall)
@@ -5792,7 +5794,7 @@ fun SettingsDialog(
                                         value = lbInput,
                                         onValueChange = { lbInput = it },
                                         label = { Text("Letterboxd Username") },
-                                        placeholder = { Text("e.g. scriptedmind") },
+                                        placeholder = { Text("e.g. your_username") },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = OutlinedTextFieldDefaults.colors(
@@ -5860,11 +5862,12 @@ fun SettingsDialog(
 
                                     Text("ONE-TAP LETTERBOXD WEB ACTIONS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.outline)
 
-                                    val user = lbInput.ifBlank { "scriptedmind" }
+                                    val user = lbInput.trim()
                                     OutlinedButton(
                                         onClick = {
                                             try {
-                                                uriHandler.openUri("https://letterboxd.com/$user/watchlist/export/")
+                                                val url = if (user.isNotBlank()) "https://letterboxd.com/$user/watchlist/export/" else "https://letterboxd.com/"
+                                                uriHandler.openUri(url)
                                             } catch (e: Exception) {}
                                         },
                                         modifier = Modifier.fillMaxWidth(),
@@ -6105,8 +6108,8 @@ fun SettingsDialog(
                         var geminiInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey) }
                         var wmInput by remember(watchmodeApiKey) { mutableStateOf(watchmodeApiKey) }
                         var hostInput by remember(ollamaHost) { mutableStateOf(ollamaHost) }
-                        var fryInput by remember(meshPrimaryHost) { mutableStateOf(meshPrimaryHost) }
-                        var mazeInput by remember(meshSecondaryHost) { mutableStateOf(meshSecondaryHost) }
+                        var primaryHostInput by remember(meshPrimaryHost) { mutableStateOf(meshPrimaryHost) }
+                        var secondaryHostInput by remember(meshSecondaryHost) { mutableStateOf(meshSecondaryHost) }
                         var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
                         var showTmdb by remember { mutableStateOf(false) }
                         var showGemini by remember { mutableStateOf(false) }
@@ -6268,7 +6271,7 @@ fun SettingsDialog(
                             ) {
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("AI Recommendations Engine (Gemini)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Powers Olivia, custom film taste analysis, and personalized viewing suggestions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                    Text("Powers local AI companion, custom film taste analysis, and personalized viewing suggestions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                     OutlinedTextField(
                                         value = geminiInput,
                                         onValueChange = { geminiInput = it },
@@ -6359,17 +6362,17 @@ fun SettingsDialog(
                                     }
 
                                     Text(
-                                        "Automatically routes heavy synthesis to Desktop Fry (Qwen 2.5 Coder 7B @ 48 tok/s) and fails over to Laptop Maze (Gemma 4 @ 26 tok/s).",
+                                        "Automatically routes local AI requests to your primary compute node (e.g. desktop PC/server running Ollama) and fails over to your secondary node if offline.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.outline
                                     )
 
-                                    // Node 1: Desktop Fry
+                                    // Node 1: Primary Node
                                     OutlinedTextField(
-                                        value = fryInput,
-                                        onValueChange = { fryInput = it },
-                                        label = { Text("Primary Node (Desktop Fry)") },
-                                        placeholder = { Text("192.168.86.27") },
+                                        value = primaryHostInput,
+                                        onValueChange = { primaryHostInput = it },
+                                        label = { Text("Primary Node (Desktop / Server)") },
+                                        placeholder = { Text("e.g. 192.168.1.100") },
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -6380,12 +6383,12 @@ fun SettingsDialog(
                                         modifier = Modifier.fillMaxWidth()
                                     )
 
-                                    // Node 2: Laptop Maze
+                                    // Node 2: Secondary Node
                                     OutlinedTextField(
-                                        value = mazeInput,
-                                        onValueChange = { mazeInput = it },
-                                        label = { Text("Secondary Node (Laptop Maze)") },
-                                        placeholder = { Text("192.168.86.217") },
+                                        value = secondaryHostInput,
+                                        onValueChange = { secondaryHostInput = it },
+                                        label = { Text("Secondary Node (Laptop / Failover)") },
+                                        placeholder = { Text("e.g. 192.168.1.101") },
                                         singleLine = true,
                                         colors = OutlinedTextFieldDefaults.colors(
                                             focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -6399,9 +6402,9 @@ fun SettingsDialog(
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Button(
                                             onClick = {
-                                                onSaveMeshPrimaryHost(fryInput)
-                                                onSaveMeshSecondaryHost(mazeInput)
-                                                onSaveOllamaHost(fryInput)
+                                                onSaveMeshPrimaryHost(primaryHostInput)
+                                                onSaveMeshSecondaryHost(secondaryHostInput)
+                                                onSaveOllamaHost(primaryHostInput)
                                             },
                                             modifier = Modifier.weight(1f),
                                             shape = RoundedCornerShape(8.dp)
@@ -6423,29 +6426,29 @@ fun SettingsDialog(
                                     }
 
                                     // Live Mesh Node Status Results
-                                    if (meshFryStatus != null || meshMazeStatus != null) {
+                                    if (meshPrimaryStatus != null || meshSecondaryStatus != null) {
                                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                        meshFryStatus?.let { fry ->
+                                        meshPrimaryStatus?.let { primary ->
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Text(if (fry.isOnline && !fry.isUserActive) "🟢" else if (fry.isOnline && fry.isUserActive) "⏸️" else "🔴", fontSize = 12.sp)
+                                                Text(if (primary.isOnline && !primary.isUserActive) "🟢" else if (primary.isOnline && primary.isUserActive) "⏸️" else "🔴", fontSize = 12.sp)
                                                 Text(
-                                                    if (fry.isOnline && fry.isUserActive) "Fry: Online (Paused - User Active) · ${fry.activeModel}"
-                                                    else if (fry.isOnline) "Fry: Online (${fry.latencyMs}ms) · ${fry.activeModel}"
-                                                    else "Fry (${fry.host}): Offline / Asleep",
+                                                    if (primary.isOnline && primary.isUserActive) "Primary: Online (Paused - User Active) · ${primary.activeModel}"
+                                                    else if (primary.isOnline) "Primary: Online (${primary.latencyMs}ms) · ${primary.activeModel}"
+                                                    else "Primary (${primary.host}): Offline / Asleep",
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = if (fry.isOnline) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (fry.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                                    fontWeight = if (primary.isOnline) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (primary.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
                                                 )
                                             }
                                         }
-                                        meshMazeStatus?.let { maze ->
+                                        meshSecondaryStatus?.let { secondary ->
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Text(if (maze.isOnline) "🟢" else "🔴", fontSize = 12.sp)
+                                                Text(if (secondary.isOnline) "🟢" else "🔴", fontSize = 12.sp)
                                                 Text(
-                                                    if (maze.isOnline) "Maze: Online (${maze.latencyMs}ms) · ${maze.activeModel}" else "Maze (${maze.host}): Offline / Asleep",
+                                                    if (secondary.isOnline) "Secondary: Online (${secondary.latencyMs}ms) · ${secondary.activeModel}" else "Secondary (${secondary.host}): Offline / Asleep",
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = if (maze.isOnline) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (maze.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                                    fontWeight = if (secondary.isOnline) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (secondary.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
                                                 )
                                             }
                                         }
@@ -6636,7 +6639,7 @@ fun SynthesizedMovieInsights(
                         letterSpacing = 1.sp
                     )
                     Text(
-                        text = if (!synthesisDate.isNullOrBlank()) "Curated by Olivia AI • $synthesisDate" else "Synthesized by Olivia AI Concierge",
+                        text = if (!synthesisDate.isNullOrBlank()) "Curated by AI Companion • $synthesisDate" else "Synthesized by AI Companion",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -6811,7 +6814,7 @@ fun SynthesizedMovieInsights(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "Discuss with Olivia & Gemini in Explore",
+                    "Discuss with AI Companion in Explore",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -7492,7 +7495,7 @@ fun ExploreTabContent(
             .testTag("explore_tab_content")
     ) {
         // Sub-Navigation Selector: 4 Modular Tabs
-        // 0: ✨ AI & Taste, 1: 💬 Olivia AI, 2: 🎙️ Podcasts, 3: 📰 Film News
+        // 0: ✨ AI & Taste, 1: 💬 AI Companion, 2: 🎙️ Podcasts, 3: 📰 Film News
         Surface(
             color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
             modifier = Modifier.fillMaxWidth()
@@ -7524,13 +7527,13 @@ fun ExploreTabContent(
                     )
                 )
 
-                // Tab 1: Chat with Olivia
+                // Tab 1: Chat with AI Companion
                 FilterChip(
                     selected = selectedSubTab == 1,
                     onClick = { onSubTabChange(1) },
                     label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("💬 Olivia AI", fontWeight = FontWeight.Bold)
+                            Text("💬 AI Companion", fontWeight = FontWeight.Bold)
                             if (chatMessages.isNotEmpty()) {
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Surface(
@@ -8015,7 +8018,7 @@ fun ExploreTabContent(
                                 ) {
                                     Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Discuss Analysis with Olivia", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text("Discuss Analysis with AI Companion", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             } else if (isGeminiAnalyzing) {
                                 Row(
@@ -8037,7 +8040,7 @@ fun ExploreTabContent(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            "PROMPT OLIVIA DIRECTLY",
+                            "PROMPT AI COMPANION DIRECTLY",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.outline,
@@ -8071,7 +8074,7 @@ fun ExploreTabContent(
             }
 
             1 -> {
-                // SubTab 1: Chat with Olivia
+                // SubTab 1: Chat with AI Companion
                 AgentChatTabContent(
                     chatMessages = chatMessages,
                     isLoading = isLoading,
@@ -8085,7 +8088,7 @@ fun ExploreTabContent(
                     podcastEpisodes = podcastEpisodes,
                     isSyncingPodcasts = isSyncingPodcasts,
                     onSyncPodcastRecs = onSyncPodcastRecs,
-                    onAskOlivia = { prompt ->
+                    onAskAi = { prompt ->
                         onSubTabChange(1)
                         onSendMessage(prompt)
                     }
@@ -8096,7 +8099,7 @@ fun ExploreTabContent(
                 // SubTab 3: 📰 Film News Hub
                 NewsExploreView(
                     movieNews = movieNews,
-                    onDiscussWithOlivia = { prompt ->
+                    onDiscussWithAi = { prompt ->
                         onSubTabChange(1)
                         onSendMessage(prompt)
                     }
@@ -8114,7 +8117,7 @@ fun PodcastsExploreView(
     podcastEpisodes: List<com.example.data.model.PodcastEpisode>,
     isSyncingPodcasts: Boolean = false,
     onSyncPodcastRecs: () -> Unit = {},
-    onAskOlivia: (String) -> Unit
+    onAskAi: (String) -> Unit
 ) {
     val uriHandler = LocalUriHandler.current
     var selectedShow by remember { mutableStateOf("All Shows") }
@@ -8302,7 +8305,7 @@ fun PodcastsExploreView(
                             }
                             OutlinedButton(
                                 onClick = {
-                                    onAskOlivia("What do you think about the discussion in this episode: '${pod.showTitle} - ${pod.episodeTitle}'?")
+                                    onAskAi("What do you think about the discussion in this episode: '${pod.showTitle} - ${pod.episodeTitle}'?")
                                 },
                                 modifier = Modifier.weight(1f).height(34.dp),
                                 shape = RoundedCornerShape(8.dp),
@@ -8310,7 +8313,7 @@ fun PodcastsExploreView(
                             ) {
                                 Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Ask Olivia", fontSize = 11.sp)
+                                Text("Ask AI", fontSize = 11.sp)
                             }
                         }
                     }
@@ -8329,7 +8332,7 @@ fun PodcastsExploreView(
 @Composable
 fun NewsExploreView(
     movieNews: List<com.example.data.model.MovieNewsItem>,
-    onDiscussWithOlivia: (String) -> Unit
+    onDiscussWithAi: (String) -> Unit
 ) {
     var selectedCategory by remember { mutableStateOf("All News") }
 
@@ -8453,13 +8456,13 @@ fun NewsExploreView(
                         ) {
                             TextButton(
                                 onClick = {
-                                    onDiscussWithOlivia("Tell me more about this news item: '${news.title}'")
+                                    onDiscussWithAi("Tell me more about this news item: '${news.title}'")
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Discuss with Olivia", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("Discuss with AI", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -8504,7 +8507,7 @@ fun AgentChatTabContent(
                 Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                    Text("Olivia — AI Film Companion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("AI Film Companion", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text("Ask me about your Vault, or ask for recommendations based on your history.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

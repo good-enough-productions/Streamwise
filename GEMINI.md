@@ -12,12 +12,12 @@ Streamwise is a **Privacy-First, Local-Heavy** cinematic management system. The 
 - **Connectivity:** Local Wi-Fi (REST via Retrofit + SSDP Discovery)
 
 ## 3. AI Research Pipeline (Synthesis 4.0)
-The app features an autonomous agent named **Olivia**.
+The app features a private, local AI cinema companion.
 
-### How Olivia Thinks:
+### How the AI Companion Thinks:
 1. **Context Bundling:** On every chat/request, the app injects the user's latest 20 watched movies and current watchlist into the system prompt.
-2. **Personal Relevance:** Gemma 4 calculates a `Match: X/10` score based on historical themes and cinematographer/talent overlaps.
-3. **Local Bridge:** Requests are sent to the default laptop IP `192.168.86.217:11434`.
+2. **Personal Relevance:** Local models calculate a `Match: X/10` score based on historical themes and cinematographer/talent overlaps.
+3. **Local Bridge:** Requests are sent to the user's configured local Ollama instance (e.g., `192.168.1.100:11434`).
 
 ### Self-Evolution Workflow:
 Users can suggest app improvements directly to the chatbot.

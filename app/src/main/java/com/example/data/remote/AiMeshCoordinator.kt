@@ -95,32 +95,32 @@ object AiMeshCoordinator {
     }
 
     suspend fun resolveActiveNode(
-        primaryHost: String = "192.168.86.27",
-        secondaryHost: String = "192.168.86.217"
+        primaryHost: String = "",
+        secondaryHost: String = ""
     ): MeshResolutionResult? = withContext(Dispatchers.IO) {
-        // 1. Probe Primary: Desktop Fry (Heavy Anchor @ 48 tok/s)
-        val fry = probeNode(
-            name = "Desktop Fry",
+        // 1. Probe Primary: Desktop / Server Node
+        val primary = probeNode(
+            name = "Primary Node",
             host = primaryHost,
-            role = "Heavy Anchor",
+            role = "Primary Compute Node",
             preferredModel = "qwen2.5-coder:7b"
         )
-        // Only route to Desktop Fry if online AND user is NOT actively using the desktop
-        if (fry.isOnline && !fry.isUserActive) {
+        // Only route to Primary if online AND user is NOT actively using the machine
+        if (primary.isOnline && !primary.isUserActive) {
             val api = OllamaClient.getApiService(primaryHost)
-            return@withContext MeshResolutionResult(fry, api, fry.activeModel)
+            return@withContext MeshResolutionResult(primary, api, primary.activeModel)
         }
 
-        // 2. Failover to Secondary: Laptop Maze (Edge Unit @ 26.5 tok/s)
-        val maze = probeNode(
-            name = "Laptop Maze",
+        // 2. Failover to Secondary: Laptop / Edge Node
+        val secondary = probeNode(
+            name = "Secondary Node",
             host = secondaryHost,
-            role = "Edge Field Unit",
+            role = "Edge Failover Unit",
             preferredModel = "gemma4:e2b"
         )
-        if (maze.isOnline) {
+        if (secondary.isOnline) {
             val api = OllamaClient.getApiService(secondaryHost)
-            return@withContext MeshResolutionResult(maze, api, maze.activeModel)
+            return@withContext MeshResolutionResult(secondary, api, secondary.activeModel)
         }
 
         null
@@ -130,22 +130,22 @@ object AiMeshCoordinator {
         primaryHost: String,
         secondaryHost: String
     ): Pair<MeshNodeStatus, MeshNodeStatus> = coroutineScope {
-        val fryDeferred = async {
+        val primaryDeferred = async {
             probeNode(
-                name = "Desktop Fry",
+                name = "Primary Node",
                 host = primaryHost,
-                role = "Heavy Compute Anchor",
+                role = "Primary Compute Node",
                 preferredModel = "qwen2.5-coder:7b"
             )
         }
-        val mazeDeferred = async {
+        val secondaryDeferred = async {
             probeNode(
-                name = "Laptop Maze",
+                name = "Secondary Node",
                 host = secondaryHost,
-                role = "Edge Field Unit",
+                role = "Edge Failover Unit",
                 preferredModel = "gemma4:e2b"
             )
         }
-        Pair(fryDeferred.await(), mazeDeferred.await())
+        Pair(primaryDeferred.await(), secondaryDeferred.await())
     }
 }
