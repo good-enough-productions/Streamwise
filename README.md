@@ -51,6 +51,11 @@ Streamwise includes an in-app updater. Whenever you open **Settings (`⚙️`) >
 
 ## ✨ Features You'll Love
 
+### 🚀 1-Minute First-Launch Setup Wizard
+- **Zero Confusion Onboarding**: When you open Streamwise for the first time, a friendly 3-step setup wizard introduces the app, connects your Letterboxd account, helps you grab a free TMDB API key in 1 tap, and selects your active streaming services.
+- **Actionable Empty States**: No intimidating blank screens. The Watchlist and Watched tabs feature warm welcome cards with 1-tap buttons to import Letterboxd CSVs, sync RSS, add movies manually, or re-run the setup guide anytime.
+- **Reorganizable Settings Hub**: Essential cinephile controls are front-and-center, with developer and advanced tools tucked into a collapsible card.
+
 ### 🔄 The Single-Service Rotation Advisor
 - **See where your watchlist actually lives**: View live counts of queued movies per streaming platform (e.g., `Max: 95 Titles`, `Prime Video: 385 Titles`).
 - **Cost-per-hour and ROI**: Track your monthly spend and see what you're paying per hour of entertainment.

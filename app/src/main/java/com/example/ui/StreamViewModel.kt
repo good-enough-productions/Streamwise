@@ -177,6 +177,20 @@ class StreamViewModel(
         userPreferences.isGridView = newVal
     }
 
+    // First-Launch Onboarding State
+    private val _hasCompletedOnboarding = MutableStateFlow(userPreferences.hasCompletedOnboarding)
+    val hasCompletedOnboarding: StateFlow<Boolean> = _hasCompletedOnboarding.asStateFlow()
+
+    fun completeOnboarding() {
+        userPreferences.hasCompletedOnboarding = true
+        _hasCompletedOnboarding.value = true
+    }
+
+    fun resetOnboarding() {
+        userPreferences.hasCompletedOnboarding = false
+        _hasCompletedOnboarding.value = false
+    }
+
     // Google Sheet Webhook Setting
     private val _googleSheetWebhookUrl = MutableStateFlow(userPreferences.googleSheetWebhookUrl)
     val googleSheetWebhookUrl: StateFlow<String> = _googleSheetWebhookUrl.asStateFlow()

@@ -205,7 +205,13 @@ D AvailabilitySyncWorker: Found 33 items to sync.</pre></p>
         </div>
 
         <div class="changelog-entry">
-            <h3>(This session) &nbsp; Feat: Watchlist Pre-Watch Synthesis Agent</h3>
+            <h3>(This session) &nbsp; Feat: First-Launch 3-Step Setup Wizard & Welcoming Empty States</h3>
+            <p><strong>Problem:</strong> When a new user (such as a Reddit cinephile) downloaded Streamwise, they were dropped into an empty, confusing screen with no guidance, buried Letterboxd settings, intimidating developer options, and no easy way to get a TMDB API key.<br>
+            <strong>Fix:</strong> Built an automated 3-step First-Launch Onboarding Wizard (<code>OnboardingDialog</code>) that welcomes new cinephiles, configures their display name, syncs Letterboxd with live RSS, provides direct 1-tap browser links to free TMDB API keys, and sets up active streaming services. Transformed Watchlist and Watched empty states into actionable cards with 1-tap imports. Reorganized Settings into Essential (TMDB, Gemini) vs Advanced (collapsible card with Watchmode, Google Sheets webhooks, AI Mesh, GitHub PAT), and fixed hardcoded version numbers to use dynamic Gradle build fields.</p>
+        </div>
+
+        <div class="changelog-entry">
+            <h3>(Prior session) &nbsp; Feat: Watchlist Pre-Watch Synthesis Agent</h3>
             <p><strong>Problem:</strong> The app lacked deep contextual insights for movies added to the watchlist, requiring manual research to understand "why" a title was recommended or what its cultural significance was.<br>
             <strong>Fix:</strong> Expanded the <code>AvailabilitySyncWorker</code> into a full-scale research agent. In addition to availability, it now pulls movie keywords and cast details via new TMDB endpoints. This data is synthesized into a structured "Agentic Research Strategy" card (complete with YAML frontmatter) and persisted in a new <code>trivia</code> field in the Room database. The Movie Details sheet was updated with a monospaced "Research Vault" section to display these insights, helping users decide what to watch with professional-grade context.</p>
         </div>
