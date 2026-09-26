@@ -115,10 +115,10 @@ adb -s <phone_serial> shell am start -n com.aistudio.streammanager.qpwoei/com.ex
 
 - **ExploreTabContent**: Redesigned from a monolithic vertical feed into 4 dedicated, state-preserved sub-tabs with independent scroll states:
   - SubTab 0: `✨ AI & Taste` (`Cinephile Taste Matrix`, `Gemini Pro Intelligence`, tailored picks with `+ Watchlist` action, quick conversation starters).
-  - SubTab 1: `💬 Olivia AI` (`AgentChatTabContent` with fullscreen conversational interface and message badge counter).
-  - SubTab 2: `🎙️ Podcasts Hub` (`PodcastsExploreView` with show selector chips and `▶️ Listen` / `💬 Ask Olivia` actions).
-  - SubTab 3: `📰 Film News Hub` (`NewsExploreView` with category selector chips and `💬 Discuss with Olivia` integration).
-- **Navigation Hoisting**: The active sub-tab is hoisted to `HomeScreen` as `exploreSubTab`, allowing bottom sheets and external triggers (such as `onDiscussInExplore` from `MovieDetailsBottomSheet`) to transition directly into Olivia chat.
+  - SubTab 1: `💬 AI Companion` (`AgentChatTabContent` with fullscreen conversational interface and message badge counter).
+  - SubTab 2: `🎙️ Podcasts Hub` (`PodcastsExploreView` with show selector chips and `▶️ Listen` / `💬 Ask AI` actions).
+  - SubTab 3: `📰 Film News Hub` (`NewsExploreView` with category selector chips and `💬 Discuss with AI` integration).
+- **Navigation Hoisting**: The active sub-tab is hoisted to `HomeScreen` as `exploreSubTab`, allowing bottom sheets and external triggers (such as `onDiscussInExplore` from `MovieDetailsBottomSheet`) to transition directly into AI companion chat.
 
 ## 14. Gemini Spark Podcast Tracker Sync & TMDB Availability Sentinel (v1.5.1)
 
@@ -270,10 +270,10 @@ Comprehensive resolution of the 14 critical findings identified in the Streamwis
 
 ### Agent Screen Humanization & Conversational Ergonomics
 - **Technical Jargon Elimination**:
-  - Replaced internal engineering references ("Gemma 4", "Gemini 3.1 Pro", "API Keys") with consumer-friendly framing: *"Olivia — AI Film Companion"*, *"Personalized Film & Taste Analysis"*, and *"Analyzing your cinematic vault..."*.
+  - Replaced internal engineering references ("Gemma 4", "Gemini 3.1 Pro", "API Keys") with consumer-friendly framing: *"AI Film Companion"*, *"Personalized Film & Taste Analysis"*, and *"Analyzing your cinematic vault..."*.
 - **Floating Icon Collision Elimination**:
   - Replaced oversized 56dp floating send button with an ergonomic 52dp inline `FilledIconButton` positioned alongside the input field with automated keyboard avoidance.
-  - Suppressed the global `FloatingFeedbackButton` whenever the user is actively on the Olivia chat tab (`selectedTab == 3 && exploreSubTab == 1`), eliminating touch target overlaps.
+  - Suppressed the global `FloatingFeedbackButton` whenever the user is actively on the AI companion chat tab (`selectedTab == 3 && exploreSubTab == 1`), eliminating touch target overlaps.
 
 ### Check-In Prompts & Decision Clarity
 - **Hierarchical Action Buttons**:
@@ -401,28 +401,28 @@ Architecture updates addressing mobile visual density and couch-first discovery:
 ## 12. Autonomous Multi-Machine AI Mesh Architecture (v1.6.2)
 
 ### 1. Dual-Node Local Compute Topology
-- **Primary Anchor (Desktop Fry)**:
-  - Address: `192.168.86.27:11434`
+- **Primary Compute Anchor (Workstation / Desktop)**:
+  - Address: `192.168.1.100:11434` (User Configurable)
   - Model: `qwen2.5-coder:7b` (High-performance code/reasoning anchor @ 48.2 tok/s).
-  - Role: Heavy contextual film recommendations, deep-wiki structured YAML cards, and multi-turn Olivia conversations.
-- **Edge Field Unit (Laptop Maze)**:
-  - Address: `192.168.86.217:11434`
+  - Role: Heavy contextual film recommendations, deep-wiki structured YAML cards, and multi-turn companion conversations.
+- **Secondary Edge Unit (Laptop / Failover)**:
+  - Address: `192.168.1.101:11434` (User Configurable)
   - Model: `gemma4:e2b` / `gemma4:26b` (@ 26.5 tok/s).
   - Role: Mobile roaming unit when off-desk or when the primary desktop anchor is in low-power standby.
 
 ### 2. Intelligent Dynamic Model Resolution (`AiMeshCoordinator`)
 - **Root Cause & Solution**:
-  - Previously, StreamWise hardcoded `model = "gemma4:e2b"` in `OllamaChatRequest`. When connected to Desktop Fry (which hosts `qwen2.5-coder:7b`), the Ollama daemon rejected requests with `404 model not found`.
+  - Previously, StreamWise hardcoded `model = "gemma4:e2b"` in `OllamaChatRequest`. When connected to nodes hosting other models, the Ollama daemon rejected requests with `404 model not found`.
   - Upgraded `OllamaApiService` with `GET api/tags` to fetch live model metadata.
   - `AiMeshCoordinator.resolveActiveNode()` probes endpoints with non-blocking timeouts, inspects active model tags dynamically, and selects the optimal available model on each node without hardcoded assumptions.
 
 ### 3. Real-Time Hardware Attribution & UI Diagnostic Deck
-- **Olivia Attribution**:
-  - Responses generated by Olivia append the executing node name and model:
-    `*(Synthesized by Olivia via Desktop Fry [qwen2.5-coder:7b])*`
+- **Hardware Attribution**:
+  - Responses generated by local models append the executing node name and model:
+    `*(Synthesized via Primary Node [qwen2.5-coder:7b])*`
 - **Settings Control Deck (Tab 3: System & Updates)**:
   - Interactive "AI Mesh Coordinator" panel with editable IP addresses.
-  - `Test Mesh Nodes` button pings both Fry and Maze concurrently, surfacing live ping latencies (ms) and active models with colored connection status indicators (🟢 Online vs 🔴 Offline).
+  - `Test Mesh Nodes` button pings both primary and secondary nodes concurrently, surfacing live ping latencies (ms) and active models with colored connection status indicators (🟢 Online vs 🔴 Offline).
 
 ### 4. Background Synthesis Integration
 - `AvailabilitySyncWorker` leverages `AiMeshCoordinator.resolveActiveNode()` during scheduled 4-hour passes, routing movie research card generation to the highest-throughput active workstation node.

@@ -133,11 +133,11 @@ class StreamViewModel(
     private val _meshSecondaryHost = MutableStateFlow(userPreferences.meshSecondaryHost)
     val meshSecondaryHost: StateFlow<String> = _meshSecondaryHost.asStateFlow()
 
-    private val _meshFryStatus = MutableStateFlow<com.example.data.remote.MeshNodeStatus?>(null)
-    val meshFryStatus: StateFlow<com.example.data.remote.MeshNodeStatus?> = _meshFryStatus.asStateFlow()
+    private val _meshPrimaryStatus = MutableStateFlow<com.example.data.remote.MeshNodeStatus?>(null)
+    val meshPrimaryStatus: StateFlow<com.example.data.remote.MeshNodeStatus?> = _meshPrimaryStatus.asStateFlow()
 
-    private val _meshMazeStatus = MutableStateFlow<com.example.data.remote.MeshNodeStatus?>(null)
-    val meshMazeStatus: StateFlow<com.example.data.remote.MeshNodeStatus?> = _meshMazeStatus.asStateFlow()
+    private val _meshSecondaryStatus = MutableStateFlow<com.example.data.remote.MeshNodeStatus?>(null)
+    val meshSecondaryStatus: StateFlow<com.example.data.remote.MeshNodeStatus?> = _meshSecondaryStatus.asStateFlow()
 
     private val _isProbingMesh = MutableStateFlow(false)
     val isProbingMesh: StateFlow<Boolean> = _isProbingMesh.asStateFlow()
@@ -920,25 +920,25 @@ class StreamViewModel(
     fun saveMeshPrimaryHost(host: String) {
         userPreferences.meshPrimaryHost = host
         _meshPrimaryHost.value = host.trim()
-        _statusMessage.value = "AI Mesh Primary (Fry) updated: $host"
+        _statusMessage.value = "AI Mesh Primary Node updated: $host"
     }
 
     fun saveMeshSecondaryHost(host: String) {
         userPreferences.meshSecondaryHost = host
         _meshSecondaryHost.value = host.trim()
-        _statusMessage.value = "AI Mesh Secondary (Maze) updated: $host"
+        _statusMessage.value = "AI Mesh Secondary Node updated: $host"
     }
 
     fun probeAiMesh() {
         viewModelScope.launch {
             _isProbingMesh.value = true
             try {
-                val (fry, maze) = com.example.data.remote.AiMeshCoordinator.probeEntireMesh(
+                val (primary, secondary) = com.example.data.remote.AiMeshCoordinator.probeEntireMesh(
                     _meshPrimaryHost.value,
                     _meshSecondaryHost.value
                 )
-                _meshFryStatus.value = fry
-                _meshMazeStatus.value = maze
+                _meshPrimaryStatus.value = primary
+                _meshSecondaryStatus.value = secondary
             } catch (e: Exception) {
                 // Ignore probe errors
             } finally {
@@ -1232,7 +1232,7 @@ class StreamViewModel(
                 val watchlist = allMediaItems.value.filter { it.status == MediaStatus.WATCHLIST.name }.take(20).joinToString(", ") { it.title }
 
                 val systemPrompt = """
-                    You are Olivia, an advanced cinematic research agent and app co-developer.
+                    You are a knowledgeable cinematic research assistant and film companion.
                     
                     USER DATA:
                     - History: ${watchHistory}
@@ -1260,7 +1260,7 @@ class StreamViewModel(
                 val (api, modelToUse, nodeName) = if (meshResult != null) {
                     Triple(meshResult.apiService, meshResult.model, meshResult.node.name)
                 } else {
-                    Triple(com.example.data.remote.OllamaClient.getApiService(ollamaHost.value), "gemma4:e2b", "Legacy Ollama (${ollamaHost.value})")
+                    Triple(com.example.data.remote.OllamaClient.getApiService(ollamaHost.value), "gemma4:e2b", "Local Ollama (${ollamaHost.value.ifBlank { "Local" }})")
                 }
 
                 val requestMessages = mutableListOf(com.example.data.remote.OllamaChatMessage("system", systemPrompt))
@@ -1290,15 +1290,20 @@ class StreamViewModel(
                     }
                 }
 
-                replyContent += "\n\n*(Synthesized by Olivia via $nodeName [$modelToUse])*"
+                replyContent += "\n\n*(Synthesized by AI Companion via $nodeName [$modelToUse])*"
 
                 currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", replyContent))
                 _chatMessages.value = currentChat
             } catch (e: Exception) {
                 val errorMsg = if (e is java.net.ConnectException || e is java.net.SocketTimeoutException || e is java.net.UnknownHostException) {
-                    "Unable to connect to AI Mesh nodes (Primary: ${meshPrimaryHost.value}, Secondary: ${meshSecondaryHost.value}, Legacy: ${ollamaHost.value}). Please ensure Desktop Fry or Laptop Maze is running Ollama on your home Wi-Fi network."
+                    val hostInfo = listOf(meshPrimaryHost.value, meshSecondaryHost.value, ollamaHost.value).filter { it.isNotBlank() }.joinToString(", ")
+                    if (hostInfo.isBlank()) {
+                        "No local AI host is configured. Please go to Settings (⚙️ > Updates & System) and enter the IP address of your computer running Ollama."
+                    } else {
+                        "Unable to connect to local AI hosts ($hostInfo). Please ensure your computer is running Ollama on your home Wi-Fi network."
+                    }
                 } else {
-                    "Error connecting to AI Mesh: ${e.message}"
+                    "Error connecting to local AI: ${e.message}"
                 }
                 currentChat.add(com.example.data.remote.OllamaChatMessage("assistant", errorMsg))
                 _chatMessages.value = currentChat

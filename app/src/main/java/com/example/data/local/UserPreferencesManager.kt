@@ -15,15 +15,15 @@ class UserPreferencesManager(context: Context) {
         set(value) { prefs.edit().putString(KEY_TMDB_API_KEY, value.trim()).apply() }
 
     var ollamaHost: String
-        get() = prefs.getString(KEY_OLLAMA_HOST, "192.168.86.217") ?: "192.168.86.217"
+        get() = prefs.getString(KEY_OLLAMA_HOST, "") ?: ""
         set(value) { prefs.edit().putString(KEY_OLLAMA_HOST, value.trim()).apply() }
 
     var meshPrimaryHost: String
-        get() = prefs.getString(KEY_MESH_PRIMARY_HOST, "192.168.86.27") ?: "192.168.86.27"
+        get() = prefs.getString(KEY_MESH_PRIMARY_HOST, "") ?: ""
         set(value) { prefs.edit().putString(KEY_MESH_PRIMARY_HOST, value.trim()).apply() }
 
     var meshSecondaryHost: String
-        get() = prefs.getString(KEY_MESH_SECONDARY_HOST, "192.168.86.217") ?: "192.168.86.217"
+        get() = prefs.getString(KEY_MESH_SECONDARY_HOST, "") ?: ""
         set(value) { prefs.edit().putString(KEY_MESH_SECONDARY_HOST, value.trim()).apply() }
 
     var preferMeshCoordinator: Boolean
@@ -51,7 +51,7 @@ class UserPreferencesManager(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_ENABLE_BETA_FEEDBACK, value).apply()
 
     var googleSheetWebhookUrl: String
-        get() = prefs.getString(KEY_GOOGLE_SHEET_WEBHOOK_URL, "https://script.google.com/macros/s/AKfycbzsbZfiDbXXGJunAmJX2xb9OtpnigwVl69M6qbBQ5bNBuyAdj6TtkW-LflbSxSFJJoI0w/exec") ?: "https://script.google.com/macros/s/AKfycbzsbZfiDbXXGJunAmJX2xb9OtpnigwVl69M6qbBQ5bNBuyAdj6TtkW-LflbSxSFJJoI0w/exec"
+        get() = prefs.getString(KEY_GOOGLE_SHEET_WEBHOOK_URL, "") ?: ""
         set(value) = prefs.edit().putString(KEY_GOOGLE_SHEET_WEBHOOK_URL, value.trim()).apply()
 
     var isSpotlightCollapsed: Boolean
@@ -59,7 +59,7 @@ class UserPreferencesManager(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_SPOTLIGHT_COLLAPSED, value).apply()
 
     var letterboxdUsername: String
-        get() = prefs.getString(KEY_LETTERBOXD_USERNAME, "scriptedmind") ?: "scriptedmind"
+        get() = prefs.getString(KEY_LETTERBOXD_USERNAME, "") ?: ""
         set(value) = prefs.edit().putString(KEY_LETTERBOXD_USERNAME, value.trim()).apply()
 
     var userName: String

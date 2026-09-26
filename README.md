@@ -154,8 +154,8 @@ Whether you're a movie buff, a casual streamer, or a UI enthusiast, your feedbac
    ./deploy.ps1
    ```
 
-### Optional: "Olivia" Local AI Film Companion
-Streamwise features an optional private AI film companion named **Olivia** that can run against local models via [Ollama](https://ollama.com) on your home Wi-Fi:
+### Optional: Local AI Film Companion
+Streamwise features an optional private AI film companion that can run against local models via [Ollama](https://ollama.com) on your home Wi-Fi:
 - Supports models like `qwen2.5-coder:7b`, `gemma4:e2b`, or `llama3`.
 - Configure your local workstation IP address under **Settings (`⚙️`) > Updates & System**.
 - Responses cite the physical node that generated them with zero data leaving your home network.

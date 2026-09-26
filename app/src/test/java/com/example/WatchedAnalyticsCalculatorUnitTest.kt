@@ -22,7 +22,7 @@ class WatchedAnalyticsCalculatorUnitTest {
         val item4 = MediaItem(title = "Shawshank Redemption", releaseDate = "1994-10-14")
         assertEquals(1994, WatchedAnalyticsCalculator.extractReleaseYear(item4))
 
-        val item5 = MediaItem(title = "The Babysitter", sharedUrl = "https://letterboxd.com/scriptedmind/film/the-babysitter-2017/")
+        val item5 = MediaItem(title = "The Babysitter", sharedUrl = "https://letterboxd.com/cinemafan/film/the-babysitter-2017/")
         assertEquals(2017, WatchedAnalyticsCalculator.extractReleaseYear(item5))
 
         val item6 = MediaItem(title = "About Last Night", userNotes = "Podcast: The Rewatchables (1986)")

@@ -181,7 +181,7 @@ All notable changes to Streamwise will be documented in this file.
 ### Fixed & Modernized
 - **Navigation Renamed to "My Services"**: Restored "My Services" tab naming (with `Icons.Default.Subscriptions`) and updated headers across spend cards and empty states, recovering edits from commit `710a6ed`.
 - **Movie Details Markdown Transformation**: Replaced raw monospace YAML frontmatter and markdown in `MovieDetailsBottomSheet` with rich `SynthesizedMovieInsights` (theme pills, cast badges, and styled insight cards).
-- **Direct Explore AI Bridge**: Added "Discuss with Olivia & Gemini in Explore" action directly inside the movie details sheet.
+- **Direct Explore AI Bridge**: Added "Discuss with AI in Explore" action directly inside the movie details sheet.
 
 ### Added
 - **Cinephile Taste Matrix**: Multi-segment visual taste distribution bar in the Explore tab calculated dynamically from the user's watched vault.
