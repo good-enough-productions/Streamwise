@@ -68,6 +68,7 @@ import com.example.data.util.WatchedAnalyticsCalculator
 import java.text.SimpleDateFormat
 import java.util.Date
 import kotlin.math.roundToInt
+import com.example.BuildConfig
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -94,6 +95,7 @@ fun HomeScreen(
     val isSyncingPodcasts by viewModel.isSyncingPodcasts.collectAsState()
     val isBackfillingTmdb by viewModel.isBackfillingTmdb.collectAsState()
     val backfillProgress by viewModel.backfillProgress.collectAsState()
+    val hasCompletedOnboarding by viewModel.hasCompletedOnboarding.collectAsState()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -103,6 +105,7 @@ fun HomeScreen(
     var filterOnlyMyServices by remember { mutableStateOf(true) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showOnboardingDialog by remember(hasCompletedOnboarding) { mutableStateOf(!hasCompletedOnboarding) }
     var showFeedbackDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
     var showServiceDetailProvider by remember { mutableStateOf<StreamingProvider?>(null) }
@@ -356,7 +359,12 @@ fun HomeScreen(
                         isSpotlightCollapsed = isSpotlightCollapsed,
                         onToggleSpotlightCollapsed = { viewModel.toggleSpotlightCollapsed() },
                         isGridView = isGridView,
-                        onToggleGridView = { viewModel.toggleGridView() }
+                        onToggleGridView = { viewModel.toggleGridView() },
+                        onAddTitleClick = { showAddDialog = true },
+                        onImportLetterboxdClick = {
+                            letterboxdFileLauncher.launch(arrayOf("*/*", "text/*", "text/csv", "application/zip"))
+                        },
+                        onStartOnboardingClick = { showOnboardingDialog = true }
                     )
                     1 -> {
                         val watchedItems by viewModel.watchedItems.collectAsState()
@@ -602,7 +610,27 @@ fun HomeScreen(
                 isBackfillingTmdb = isBackfillingTmdb,
                 backfillProgress = backfillProgress,
                 onBackfillTmdb = { viewModel.backfillTmdbMetadataForAll(forceAll = false) },
+                onRestartOnboarding = { showOnboardingDialog = true },
                 onDismiss = { showSettingsDialog = false }
+            )
+        }
+
+        // First-Launch Onboarding Wizard Dialog (Overlay)
+        if (showOnboardingDialog) {
+            OnboardingDialog(
+                allProviders = allProviders,
+                onProviderToggle = { id, active -> viewModel.toggleStreamingProvider(id, active) },
+                userName = userName,
+                onSaveUserName = { viewModel.saveUserName(it) },
+                letterboxdUsername = letterboxdUsername,
+                onSaveLetterboxdUsername = { viewModel.saveLetterboxdUsername(it) },
+                tmdbApiKey = tmdbApiKey,
+                onSaveTmdbApiKey = { viewModel.saveTmdbApiKey(it) },
+                onSyncLetterboxdLive = { viewModel.syncLetterboxdLive() },
+                onComplete = {
+                    viewModel.completeOnboarding()
+                    showOnboardingDialog = false
+                }
             )
         }
 
@@ -1123,7 +1151,10 @@ fun WatchlistTabContent(
     isSpotlightCollapsed: Boolean = false,
     onToggleSpotlightCollapsed: () -> Unit = {},
     isGridView: Boolean = true,
-    onToggleGridView: () -> Unit = {}
+    onToggleGridView: () -> Unit = {},
+    onAddTitleClick: () -> Unit = {},
+    onImportLetterboxdClick: () -> Unit = {},
+    onStartOnboardingClick: () -> Unit = {}
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -1709,36 +1740,131 @@ fun WatchlistTabContent(
             // 3. Media Items List (or Empty State)
             if (processedItems.isEmpty()) {
                 item(key = "watchlist_empty_state") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 48.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
+                    if (watchlistItems.isEmpty()) {
+                        // Welcoming Onboarding / Empty State Card for brand-new users
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 24.dp),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.List,
-                                contentDescription = "Empty list",
-                                modifier = Modifier.size(56.dp),
-                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                "No titles found",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                if (filterOnlyMyServices) "Try switching to 'All' or widening your filters."
-                                else "Use the Add button or share titles to populate your vault.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                textAlign = TextAlign.Center
-                            )
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                    modifier = Modifier.padding(20.dp)
+                                ) {
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        modifier = Modifier.size(54.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(
+                                                imageVector = Icons.Default.Movie,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(28.dp),
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                    }
+
+                                    Text(
+                                        "Welcome to Streamwise! 🍿",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    Text(
+                                        "Never waste time looking for what to watch. Streamwise checks where movies are streaming across your active services and syncs with your Letterboxd account.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    Button(
+                                        onClick = onImportLetterboxdClick,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("📥 Import Letterboxd Watchlist", fontWeight = FontWeight.SemiBold)
+                                    }
+
+                                    FilledTonalButton(
+                                        onClick = onAddTitleClick,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("➕ Add Movie Manually")
+                                    }
+
+                                    if (tmdbApiKey.isBlank()) {
+                                        OutlinedButton(
+                                            onClick = onOpenSettings,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("🔑 Add Free TMDB Key (For Posters)", fontSize = 12.sp)
+                                        }
+                                    }
+
+                                    TextButton(
+                                        onClick = onStartOnboardingClick,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("✨ Open 1-Minute Setup Guide", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Standard Filtered Empty State
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.List,
+                                    contentDescription = "Empty list",
+                                    modifier = Modifier.size(56.dp),
+                                    tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    "No titles match your filters",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    if (filterOnlyMyServices) "Try switching to 'All Saved' or widening your platform/genre filters."
+                                    else "Try clearing your search or active filters.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
                     }
                 }
@@ -3178,8 +3304,60 @@ fun WatchedTabContent(
         }
 
         if (processedItems.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No logged titles found.", color = MaterialTheme.colorScheme.outline)
+            Box(modifier = Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+                if (watchedItems.isEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(20.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.History,
+                                contentDescription = null,
+                                modifier = Modifier.size(44.dp),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "Your Watched Vault is Empty",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                "Import your Letterboxd watched history or diary to view your 3-column poster wall, platform analytics, and monthly viewing hours.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Button(
+                                onClick = onPickLetterboxdFile,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Import Letterboxd CSV/ZIP", fontSize = 12.sp)
+                            }
+                            OutlinedButton(
+                                onClick = onSyncLetterboxdLive,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Icon(Icons.Default.RssFeed, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Sync Letterboxd Live RSS", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                } else {
+                    Text("No logged titles match your active filters.", color = MaterialTheme.colorScheme.outline)
+                }
             }
         } else if (viewMode == "grid") {
             // Poster Wall Grid View with Collapsible Header Card inside scrollable grid
@@ -5613,6 +5791,287 @@ fun HtmlAssetViewerDialog(
 }
 
 // ==========================================
+// COMPOSABLE: Onboarding Dialog (First-Launch 3-Step Wizard)
+// ==========================================
+@Composable
+fun OnboardingDialog(
+    allProviders: List<StreamingProvider>,
+    onProviderToggle: (String, Boolean) -> Unit,
+    userName: String,
+    onSaveUserName: (String) -> Unit,
+    letterboxdUsername: String,
+    onSaveLetterboxdUsername: (String) -> Unit,
+    tmdbApiKey: String,
+    onSaveTmdbApiKey: (String) -> Unit,
+    onSyncLetterboxdLive: () -> Unit,
+    onComplete: () -> Unit
+) {
+    var step by remember { mutableStateOf(1) } // 1: Welcome & Name, 2: Letterboxd & TMDB, 3: Services
+    var nameInput by remember(userName) { mutableStateOf(userName) }
+    var lbInput by remember(letterboxdUsername) { mutableStateOf(letterboxdUsername) }
+    var tmdbInput by remember(tmdbApiKey) { mutableStateOf(tmdbApiKey) }
+    val uriHandler = LocalUriHandler.current
+
+    AlertDialog(
+        onDismissRequest = onComplete,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    when (step) {
+                        1 -> "Welcome to Streamwise 🍿"
+                        2 -> "Connect Movie Accounts 🎬"
+                        3 -> "Your Streaming Services 📺"
+                        else -> "Streamwise Setup"
+                    },
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        "Step $step of 3",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                when (step) {
+                    1 -> {
+                        // Step 1: Welcome & Profile Name
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text(
+                                    "Your Personal Cinema Command Center",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    "• Instant Streaming Availability: Know where your watchlist films stream across 19+ platforms.\n" +
+                                    "• Letterboxd Integration: Live RSS diary sync and full CSV/ZIP export & import.\n" +
+                                    "• $0/mo Serverless & Private: Everything runs on-device with zero subscription fees.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("What should we call you?", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                            OutlinedTextField(
+                                value = nameInput,
+                                onValueChange = { nameInput = it },
+                                placeholder = { Text("e.g. Cinephile") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = DarkInputBackground,
+                                    unfocusedContainerColor = DarkInputBackground,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = DarkBorderOutline
+                                )
+                            )
+                            Text(
+                                "Used to personalize your viewing insights and diary reports.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+
+                    2 -> {
+                        // Step 2: Letterboxd & TMDB
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Icon(Icons.Default.RssFeed, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                    Text("Letterboxd Sync (Optional)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                }
+                                Text(
+                                    "Enter your username to pull your watchlist and diary via live public RSS.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                OutlinedTextField(
+                                    value = lbInput,
+                                    onValueChange = { lbInput = it },
+                                    label = { Text("Letterboxd Username") },
+                                    placeholder = { Text("e.g. your_username") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = DarkInputBackground,
+                                        unfocusedContainerColor = DarkInputBackground,
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = DarkBorderOutline
+                                    )
+                                )
+                            }
+                        }
+
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Icon(Icons.Default.Movie, contentDescription = null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(18.dp))
+                                    Text("TMDB API Key (Free, Highly Recommended)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                }
+                                Text(
+                                    "Powers high-res movie posters, cast ages, community ratings, and runtimes.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                                OutlinedButton(
+                                    onClick = {
+                                        try {
+                                            uriHandler.openUri("https://www.themoviedb.org/settings/api")
+                                        } catch (e: Exception) {}
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Get Free TMDB Key (Takes 1 min) →", fontSize = 11.sp)
+                                }
+                                OutlinedTextField(
+                                    value = tmdbInput,
+                                    onValueChange = { tmdbInput = it },
+                                    label = { Text("TMDB API Key") },
+                                    placeholder = { Text("Paste 32-character key") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedContainerColor = DarkInputBackground,
+                                        unfocusedContainerColor = DarkInputBackground,
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                        unfocusedBorderColor = DarkBorderOutline
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    3 -> {
+                        // Step 3: Streaming Services Selection
+                        Text(
+                            "Select the services you subscribe to or access ($0 free platforms are included). Streamwise filters your watchlist to titles you can watch right now.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+
+                        allProviders.forEach { provider ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(provider.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            if (provider.costPerMonth > 0) "${provider.costPerMonth}/mo" else "Free ($0.0)",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                    Switch(
+                                        checked = provider.isActive,
+                                        onCheckedChange = { onProviderToggle(provider.id, it) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            when (step) {
+                1 -> {
+                    Button(
+                        onClick = {
+                            if (nameInput.isNotBlank()) onSaveUserName(nameInput)
+                            step = 2
+                        }
+                    ) {
+                        Text("Next: Connect Accounts →")
+                    }
+                }
+                2 -> {
+                    Button(
+                        onClick = {
+                            if (lbInput.isNotBlank()) {
+                                onSaveLetterboxdUsername(lbInput)
+                                onSyncLetterboxdLive()
+                            }
+                            if (tmdbInput.isNotBlank()) {
+                                onSaveTmdbApiKey(tmdbInput)
+                            }
+                            step = 3
+                        }
+                    ) {
+                        Text("Next: Pick Services →")
+                    }
+                }
+                3 -> {
+                    Button(
+                        onClick = onComplete
+                    ) {
+                        Text("🚀 Get Started")
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            if (step > 1) {
+                OutlinedButton(onClick = { step -= 1 }) {
+                    Text("← Back")
+                }
+            } else {
+                TextButton(onClick = onComplete) {
+                    Text("Skip Setup")
+                }
+            }
+        }
+    )
+}
+
+// ==========================================
 // COMPOSABLE: Settings Dialog (4-Tab Unified Hub)
 // ==========================================
 @Composable
@@ -5661,6 +6120,7 @@ fun SettingsDialog(
     isBackfillingTmdb: Boolean = false,
     backfillProgress: String = "",
     onBackfillTmdb: () -> Unit = {},
+    onRestartOnboarding: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     var activeSubTab by remember { mutableStateOf(0) } // 0: Profile, 1: Services, 2: Guides & Docs, 3: Updates & System
@@ -5719,7 +6179,6 @@ fun SettingsDialog(
                     0 -> {
                         var nameInput by remember(userName) { mutableStateOf(userName) }
                         var lbInput by remember(letterboxdUsername) { mutableStateOf(letterboxdUsername) }
-                        var sheetWebhookInput by remember(googleSheetWebhookUrl) { mutableStateOf(googleSheetWebhookUrl) }
                         val scrollState = rememberScrollState()
 
                         Column(
@@ -5907,77 +6366,6 @@ fun SettingsDialog(
                                     }
                                 }
                             }
-
-                            // Google Sheet Webhook Section
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Google Sheet Ledger Webhook", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Apps Script Webhook to sync watched and watchlist items to your Google Drive sheet ($0/mo).", style = MaterialTheme.typography.bodySmall)
-
-                                    OutlinedTextField(
-                                        value = sheetWebhookInput,
-                                        onValueChange = { sheetWebhookInput = it },
-                                        label = { Text("Apps Script Webhook URL") },
-                                        placeholder = { Text("https://script.google.com/macros/s/.../exec") },
-                                        singleLine = true,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedContainerColor = DarkInputBackground,
-                                            unfocusedContainerColor = DarkInputBackground,
-                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                            unfocusedBorderColor = DarkBorderOutline,
-                                            cursorColor = MaterialTheme.colorScheme.primary
-                                        )
-                                    )
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Button(
-                                            onClick = { onSaveGoogleSheetWebhookUrl(sheetWebhookInput) },
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            Text("Save URL", fontSize = 12.sp)
-                                        }
-
-                                        FilledTonalButton(
-                                            onClick = onSyncLetterboxdToSheet,
-                                            enabled = !isSyncingToSheet && sheetWebhookInput.isNotBlank(),
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp)
-                                        ) {
-                                            if (isSyncingToSheet) {
-                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                            } else {
-                                                Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            }
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Sync Sheet", fontSize = 12.sp)
-                                        }
-                                    }
-
-                                    FilledTonalButton(
-                                        onClick = onSyncPodcastRecs,
-                                        enabled = !isSyncingPodcasts && sheetWebhookInput.isNotBlank(),
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        if (isSyncingPodcasts) {
-                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                        } else {
-                                            Icon(Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        }
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("🎙️ Sync Gemini Spark Podcast Recs", fontSize = 12.sp)
-                                    }
-                                }
-                            }
                         }
                     }
 
@@ -6099,6 +6487,31 @@ fun SettingsDialog(
                                     }
                                 }
                             }
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
+                                        Text("First-Run Setup Wizard", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(
+                                        "Revisit the 3-step setup walkthrough to update your display name, Letterboxd sync, TMDB key, or streaming services.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Button(
+                                        onClick = onRestartOnboarding,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)
+                                    ) {
+                                        Text("Launch Setup Wizard", fontSize = 12.sp)
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -6111,6 +6524,8 @@ fun SettingsDialog(
                         var primaryHostInput by remember(meshPrimaryHost) { mutableStateOf(meshPrimaryHost) }
                         var secondaryHostInput by remember(meshSecondaryHost) { mutableStateOf(meshSecondaryHost) }
                         var tokenInput by remember(githubToken) { mutableStateOf(githubToken) }
+                        var sheetWebhookInput by remember(googleSheetWebhookUrl) { mutableStateOf(googleSheetWebhookUrl) }
+                        var showAdvancedSettings by remember { mutableStateOf(false) }
                         var showTmdb by remember { mutableStateOf(false) }
                         var showGemini by remember { mutableStateOf(false) }
                         var showWm by remember { mutableStateOf(false) }
@@ -6139,10 +6554,10 @@ fun SettingsDialog(
                                     ) {
                                         Column {
                                             Text("App Version", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                                            Text("v1.4.0 (Build 140)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                            Text("v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                         }
                                         Badge(containerColor = MaterialTheme.colorScheme.primary) {
-                                            Text("v1.4.0", modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onPrimary)
+                                            Text("v${BuildConfig.VERSION_NAME}", modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), color = MaterialTheme.colorScheme.onPrimary)
                                         }
                                     }
 
@@ -6202,7 +6617,7 @@ fun SettingsDialog(
                                 }
                             }
 
-                            // TMDB API Section
+                            // TMDB API Section (Essential Setup)
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
@@ -6211,6 +6626,21 @@ fun SettingsDialog(
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("Movie Catalog & Posters (TMDB)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                     Text("Enables movie posters, cast details, runtimes, and community ratings.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                uriHandler.openUri("https://www.themoviedb.org/settings/api")
+                                            } catch (e: Exception) {}
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Get a Free TMDB API Key → (themoviedb.org)", fontSize = 11.sp)
+                                    }
+
                                     OutlinedTextField(
                                         value = tmdbInput,
                                         onValueChange = { tmdbInput = it },
@@ -6263,7 +6693,7 @@ fun SettingsDialog(
                                 }
                             }
 
-                            // Gemini API Section
+                            // Gemini API Section (Essential Setup)
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
@@ -6272,6 +6702,21 @@ fun SettingsDialog(
                                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text("AI Recommendations Engine (Gemini)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                                     Text("Powers local AI companion, custom film taste analysis, and personalized viewing suggestions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            try {
+                                                uriHandler.openUri("https://aistudio.google.com/apikey")
+                                            } catch (e: Exception) {}
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Get a Free Gemini API Key → (aistudio.google.com)", fontSize = 11.sp)
+                                    }
+
                                     OutlinedTextField(
                                         value = geminiInput,
                                         onValueChange = { geminiInput = it },
@@ -6301,234 +6746,369 @@ fun SettingsDialog(
                                 }
                             }
 
-                            // Watchmode Section
+                            // Advanced & Developer Settings Expandable Section
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Direct Streaming Launchers (Watchmode)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Unlocks 1-tap playback directly into Netflix, Max, Apple TV+, and installed streaming apps.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                                    OutlinedTextField(
-                                        value = wmInput,
-                                        onValueChange = { wmInput = it },
-                                        label = { Text("Watchmode Key") },
-                                        singleLine = true,
-                                        visualTransformation = if (showWm) VisualTransformation.None else PasswordVisualTransformation(),
-                                        trailingIcon = {
-                                            IconButton(onClick = { showWm = !showWm }) {
-                                                Icon(imageVector = if (showWm) Icons.Default.Clear else Icons.Default.Search, contentDescription = null)
-                                            }
-                                        },
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                            focusedContainerColor = DarkInputBackground,
-                                            unfocusedContainerColor = DarkInputBackground
-                                        ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Button(
-                                        onClick = { onSaveWatchmodeApiKey(wmInput) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
-                                    ) {
-                                        Text("Save Streaming Launch Key", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            // AI Mesh Multi-Machine Coordinator (Desktop Fry & Laptop Maze)
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { showAdvancedSettings = !showAdvancedSettings },
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Column {
-                                            Text("AI Mesh Coordinator", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                            Text("Multi-Machine Local Compute", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                                        }
-                                        Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                                            Text("Mesh Auto-Failover", fontSize = 10.sp, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 4.dp))
-                                        }
-                                    }
-
-                                    Text(
-                                        "Automatically routes local AI requests to your primary compute node (e.g. desktop PC/server running Ollama) and fails over to your secondary node if offline.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-
-                                    // Node 1: Primary Node
-                                    OutlinedTextField(
-                                        value = primaryHostInput,
-                                        onValueChange = { primaryHostInput = it },
-                                        label = { Text("Primary Node (Desktop / Server)") },
-                                        placeholder = { Text("e.g. 192.168.1.100") },
-                                        singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                            focusedContainerColor = DarkInputBackground,
-                                            unfocusedContainerColor = DarkInputBackground
-                                        ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    // Node 2: Secondary Node
-                                    OutlinedTextField(
-                                        value = secondaryHostInput,
-                                        onValueChange = { secondaryHostInput = it },
-                                        label = { Text("Secondary Node (Laptop / Failover)") },
-                                        placeholder = { Text("e.g. 192.168.1.101") },
-                                        singleLine = true,
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                            focusedContainerColor = DarkInputBackground,
-                                            unfocusedContainerColor = DarkInputBackground
-                                        ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Button(
-                                            onClick = {
-                                                onSaveMeshPrimaryHost(primaryHostInput)
-                                                onSaveMeshSecondaryHost(secondaryHostInput)
-                                                onSaveOllamaHost(primaryHostInput)
-                                            },
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.weight(1f)
                                         ) {
-                                            Text("Save Mesh IPs", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            Icon(
+                                                Icons.Default.Build,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Column {
+                                                Text("Advanced & Developer Settings", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                                                Text(
+                                                    if (showAdvancedSettings) "Tap to collapse" else "Watchmode, Google Sheets, AI Mesh, GitHub Token",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
                                         }
-                                        OutlinedButton(
-                                            onClick = onProbeMesh,
-                                            enabled = !isProbingMesh,
-                                            modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(8.dp)
+                                        IconButton(onClick = { showAdvancedSettings = !showAdvancedSettings }) {
+                                            Icon(
+                                                imageVector = if (showAdvancedSettings) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                                contentDescription = if (showAdvancedSettings) "Collapse advanced settings" else "Expand advanced settings",
+                                                tint = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    }
+
+                                    if (showAdvancedSettings) {
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                                        // Watchmode Section
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(10.dp)
                                         ) {
-                                            if (isProbingMesh) {
-                                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                                            } else {
-                                                Text("Test Mesh Nodes", fontSize = 11.sp)
+                                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text("Direct Streaming Launchers (Watchmode)", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                                Text("Unlocks 1-tap playback directly into Netflix, Max, Apple TV+, and installed streaming apps.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        try {
+                                                            uriHandler.openUri("https://api.watchmode.com/")
+                                                        } catch (e: Exception) {}
+                                                    },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    shape = RoundedCornerShape(8.dp)
+                                                ) {
+                                                    Icon(Icons.Default.OpenInBrowser, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Get a Watchmode API Key → (api.watchmode.com)", fontSize = 11.sp)
+                                                }
+
+                                                OutlinedTextField(
+                                                    value = wmInput,
+                                                    onValueChange = { wmInput = it },
+                                                    label = { Text("Watchmode Key") },
+                                                    singleLine = true,
+                                                    visualTransformation = if (showWm) VisualTransformation.None else PasswordVisualTransformation(),
+                                                    trailingIcon = {
+                                                        IconButton(onClick = { showWm = !showWm }) {
+                                                            Icon(imageVector = if (showWm) Icons.Default.Clear else Icons.Default.Search, contentDescription = null)
+                                                        }
+                                                    },
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                                        focusedContainerColor = DarkInputBackground,
+                                                        unfocusedContainerColor = DarkInputBackground
+                                                    ),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                                Button(
+                                                    onClick = { onSaveWatchmodeApiKey(wmInput) },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                                ) {
+                                                    Text("Save Streaming Launch Key", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
                                             }
                                         }
-                                    }
 
-                                    // Live Mesh Node Status Results
-                                    if (meshPrimaryStatus != null || meshSecondaryStatus != null) {
-                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                                        meshPrimaryStatus?.let { primary ->
-                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Text(if (primary.isOnline && !primary.isUserActive) "🟢" else if (primary.isOnline && primary.isUserActive) "⏸️" else "🔴", fontSize = 12.sp)
+                                        // Google Sheet Webhook Section
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text("Google Sheet Ledger Webhook", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                                Text("Apps Script Webhook to sync watched and watchlist items to your Google Drive sheet ($0/mo).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+
+                                                OutlinedTextField(
+                                                    value = sheetWebhookInput,
+                                                    onValueChange = { sheetWebhookInput = it },
+                                                    label = { Text("Apps Script Webhook URL") },
+                                                    placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                                                    singleLine = true,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedContainerColor = DarkInputBackground,
+                                                        unfocusedContainerColor = DarkInputBackground,
+                                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                                        unfocusedBorderColor = DarkBorderOutline,
+                                                        cursorColor = MaterialTheme.colorScheme.primary
+                                                    )
+                                                )
+
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Button(
+                                                        onClick = { onSaveGoogleSheetWebhookUrl(sheetWebhookInput) },
+                                                        modifier = Modifier.weight(1f),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    ) {
+                                                        Text("Save URL", fontSize = 12.sp)
+                                                    }
+
+                                                    FilledTonalButton(
+                                                        onClick = onSyncLetterboxdToSheet,
+                                                        enabled = !isSyncingToSheet && sheetWebhookInput.isNotBlank(),
+                                                        modifier = Modifier.weight(1f),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    ) {
+                                                        if (isSyncingToSheet) {
+                                                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                                        } else {
+                                                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                        }
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text("Sync Sheet", fontSize = 12.sp)
+                                                    }
+                                                }
+
+                                                FilledTonalButton(
+                                                    onClick = onSyncPodcastRecs,
+                                                    enabled = !isSyncingPodcasts && sheetWebhookInput.isNotBlank(),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    shape = RoundedCornerShape(8.dp)
+                                                ) {
+                                                    if (isSyncingPodcasts) {
+                                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                                    } else {
+                                                        Icon(Icons.Default.Headphones, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    }
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("🎙️ Sync Gemini Spark Podcast Recs", fontSize = 12.sp)
+                                                }
+                                            }
+                                        }
+
+                                        // AI Mesh Multi-Machine Coordinator
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column {
+                                                        Text("AI Mesh Coordinator", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                                        Text("Multi-Machine Local Compute", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                                    }
+                                                    Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
+                                                        Text("Mesh Auto-Failover", fontSize = 10.sp, color = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.padding(horizontal = 4.dp))
+                                                    }
+                                                }
+
                                                 Text(
-                                                    if (primary.isOnline && primary.isUserActive) "Primary: Online (Paused - User Active) · ${primary.activeModel}"
-                                                    else if (primary.isOnline) "Primary: Online (${primary.latencyMs}ms) · ${primary.activeModel}"
-                                                    else "Primary (${primary.host}): Offline / Asleep",
+                                                    "Automatically routes local AI requests to your primary compute node (e.g. desktop PC/server running Ollama) and fails over to your secondary node if offline.",
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = if (primary.isOnline) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (primary.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+
+                                                // Node 1: Primary Node
+                                                OutlinedTextField(
+                                                    value = primaryHostInput,
+                                                    onValueChange = { primaryHostInput = it },
+                                                    label = { Text("Primary Node (Desktop / Server)") },
+                                                    placeholder = { Text("e.g. 192.168.1.100") },
+                                                    singleLine = true,
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                                        focusedContainerColor = DarkInputBackground,
+                                                        unfocusedContainerColor = DarkInputBackground
+                                                    ),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                // Node 2: Secondary Node
+                                                OutlinedTextField(
+                                                    value = secondaryHostInput,
+                                                    onValueChange = { secondaryHostInput = it },
+                                                    label = { Text("Secondary Node (Laptop / Failover)") },
+                                                    placeholder = { Text("e.g. 192.168.1.101") },
+                                                    singleLine = true,
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                                        focusedContainerColor = DarkInputBackground,
+                                                        unfocusedContainerColor = DarkInputBackground
+                                                    ),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+
+                                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                    Button(
+                                                        onClick = {
+                                                            onSaveMeshPrimaryHost(primaryHostInput)
+                                                            onSaveMeshSecondaryHost(secondaryHostInput)
+                                                            onSaveOllamaHost(primaryHostInput)
+                                                        },
+                                                        modifier = Modifier.weight(1f),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    ) {
+                                                        Text("Save Mesh IPs", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                    OutlinedButton(
+                                                        onClick = onProbeMesh,
+                                                        enabled = !isProbingMesh,
+                                                        modifier = Modifier.weight(1f),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    ) {
+                                                        if (isProbingMesh) {
+                                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                                        } else {
+                                                            Text("Test Mesh Nodes", fontSize = 11.sp)
+                                                        }
+                                                    }
+                                                }
+
+                                                // Live Mesh Node Status Results
+                                                if (meshPrimaryStatus != null || meshSecondaryStatus != null) {
+                                                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                                                    meshPrimaryStatus?.let { primary ->
+                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text(if (primary.isOnline && !primary.isUserActive) "🟢" else if (primary.isOnline && primary.isUserActive) "⏸️" else "🔴", fontSize = 12.sp)
+                                                            Text(
+                                                                if (primary.isOnline && primary.isUserActive) "Primary: Online (Paused - User Active) · ${primary.activeModel}"
+                                                                else if (primary.isOnline) "Primary: Online (${primary.latencyMs}ms) · ${primary.activeModel}"
+                                                                else "Primary (${primary.host}): Offline / Asleep",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontWeight = if (primary.isOnline) FontWeight.Bold else FontWeight.Normal,
+                                                                color = if (primary.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                                            )
+                                                        }
+                                                    }
+                                                    meshSecondaryStatus?.let { secondary ->
+                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Text(if (secondary.isOnline) "🟢" else "🔴", fontSize = 12.sp)
+                                                            Text(
+                                                                if (secondary.isOnline) "Secondary: Online (${secondary.latencyMs}ms) · ${secondary.activeModel}" else "Secondary (${secondary.host}): Offline / Asleep",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontWeight = if (secondary.isOnline) FontWeight.Bold else FontWeight.Normal,
+                                                                color = if (secondary.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // GitHub PAT Token Section
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Text("Beta Feedback & Issue Submission", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                                Text("Allows submitting bug reports and feature requests directly to our project backlog.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                                OutlinedTextField(
+                                                    value = tokenInput,
+                                                    onValueChange = { tokenInput = it },
+                                                    label = { Text("GitHub Token (PAT)") },
+                                                    placeholder = { Text("ghp_...") },
+                                                    singleLine = true,
+                                                    visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                                                    trailingIcon = {
+                                                        IconButton(onClick = { showToken = !showToken }) {
+                                                            Icon(
+                                                                imageVector = if (showToken) Icons.Default.Clear else Icons.Default.Search,
+                                                                contentDescription = null
+                                                            )
+                                                        }
+                                                    },
+                                                    colors = OutlinedTextFieldDefaults.colors(
+                                                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                                                        focusedContainerColor = DarkInputBackground,
+                                                        unfocusedContainerColor = DarkInputBackground
+                                                    ),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                                Button(
+                                                    onClick = { onSaveGithubToken(tokenInput) },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)
+                                                ) {
+                                                    Text("Save Feedback Token", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+
+                                        // Beta Feedback FAB Toggle Card
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(12.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                                    Text(
+                                                        "Enable Beta Feedback FAB",
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        "Display floating button on all screens to capture screen diagnostics and file issues to the project backlog.",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.outline
+                                                    )
+                                                }
+                                                Switch(
+                                                    checked = enableBetaFeedback,
+                                                    onCheckedChange = onToggleBetaFeedback,
+                                                    modifier = Modifier.testTag("enable_feedback_switch")
                                                 )
                                             }
                                         }
-                                        meshSecondaryStatus?.let { secondary ->
-                                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                                Text(if (secondary.isOnline) "🟢" else "🔴", fontSize = 12.sp)
-                                                Text(
-                                                    if (secondary.isOnline) "Secondary: Online (${secondary.latencyMs}ms) · ${secondary.activeModel}" else "Secondary (${secondary.host}): Offline / Asleep",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = if (secondary.isOnline) FontWeight.Bold else FontWeight.Normal,
-                                                    color = if (secondary.isOnline) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline
-                                                )
-                                            }
-                                        }
                                     }
-                                }
-                            }
-
-                            // GitHub PAT Token Section
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text("Beta Feedback & Issue Submission", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                                    Text("Allows submitting bug reports and feature requests directly to our project backlog.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
-                                    OutlinedTextField(
-                                        value = tokenInput,
-                                        onValueChange = { tokenInput = it },
-                                        label = { Text("GitHub Token (PAT)") },
-                                        placeholder = { Text("ghp_...") },
-                                        singleLine = true,
-                                        visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
-                                        trailingIcon = {
-                                            IconButton(onClick = { showToken = !showToken }) {
-                                                Icon(
-                                                    imageVector = if (showToken) Icons.Default.Clear else Icons.Default.Search,
-                                                    contentDescription = null
-                                                )
-                                            }
-                                        },
-                                        colors = OutlinedTextFieldDefaults.colors(
-                                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                                            focusedContainerColor = DarkInputBackground,
-                                            unfocusedContainerColor = DarkInputBackground
-                                        ),
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                    Button(
-                                        onClick = { onSaveGithubToken(tokenInput) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary, contentColor = MaterialTheme.colorScheme.onTertiary)
-                                    ) {
-                                        Text("Save Feedback Token", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            // Beta Feedback FAB Toggle Card
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                                        Text(
-                                            "Enable Beta Feedback FAB",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            "Display floating button on all screens to capture screen diagnostics and file issues to the project backlog.",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.outline
-                                        )
-                                    }
-                                    Switch(
-                                        checked = enableBetaFeedback,
-                                        onCheckedChange = onToggleBetaFeedback,
-                                        modifier = Modifier.testTag("enable_feedback_switch")
-                                    )
                                 }
                             }
                         }

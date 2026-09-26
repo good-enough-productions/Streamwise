@@ -2,6 +2,27 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.6.5] - 2026-09-25
+
+### Added
+- **First-Launch 3-Step Onboarding Wizard (`OnboardingDialog`)**:
+  - Automatically greets new users on cold launch with a clean, friendly 3-step setup walkthrough:
+    - **Step 1 (Welcome & Profile)**: Explains the app's $0/month serverless cinema mission and sets the user's display name.
+    - **Step 2 (Movie Accounts)**: Direct input for Letterboxd username (triggers initial diary RSS sync) and TMDB API key with a 1-tap browser link to create a free API key.
+    - **Step 3 (Services)**: Fast selection of active streaming subscriptions from 19+ supported platforms.
+  - Can be revisited anytime from Settings → Guides tab ("First-Run Setup Wizard") or Watchlist empty state.
+- **Welcoming Empty States & Direct Action CTAs**:
+  - **Watchlist Tab**: If the watchlist is empty, replaced the generic "No titles found" text with a warm cinephile welcome card featuring 1-tap actions: "📥 Import Letterboxd Watchlist", "➕ Add Movie Manually", "🔑 Add Free TMDB Key", and "✨ Open 1-Minute Setup Guide".
+  - **Watched Tab**: When the vault has no logged history, displays an inviting card with direct buttons to import Letterboxd CSV/ZIP archives or trigger a live RSS diary sync.
+
+### Changed
+- **Reorganized Settings into Essential vs. Advanced**:
+  - **System Tab**: Separated basic setup (TMDB key, Gemini AI key) from power-user developer tools. Placed Watchmode direct launcher, Google Sheet webhook, multi-machine AI mesh coordinator, and GitHub PAT token behind an expandable "Advanced & Developer Settings" card.
+  - **Profile Tab**: Moved developer-facing Google Apps Script Webhook configuration out of the Profile tab to keep Profile dedicated to cinephile identity and Letterboxd integration.
+  - **Direct Key Signup Links**: Added 1-tap "Get Key" buttons beneath TMDB, Gemini, and Watchmode fields that directly open developer consoles in the user's browser.
+- **Dynamic App Versioning**:
+  - Replaced hardcoded version strings in the Settings OTA updater with dynamic `BuildConfig.VERSION_NAME` and `BuildConfig.VERSION_CODE`.
+
 ## [1.6.4] - 2026-09-21
 
 ### Fixed

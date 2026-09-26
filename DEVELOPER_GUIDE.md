@@ -427,3 +427,32 @@ Architecture updates addressing mobile visual density and couch-first discovery:
 ### 4. Background Synthesis Integration
 - `AvailabilitySyncWorker` leverages `AiMeshCoordinator.resolveActiveNode()` during scheduled 4-hour passes, routing movie research card generation to the highest-throughput active workstation node.
 
+## 13. First-Launch Onboarding & Setup Wizard Architecture (v1.6.5)
+
+### 1. Persistence & State Machine
+- **DataStore / SharedPreferences**: `UserPreferencesManager.kt` persists `KEY_HAS_COMPLETED_ONBOARDING` (`hasCompletedOnboarding: Flow<Boolean>`), defaulting to `false` for fresh installs.
+- **ViewModel Integration**: `StreamViewModel.kt` exposes `hasCompletedOnboarding: StateFlow<Boolean>` via `stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)`.
+  - Calling `completeOnboarding()` flips the flag to `true` and saves to SharedPreferences.
+  - Calling `resetOnboarding()` flips the flag to `false` to allow manual re-running from Settings.
+
+### 2. 3-Step Setup Wizard Dialog (`OnboardingDialog`)
+- **Step 1 (Welcome & Identity)**: Welcomes the user, explains the core mission ("Maximize watch hours. Minimize streaming costs."), and collects a display name.
+- **Step 2 (Data Sync & Free TMDB Key)**:
+  - Letterboxd account connection: Enter username for instant RSS diary/watchlist sync.
+  - Free TMDB API Key entry: Provides a 1-tap direct hyperlink to `https://www.themoviedb.org/settings/api` with clear instructions that personal keys are free, fast, and 100% private to their phone.
+- **Step 3 (Active Streaming Subscriptions)**:
+  - Multi-select chip grid of major streaming services (Netflix, Max, Prime Video, Hulu, Disney+, Apple TV+, Criterion, Tubi, etc.) to immediately tune the Watchlist and Rotation Advisor.
+
+### 3. Actionable Empty States
+- When `watchlist.isEmpty()` or `watchedMovies.isEmpty()`, instead of blank screens, Compose renders rich cards featuring:
+  - Clear iconography and welcoming introductory copy.
+  - 1-tap call-to-action buttons:
+    - Watchlist: "Import Letterboxd Watchlist", "Add Movie Manually", "Add Free TMDB Key", "Open 1-Minute Setup Guide".
+    - Watched Vault: "Import Letterboxd CSV / ZIP", "Sync Live Letterboxd RSS", "Open 1-Minute Setup Guide".
+
+### 4. Settings Reorganization (Essential vs. Advanced)
+- **Profile Tab**: Cleaned up to focus purely on cinephile identity, display name, Letterboxd handle, and avatar URL. Developer webhooks removed.
+- **Guides Tab**: Features a 1-tap "First-Run Setup Wizard" card allowing users to re-run the 3-step walkthrough anytime.
+- **System Tab**: Dynamic version string (`v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})`), 1-tap browser links for TMDB and Gemini developer portals, and a collapsible "Advanced & Developer Settings" card isolating Watchmode API keys, Google Sheets webhooks, multi-machine AI mesh IP addresses, and GitHub PATs.
+
+
