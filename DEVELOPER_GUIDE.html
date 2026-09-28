@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streamwise Developer Guide</title>
+  <style>
+    :root {
+      --bg: #0f111a;
+      --card-bg: rgba(26, 29, 45, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-glow: rgba(137, 180, 250, 0.25);
+      --accent: #89b4fa;
+      --accent-green: #a6e3a1;
+      --accent-yellow: #f9e2af;
+      --accent-purple: #cba6f7;
+      --accent-red: #f38ba8;
+      --text: #cdd6f4;
+      --text-muted: #a6adc8;
+      --code-bg: #1e1e2e;
+      --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      padding: 24px;
+      line-height: 1.6;
+      background-image: radial-gradient(circle at 10% 20%, rgba(137, 180, 250, 0.04) 0%, transparent 40%),
+                        radial-gradient(circle at 90% 80%, rgba(166, 227, 161, 0.04) 0%, transparent 40%);
+      min-height: 100vh;
+    }
+    .nav-bar {
+      max-width: 900px;
+      margin: 0 auto 20px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: rgba(137, 180, 250, 0.1);
+      border: 1px solid var(--card-border-glow);
+      transition: all 0.2s ease;
+    }
+    .back-btn:hover {
+      background: rgba(137, 180, 250, 0.2);
+      transform: translateX(-2px);
+    }
+    .doc-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 36px 44px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: #fff;
+      margin-top: 1.5em;
+      margin-bottom: 0.6em;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    h1 {
+      font-size: 28px;
+      margin-top: 0;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-border);
+      color: var(--accent);
+    }
+    h2 {
+      font-size: 22px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 8px;
+    }
+    h3 { font-size: 18px; }
+    p { margin-bottom: 1em; }
+    ul, ol {
+      margin-bottom: 1.2em;
+      padding-left: 24px;
+    }
+    li { margin-bottom: 0.4em; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      background: rgba(137, 180, 250, 0.08);
+      padding: 12px 18px;
+      margin: 1.2em 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--text);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+    code {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent-yellow);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      margin: 1.2em 0;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      border: none;
+      color: #f8f8f2;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5em 0;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 14px;
+      border: 1px solid var(--card-border);
+      text-align: left;
+    }
+    th {
+      background: rgba(137, 180, 250, 0.12);
+      color: #fff;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    hr {
+      border: none;
+      height: 1px;
+      background: var(--card-border);
+      margin: 2em 0;
+    }
+    .mermaid {
+      background: rgba(15, 17, 26, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 1.5em 0;
+      display: flex;
+      justify-content: center;
+    }
+    footer {
+      max-width: 900px;
+      margin: 24px auto 0 auto;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    });
+  </script>
+</head>
+<body>
+  <div class="nav-bar">
+    <a href="../agent_dashboard.html" class="back-btn">← Back to Cockpit</a>
+    <div class="doc-meta">Generated from <code>DEVELOPER_GUIDE.md</code></div>
+  </div>
+
+  <main class="container">
+    <h1 id="streamwise-developer-guide">Streamwise Developer Guide</h1>
+<p>This guide details the architectural design, local build setup, and synchronization patterns for Streamwise.</p>
+<h2 id="1-architecture-overview">1. Architecture Overview</h2>
+<ul>
+<li><strong>UI Layer</strong>: Jetpack Compose with Material 3 theming (<code>com.example.ui</code>).</li>
+<li><strong>ViewModel</strong>: <code>StreamViewModel.kt</code> managing UI state, live reactive Flows, and direct coroutine metadata sync via <code>viewModelScope</code>.</li>
+<li><strong>Database</strong>: Room database (<code>AppDatabase.kt</code>) caching titles (<code>MediaItem</code>), providers, and watch history offline.</li>
+<li><strong>Remote APIs</strong>:</li>
+<li><code>TmdbApiService.kt</code>: REST endpoints for TMDB metadata and JustWatch/TMDB watch providers.</li>
+<li><code>AvailabilitySyncWorker.kt</code>: Android WorkManager worker for periodic background availability scans.</li>
+<li><strong>Environment &amp; Secrets</strong>: Loaded via Gradle Secrets Plugin from <code>.env</code> in <code>apps/streamwise/</code> (<code>TMDB_API_KEY</code>, <code>GEMINI_API_KEY</code>).</li>
+</ul>
+<h2 id="2-local-build-test">2. Local Build &amp; Test</h2>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>JDK 17</li>
+<li>Android SDK (API 34)</li>
+</ul>
+<h3 id="build-commands">Build Commands</h3>
+<pre><code class="language-bash">cd apps/streamwise
+./gradlew assembleDebug
+</code></pre>
+<h3 id="wireless-adb-deployment">Wireless ADB Deployment</h3>
+<pre><code class="language-powershell">adb devices -l
+adb -s &lt;phone_serial&gt; install -r -d app/build/outputs/apk/debug/app-debug.apk
+adb -s &lt;phone_serial&gt; shell am start -n com.goodenoughproductions.streamwise/com.example.MainActivity
+</code></pre>
+<h2 id="3-workmanager-vs-viewmodel-sync-rules">3. WorkManager vs. ViewModel Sync Rules</h2>
+<ul>
+<li><strong>Periodic Sync</strong>: Uses <code>AvailabilitySyncWorker.WORK_NAME</code> scheduled via <code>enqueueUniquePeriodicWork</code> every 4 hours.</li>
+<li><strong>Manual/Immediate Sync</strong>: Uses <code>AvailabilitySyncWorker.ONE_TIME_WORK_NAME</code> with <code>ExistingWorkPolicy.REPLACE</code>. Never share the unique work name between periodic and one-time tasks.</li>
+</ul>
+<h2 id="3b-zero-data-loss-user-protected-media-architecture">3b. Zero-Data Loss &amp; User-Protected Media Architecture</h2>
+<ul>
+<li><strong>The <code>isUserProtected</code> Guarantee (<code>MediaItem.isUserProtected</code>)</strong>:</li>
+<li>A <code>MediaItem</code> is classified as <strong>user-protected</strong> if:<ol>
+<li>It has personal notes (<code>!item.userNotes.isNullOrBlank()</code>).</li>
+<li>It has custom assigned streaming providers (<code>!item.providerIds.isNullOrBlank() &amp;&amp; item.providerIds != "none"</code>).</li>
+<li>It originated from a manual or user-facing source (<code>importSource</code> is "Manual Entry", "User Added", "Shared Link", "Letterboxd", or blank).</li>
+</ol>
+</li>
+<li>User-protected items are strictly immune from automated scrubbing (<code>scrubAndEnrichUnmatchedTitles</code>), title sanitization purges (<code>MediaTitleSanitizer.isNonMovieEpisode</code>), or unmatchable TMDB API sweeps.</li>
+<li><strong>Non-Destructive Provider Unioning</strong>:</li>
+<li>When TMDB watch provider queries return results or <code>"none"</code>, <code>StreamViewModel</code> merges detected providers with existing user-assigned providers (<code>(existingList + tmdbList).distinct().joinToString(",")</code>).</li>
+<li>Manual provider tags assigned via <code>AddMediaDialog</code> or movie details are never wiped out when TMDB metadata is delayed or lacks regional streaming data.</li>
+<li><strong>Non-Destructive Watchlist Fallbacks</strong>:</li>
+<li>If a movie or TV show fails TMDB resolution (due to rate-limits, unlisted titles, or connectivity), the background routine sets <code>status = WATCHLIST</code> with fallback provider <code>"none"</code> and standard placeholder artwork, never issuing <code>repository.deleteMediaItem(item)</code>.</li>
+</ul>
+<h2 id="4-explore-ai-cinephile-insights-architecture">4. Explore AI &amp; Cinephile Insights Architecture</h2>
+<ul>
+<li><strong>SynthesizedMovieInsights</strong>: Automatically parses YAML frontmatter (<code>focus_topics</code>, <code>featured_cast</code>, <code>agent_synthesis_date</code>) and markdown bullet points into interactive topic pills, cast badges, and styled insight cards. Includes direct handoff action to Explore chat.</li>
+<li><strong>Cinephile Taste Matrix</strong>: Multi-segment visual bar in the Explore tab calculating exact genre distributions from the user's offline SQLite watched history.</li>
+<li><strong>Gemini Pro Recommendations</strong>: Integrates <code>GeminiClient</code> with user-managed API keys in Settings, providing 1-tap <code>+ Watchlist</code> addition that triggers immediate TMDB metadata and availability enrichment.</li>
+</ul>
+<h2 id="5-autonomous-beta-feedback-pipeline-app-backlog-jules">5. Autonomous Beta Feedback Pipeline (App -&gt; Backlog &amp; Jules)</h2>
+<ul>
+<li><strong>FloatingFeedbackButton</strong>: Material 3 floating action button rendered globally across all screens when <code>enableBetaFeedback</code> is enabled in <code>UserPreferencesManager</code>.</li>
+<li><strong>FeedbackDialog</strong>: Captures on-device screenshots via <code>PixelCopy</code> alongside device telemetry (device model, Android OS version, active tab, watchlist and vault counts).</li>
+<li><strong>Backlog First &amp; Jules AI Opt-In</strong>: By default, feedback generates standard GitHub Issues labeled <code>feedback</code>, <code>streamwise</code>, and <code>[category]</code> for backlog tracking. When the user explicitly checks "Assign to Jules (Autonomous AI)", the <code>jules</code> and <code>jules-triage</code> labels are attached.</li>
+<li><strong>Secure Webhook</strong>: Submits payload to the Cloud Run proxy (<code>https://feedback-proxy-rljydlcchq-uc.a.run.app</code>), keeping GitHub PATs off client devices.</li>
+</ul>
+<h2 id="6-collapsible-spotlight-advanced-multi-dimensional-filters-issues-7-8">6. Collapsible Spotlight &amp; Advanced Multi-Dimensional Filters (Issues #7 &amp; #8)</h2>
+<ul>
+<li><strong>Collapsible Spotlight</strong>: Persistent top carousel toggleable via animated chevron, freeing up screen real estate while retaining fast access to high-priority streaming titles.</li>
+<li><strong>AdvancedFilterBottomSheet</strong>: Modal filter panel supporting:</li>
+<li>Streaming Provider grid chips.</li>
+<li>Multi-genre selector pills.</li>
+<li>Minimum rating threshold chips (6.0+, 7.0+, 7.5+, 8.0+, 8.5+).</li>
+<li>Release era filtering (2020s, 2010s, 2000s, 90s, Classic pre-1990).</li>
+<li>Dynamic sort orders (Priority, Title A-Z, Rating High-Low, Release Year).</li>
+<li>Quick-clear pill and active filter badges on the home screen toolbar.</li>
+</ul>
+<h2 id="7-cinephile-vault-diary-timeline-letterboxd-sync-issues-9-10">7. Cinephile Vault, Diary Timeline &amp; Letterboxd Sync (Issues #9 &amp; #10)</h2>
+<ul>
+<li><strong>Cinephile Vault Overview</strong>: Real-time stats card displaying total logged films, estimated screen time hours, average rating, and top 4 favorite genres.</li>
+<li><strong>Monthly Diary Timeline</strong>: Groups watched entries chronologically by Year-Month (<code>September 2026</code>, <code>August 2026</code>), displaying formatted watch dates (<code>Watched Sep 4, 2026</code>), user notes, and 1-tap re-watch triggers.</li>
+<li><strong>Poster Wall Grid</strong>: View mode toggle between structured timeline diary list and compact visual poster grid (<code>WatchedGridPosterCard</code>).</li>
+<li><strong>1-Tap Letterboxd Google Sheet Sync</strong>: Dispatches watched history and watchlist titles as structured JSON to a Google Apps Script webhook, following HTTP 302 redirects to mirror data into Google Drive / Google Sheets at $0/mo.</li>
+</ul>
+<h2 id="8-live-watchlist-title-counts-sticky-queue-clarity-v140">8. Live Watchlist Title Counts &amp; Sticky Queue Clarity (v1.4.0)</h2>
+<ul>
+<li><strong>Dynamic Count Propagation</strong>: Top App Bar title dynamically renders current list size (<code>Watchlist • X Titles</code>, <code>Watched Vault • Y Movies</code>, <code>My Services • Z Active</code>).</li>
+<li><strong>Bottom Navigation Badging</strong>: Employs Material 3 <code>BadgedBox</code> on navigation items reflecting real-time SQLite counts (<code>Badge { 33 }</code> on Watchlist, <code>Badge { 1104 }</code> on Watched).</li>
+<li><strong>Sticky Summary Header</strong>: Sticky subheader displays filtered match counts (<code>Showing X of Y titles • Z hidden by filters</code>), cleanly differentiating between available content and user filter constraints.</li>
+</ul>
+<h2 id="9-cinema-podcasts-integration-podcastepisodecatalog">9. Cinema Podcasts Integration (<code>PodcastEpisodeCatalog</code>)</h2>
+<ul>
+<li><strong>Domain Model</strong>: <code>PodcastEpisodeCatalog.kt</code> maps popular film podcasts (<em>What Went Wrong</em>, <em>The Rewatchables</em>, <em>The Big Picture</em>, <em>Blank Check</em>, <em>How Did This Get Made?</em>) against normalized lowercase titles and subject types (<code>isMainSubject: Boolean</code>).</li>
+<li><strong>Sub-Filter Logic</strong>: When a podcast is selected in <code>AdvancedFilterBottomSheet</code>, users can toggle between "Main Film / Featured Topic" (strict match) and "Any Mention (Inclusive)" (broad match).</li>
+<li><strong>Extensibility</strong>: Catalog is designed for zero-API offline querying, ready for dynamic RSS episode ingestion.</li>
+</ul>
+<h2 id="10-service-detail-management-deal-finder-servicedetailbottomsheet">10. Service Detail Management &amp; Deal Finder (<code>ServiceDetailBottomSheet</code>)</h2>
+<ul>
+<li><strong>Provider Schema v7</strong>: Room <code>MIGRATION_6_7</code> extends <code>StreamingProvider</code> with <code>subscribedSince: Long?</code>, <code>planName: String?</code>, <code>renewalDayOfMonth: Int?</code>, and <code>notes: String?</code>.</li>
+<li><strong>Tenure Computation</strong>: Dynamically calculates months and days active from the stored timestamp, supporting quick-set tenure chips (<em>This Month</em>, <em>3 Mos</em>, <em>6 Mos</em>, <em>1 Year</em>, <em>2+ Years</em>).</li>
+<li><strong>Deal Finder Aggregation</strong>: Direct intent launchers targeting verified deal communities (<em>The Streamable Deals</em>, <em>Slickdeals</em>, <em>Doctor of Credit</em>, and <em>Google Deals</em>) formatted with safe URL query encoding.</li>
+</ul>
+<h2 id="11-github-ota-auto-updater-documentation-sync">11. GitHub OTA Auto-Updater &amp; Documentation Sync</h2>
+<ul>
+<li><strong>Updater Architecture</strong>: <code>GitHubUpdateManager.kt</code> checks GitHub Releases API via OkHttp coroutines, parses release tags (<code>v1.4.0</code>), downloads APKs to internal cache with live progress callback, and invokes the Android <code>PackageInstaller</code> via <code>FileProvider</code> (<code>com.goodenoughproductions.streamwise.fileprovider</code>).</li>
+<li><strong>In-App Web Asset Viewers</strong>: <code>HtmlAssetViewerDialog</code> embeds Android <code>WebView</code> to render local assets (<code>user_guide.html</code> and <code>changelog.html</code>) offline with dark-theme CSS formatting.</li>
+</ul>
+<h2 id="12-letterboxd-two-way-synchronization-pipeline-v150">12. Letterboxd Two-Way Synchronization Pipeline (v1.5.0)</h2>
+<ul>
+<li><strong>LetterboxdCsvParser</strong>: High-performance parser for standalone CSV exports (<code>watchlist.csv</code>, <code>watched.csv</code>, <code>diary.csv</code>, <code>ratings.csv</code>) and full account ZIP archives (<code>letterboxd-*-data.zip</code>). Extracts titles, release years, 5-star or 10-point ratings, and watch dates.</li>
+<li><strong>Deduplication Engine</strong>: Compares imported titles against local Room database (<code>MediaDao.getAllMediaItemsList()</code>) using normalized title and release year matching. Skips duplicates while populating missing watch dates and ratings.</li>
+<li><strong>Two-Way Export</strong>: Generates standard Letterboxd import CSV (<code>Title,Year,Rating10,WatchedDate</code>) for movies logged in Streamwise and shares via Android <code>Intent.ACTION_SEND</code> (<code>text/csv</code>) for 1-tap upload to <code>https://letterboxd.com/import/</code>.</li>
+<li><strong>Google Apps Script Webhook</strong>: <code>scripts/webhook/StreamwiseLetterboxdSync.gs</code> accepts file uploads, archives timestamped backups into <code>Active Builds / Streamwise / Backups &amp; Exports</code> on Google Drive, and syncs a structured <code>Streamwise — Letterboxd Sync Database</code> Google Sheet ($0/mo).</li>
+</ul>
+<h2 id="13-modular-explore-tab-architecture-v150">13. Modular Explore Tab Architecture (v1.5.0)</h2>
+<ul>
+<li><strong>ExploreTabContent</strong>: Redesigned from a monolithic vertical feed into 4 dedicated, state-preserved sub-tabs with independent scroll states:</li>
+<li>SubTab 0: <code>✨ AI &amp; Taste</code> (<code>Cinephile Taste Matrix</code>, <code>Gemini Pro Intelligence</code>, tailored picks with <code>+ Watchlist</code> action, quick conversation starters).</li>
+<li>SubTab 1: <code>💬 AI Companion</code> (<code>AgentChatTabContent</code> with fullscreen conversational interface and message badge counter).</li>
+<li>SubTab 2: <code>🎙️ Podcasts Hub</code> (<code>PodcastsExploreView</code> with show selector chips and <code>▶️ Listen</code> / <code>💬 Ask AI</code> actions).</li>
+<li>SubTab 3: <code>📰 Film News Hub</code> (<code>NewsExploreView</code> with category selector chips and <code>💬 Discuss with AI</code> integration).</li>
+<li><strong>Navigation Hoisting</strong>: The active sub-tab is hoisted to <code>HomeScreen</code> as <code>exploreSubTab</code>, allowing bottom sheets and external triggers (such as <code>onDiscussInExplore</code> from <code>MovieDetailsBottomSheet</code>) to transition directly into AI companion chat.</li>
+</ul>
+<h2 id="14-gemini-spark-podcast-tracker-sync-tmdb-availability-sentinel-v151">14. Gemini Spark Podcast Tracker Sync &amp; TMDB Availability Sentinel (v1.5.1)</h2>
+<ul>
+<li><strong>Gemini Spark Podcast Tracker</strong>: Real-time synchronization of the living Google Sheet (<code>Podcast Film &amp; TV Recommendations Tracker</code>) with Streamwise and the Master Hub General Ledger. Fetches recommendations via Apps Script Web App endpoint (<code>?action=getPodcastRecs</code>), enriches the user's Watchlist with origin tags (<code>importSource: Podcast: [Podcast] - [Episode]</code>), updates watched titles with podcast notes, and stores in SQLite.</li>
+<li><strong>Provider Sentinel Resilience ("none")</strong>: When TMDB returns empty US watch provider results for valid titles, the sync engine records <code>"none"</code> as a sentinel instead of leaving <code>providerIds</code> null. This differentiates unstreamable/theater-only titles from un-queried titles, terminating redundant startup sync loops while cleanly filtering <code>"none"</code> from UI provider lists.</li>
+</ul>
+<h2 id="15-my-services-watchlist-volume-tracking-resilient-multi-tier-feedback-v152">15. My Services Watchlist Volume Tracking &amp; Resilient Multi-Tier Feedback (v1.5.2)</h2>
+<ul>
+<li><strong>Provider Watchlist Volume</strong>: <code>MonthlyRoiContent</code> and <code>ServiceDetailBottomSheet</code> compute real-time watchlist volume counts per streaming service: <code>watchlistItems.count { it.providersList.any { p -&gt; p.equals(provider.id, ignoreCase = true) } }</code>. Active service cards display <code>🎬 X Watchlist Titles</code>, inactive cards display <code>🎬 Y Queued</code>, and <code>ServiceDetailBottomSheet</code> renders a dedicated list of available queued movies on that platform with 1-tap navigation to movie details.</li>
+<li><strong>Multi-Tier Resilient Feedback Pipeline</strong>: <code>submitIssue</code> implements a 3-tier cascade:
+  1. Direct GitHub API via user PAT (if present in settings).
+  2. Central Cloud Run proxy (<code>feedback-proxy-rljydlcchq-uc.a.run.app</code>).
+  3. Google Apps Script Web App fallback with HTTP 302 redirect resolution.</li>
+<li><strong>Visible Error Banner &amp; Toasts</strong>: <code>FeedbackDialog</code> hoists the error card outside the scrollable column right above the submit button, coupled with native Android Toast alerts on both success and error, preventing silent failures.</li>
+</ul>
+<h2 id="16-cinema-podcast-rss-ingestion-pipeline-dynamic-catalog-matching-v153">16. Cinema Podcast RSS Ingestion Pipeline &amp; Dynamic Catalog Matching (v1.5.3)</h2>
+<ul>
+<li><strong>Zero-Dependency Python Scraper (<code>scrape_feeds.py</code>)</strong>: Standalone Python script using standard library modules (<code>urllib.request</code>, <code>xml.etree.ElementTree</code>, <code>re</code>, <code>csv</code>, <code>json</code>) to scrape, parse, and normalize all available episodes across 5 cinema podcast feeds:</li>
+<li><em>The Rewatchables</em> (<code>https://feeds.megaphone.fm/the-rewatchables</code>) - 479 episodes</li>
+<li><em>The Big Picture</em> (<code>https://feeds.megaphone.fm/the-big-picture</code>) - 968 episodes</li>
+<li><em>Unspooled</em> (<code>https://feeds.megaphone.fm/SBP3707703183</code>) - 468 episodes</li>
+<li><em>How Did This Get Made?</em> (<code>https://feeds.simplecast.com/Ao0C24M8</code>) - 393 episodes</li>
+<li><em>What Went Wrong</em> (<code>https://feeds.acast.com/public/shows/what-went-wrong1</code>) - 208 episodes
+  Totaling <strong>2,516 scraped episodes</strong>.</li>
+<li><strong>Episode Title Extraction Regex Engine</strong>: Robust multi-pattern extractor designed to handle single/curly quotes, internal apostrophes (e.g. <em>'She's the One'</em>, <em>'There's Something About Mary'</em>), host/guest credit stripping without truncating titles with the word "with" (e.g. <em>Interview with the Vampire</em>), and colon/dash episode formatting.</li>
+<li><strong>Google Sheet Population (<code>sync_to_sheet.py</code>)</strong>: Apps Script Web App (<code>AKfycbzsbZfiDbXXGJunAmJX2xb9OtpnigwVl69M6qbBQ5bNBuyAdj6TtkW-LflbSxSFJJoI0w</code>) endpoint <code>appendPodcastEpisodes</code> populated 2,233 missing episodes into the living Google Sheet tracker with deduplication, bringing total tracker rows to 2,394.</li>
+<li><strong>Dynamic Asset &amp; Tag-Aware Filtering</strong>:</li>
+<li><code>generate_podcast_assets.py</code> exports <code>podcast_titles.json</code> (2,300+ unique titles mapped to podcast IDs) into Android assets.</li>
+<li><code>PodcastEpisodeCatalog.kt</code> dynamically loads <code>podcast_titles.json</code> on app startup (<code>PodcastEpisodeCatalog.initialize(context)</code>), integrates <em>Unspooled</em>, and tests title matches against <code>importSource</code>, user notes tags (<code>[The Rewatchables]</code>), the 2,300+ title catalog, and static mentions.</li>
+<li><code>AdvancedFilterBottomSheet.kt</code> correctly updates filter count indicators (e.g. <em>The Rewatchables</em> displaying 359 matching titles).</li>
+</ul>
+<h2 id="17-actor-age-at-release-engine-actoragecalculatorkt-v154">17. Actor Age at Release Engine (<code>ActorAgeCalculator.kt</code> - v1.5.4)</h2>
+<ul>
+<li><strong>Domain Logic &amp; Math</strong>: Derived from the standalone <code>good-enough-productions/actor-age</code> repository. Calculates exact age when a movie was released using <code>ActorAgeCalculator.calculateAgeAtRelease(birthday, releaseDate, deathday)</code>.</li>
+<li><strong>Date Handling &amp; Edge Cases</strong>:</li>
+<li>Full ISO-8601 <code>YYYY-MM-DD</code> date parsing using <code>java.time.LocalDate</code> and <code>java.time.Period</code>.</li>
+<li>Leap year (<code>Feb 29</code>) boundary handling.</li>
+<li>Year-only fallback (e.g. <code>"1994"</code>) estimating age via simple year subtraction.</li>
+<li>Deceased state computation: verifies if the actor was alive when the movie released, formatting deceased status (<code>isDeceased: Boolean</code>) while ensuring post-mortem releases compute their final age at death.</li>
+<li><strong>TMDB API &amp; Concurrent Lookups</strong>:</li>
+<li><code>TmdbApiService.kt</code> extended with <code>@GET("person/{person_id}")</code> returning <code>TmdbPersonDetails</code> (<code>birthday</code>, <code>deathday</code>, <code>profile_path</code>, <code>place_of_birth</code>).</li>
+<li><code>StreamViewModel.loadMovieCastWithAges</code>: Runs parallel network requests using <code>async(Dispatchers.IO)</code> limited to the top 10 billed cast members. Results are cached in a thread-safe <code>ConcurrentHashMap&lt;Int, TmdbPersonDetails&gt;</code> to avoid redundant network traffic on repeated bottom sheet presentations.</li>
+<li><strong>UI Integration</strong>: <code>MovieDetailsBottomSheet</code> displays a horizontal scrollable card row showing actor portrait, character name, age badge (e.g. <code>🎂 Age 38 at release</code>), and deceased badge (<code>🕊️ (Deceased)</code>).</li>
+</ul>
+<h2 id="18-cinephile-viewing-analytics-release-eras-engine-watchedanalyticscalculatorkt-v154">18. Cinephile Viewing Analytics &amp; Release Eras Engine (<code>WatchedAnalyticsCalculator.kt</code> - v1.5.4)</h2>
+<ul>
+<li><strong>Analytics Computation</strong>: Synthesizes the core analytical features from <code>good-enough-productions/movies-dataset</code> natively inside Android SQLite/Room memory:</li>
+<li><strong>Decades &amp; Eras Breakdown</strong>: Partitions watch history across 7 cinema eras: <code>2020s</code>, <code>2010s</code>, <code>2000s</code>, <code>1990s</code>, <code>1980s</code>, <code>1970s</code>, and <code>Pre-1970s Classic</code>. Calculates absolute film counts, percentages, and total runtime per era.</li>
+<li><strong>Genre Profiling &amp; User Ratings</strong>: Computes genre frequencies and averages the user's logged Letterboxd star ratings per genre to identify highest-rated categories vs most-watched categories.</li>
+<li><strong>Streaming "Service Used"</strong>: Tracks viewing platform tags (<code>serviceUsed</code> field in <code>MediaItem</code>), quantifying provider usage (Netflix, Max, Criterion Channel, Theatrical, etc.) and unassigned counts.</li>
+<li><strong>Letterboxd Rating Distribution</strong>: Partitions ratings into 5 visual histogram tiers: Masterpieces (9-10★), Great (7-8.9★), Good (5-6.9★), Mediocre (3-4.9★), and Poor (0.5-2.9★).</li>
+<li><strong>Viewing Rhythm</strong>: Identifies the user's all-time peak watch month (e.g. <code>October 2025: 42 films</code>) and calculates year-over-year watch volumes.</li>
+<li><strong>Interactive UI (<code>WatchedAnalyticsBottomSheet.kt</code>)</strong>:</li>
+<li>Modal bottom sheet with 4 KPI summary cards (Total Films, Screen Time in hours/days, Average Rating, Peak Era).</li>
+<li>1-tap interactive filtering: Tapping any era or service directly sets <code>selectedEra</code> or <code>selectedService</code> in <code>HomeScreen</code>, closing the sheet and filtering the Watched Vault with an active dismissible filter chip ribbon.</li>
+<li>"Service Used to Watch" interactive selector added to <code>MovieDetailsBottomSheet</code> for watched titles to easily tag streaming services.</li>
+</ul>
+<h2 id="19-data-integrity-hardening-strict-tmdb-gating-cursorwindow-memory-architecture-v155">19. Data Integrity Hardening, Strict TMDB Gating &amp; CursorWindow Memory Architecture (v1.5.5)</h2>
+<ul>
+<li><strong>Root Cause Analysis (Issues #13 &amp; #14)</strong>:</li>
+<li>Previously, <code>syncPodcastRecommendationsInternal</code> inserted unverified podcast RSS titles directly into <code>WATCHLIST</code>. 470 non-movie discussions (mailbags, drafts, auctions, hall of fame shows) polluted the user's database without TMDB IDs or poster art.</li>
+<li>Furthermore, <code>filterOnlyMyServices</code> defaulted to <code>true</code>. When a user selected a podcast filter (e.g. <em>The Rewatchables</em>), movies covered by the podcast that were not on the user's active paid subscriptions were filtered out, giving the impression that the podcast filter was not working (#13).</li>
+<li>In addition, concatenating multi-kilobyte episode descriptions into <code>userNotes</code> pushed the SQLite query payload beyond Android's default 2MB <code>CursorWindow</code> limit, causing <code>IllegalStateException: Couldn't read row 587, col 0 from CursorWindow</code> on cold launch.</li>
+<li><strong>Data Integrity Sanitize &amp; Gatekeeping (<code>MediaTitleSanitizer.kt</code>)</strong>:</li>
+<li><code>isNonMovieEpisode</code>: Comprehensive regex blacklist filtering out drafts, auctions, mailbags, Oscar predictions, festival recaps, and bare podcast show titles.</li>
+<li><code>cleanCandidateTitle</code>: Strips podcast prefixes (e.g. <em>"The Re-"</em>, <em>"(Re)"</em>), guest names, and episode markers before TMDB querying.</li>
+<li><strong>Zero-Tolerance Gating</strong>: During podcast syncs or imports, items that do not return a matching movie or TV show on TMDB are discarded immediately—never inserted into the Watchlist.</li>
+<li><strong>Room v9 Database Schema &amp; CursorWindow Resilience</strong>:</li>
+<li>Upgraded Room DB from version 7 -&gt; 8 (adding <code>releaseDate TEXT</code> column) -&gt; 9 (automated data integrity purge and text trimming).</li>
+<li>Synchronous <code>onOpen</code> SQLite cleanup:
+    <code>sql
+    DELETE FROM media_items WHERE status = 'WATCHLIST' AND (tmdbId IS NULL OR tmdbId = '');
+    UPDATE media_items SET userNotes = substr(userNotes, 1, 300) WHERE length(userNotes) &gt; 300;
+    UPDATE media_items SET overview = substr(overview, 1, 300) WHERE length(overview) &gt; 300;
+    UPDATE media_items SET trivia = NULL WHERE trivia IS NOT NULL;</code></li>
+<li>In <code>StreamApp.onCreate()</code>, <code>sCursorWindowSize</code> is programmatically set to 50MB via reflection, permanently preventing <code>CursorWindowAllocationException</code>.</li>
+<li><strong>Podcast Filter Precedence (<code>HomeScreen.kt</code>)</strong>:</li>
+<li>Filter logic updated: when <code>selectedPodcastId != null</code> or <code>selectedPlatforms.isNotEmpty()</code>, the subscription-gating check (<code>filterOnlyMyServices</code>) is automatically bypassed so all covered films across all providers are displayed.</li>
+</ul>
+<h2 id="20-ui-streamlining-cinephile-auteurs-and-subscription-expected-value-v156">20. UI Streamlining, Cinephile Auteurs, and Subscription Expected Value (v1.5.6)</h2>
+<h3 id="watched-vault-header-rework-issue-16">Watched Vault Header Rework (Issue #16)</h3>
+<ul>
+<li><strong>Problem</strong>: The fixed header chrome in <code>WatchedTabContent</code> (3-KPI summary card, viewing analytics banner, genre tags ribbon, Letterboxd sync buttons) occupied over 55% of the vertical viewport on mobile devices, squeezing the diary to only 1-2 visible movie cards.</li>
+<li><strong>Solution</strong>:</li>
+<li>Re-architected <code>WatchedTabContent</code> to feature a slim sticky top bar (48dp height search bar, compact sort dropdown, view mode switcher, and analytics icon button) taking only ~90dp total height.</li>
+<li>Encapsulated the heavy metrics and Letterboxd sync buttons into <code>WatchedVaultOverviewCard</code>.</li>
+<li>Moved <code>WatchedVaultOverviewCard</code> inside the scrollable content (<code>LazyColumn</code> and <code>LazyVerticalGrid</code>), using <code>GridItemSpan(maxLineSpan)</code> in grid mode.</li>
+<li>Implemented a collapsible state: defaults to a compact 1-line summary (<code>🎬 1,130 Films • ~2,071h • ★ 7.2 • ~7.0/mo [Insights 📊] [▾]</code>) that expands to full sync buttons and metrics upon tap. Scrolling down immediately moves the card off screen, dedicating 90%+ vertical space to films.</li>
+</ul>
+<h3 id="ah-hah-cinephile-analytics-engine-issue-17">"Ah Hah" Cinephile Analytics Engine (Issue #17)</h3>
+<ul>
+<li><strong>Top Directors &amp; Auteurs</strong>:</li>
+<li>Curated filmographies for 20+ prominent auteurs (Coen Brothers, Nolan, Scorsese, Fincher, Tarantino, Ridley Scott, Cameron, Spielberg, PTA, Kubrick, Linklater, Villeneuve).</li>
+<li>Exact normalized title matching (<code>normalizeTitle</code>) strips punctuation, parentheses, and leading articles, preventing false substring matches (e.g. <em>"Us"</em> matching <em>"Inglourious Basterds"</em>).</li>
+<li>Aggregates film counts, average ratings (e.g. <code>★ 8.8</code>), and surfaces distinct sample title chips.</li>
+<li><strong>Top Actors &amp; Screen Presence</strong>:</li>
+<li>Tracks top Hollywood stars across the user's logged vault (Tom Cruise, Matt Damon, Leonardo DiCaprio, Brad Pitt, Robert De Niro, Christian Bale, Margot Robbie, Al Pacino, Emma Stone, Ryan Gosling).</li>
+<li><strong>Cinephile Blind Spots &amp; Watchlist Integration</strong>:</li>
+<li>Identifies underrepresented areas in the user's vault (&lt;3% representation across Golden Age Cinema Pre-1970s, 1970s New Hollywood, Westerns, and Documentaries).</li>
+<li>Cross-references these gaps against the user's 1,100+ Watchlist queue to surface queued titles ready to stream (e.g. <em>The Searchers</em>, <em>High Noon</em>, <em>The Godfather</em>, <em>Free Solo</em>), creating an actionable bridge between past viewing and future discovery.</li>
+</ul>
+<h3 id="subscription-expected-value-single-service-rotation-advisor-issue-15">Subscription Expected Value &amp; Single-Service Rotation Advisor (Issue #15)</h3>
+<ul>
+<li><strong>Viewing Velocity</strong>: Analyzes the last 6 active viewing months to compute the user's real-world watch velocity (~7.0 films/month).</li>
+<li><strong>Effective Cost Per Film</strong>: Dynamically calculates <code>totalMonthlySpend / monthlyVelocity</code> (e.g. \$64.95 / 7 = \$9.28/film).</li>
+<li><strong>Single-Service Rotation Advisor</strong>:</li>
+<li>Models the expected value of maintaining only 1 active subscription at a time.</li>
+<li>Identifies the streaming service with the largest backlog in the user's Watchlist (e.g. Max with 142 queued films) and calculates how many months of continuous entertainment it provides at the user's current velocity (~20 months).</li>
+<li>Calculates potential savings (saving ~$49/month or ~$588/year) by pausing idle subscriptions with zero loss of content supply.</li>
+</ul>
+<h2 id="21-watched-era-rating-extraction-collapsible-spotlight-clean-ui-architecture-v157">21. Watched Era &amp; Rating Extraction, Collapsible Spotlight &amp; Clean UI Architecture (v1.5.7)</h2>
+<h3 id="100-release-year-decade-extraction-0-unknown-era">100% Release Year &amp; Decade Extraction (0% Unknown Era)</h3>
+<ul>
+<li><strong>Root Cause</strong>: In previous versions, Letterboxd CSV imports populated <code>status = 'WATCHED'</code> and <code>tmdbId</code> but left <code>releaseDate</code> null or unparsed for bulk history, causing <code>WatchedAnalyticsCalculator</code> to classify 1,104 out of 1,130 films (97.7%) under "Unknown Era".</li>
+<li><strong>Startup Backfill Engine (<code>AppDatabase.kt</code> / <code>MediaRepository.kt</code>)</strong>:</li>
+<li>Automatically parses release years from Letterboxd URL slugs (<code>/film/{slug}-{year}/</code>), user notes, and title strings during database initialization and sync.</li>
+<li>Safely backfills <code>releaseDate = 'YYYY-01-01'</code> without overwriting existing TMDB metadata.</li>
+<li>Result verified on physical device: 100% of 1,130 watched films classified into exact cinema eras (2000s: 34.3%, 2010s: 25.9%, 1990s: 18.6%, 2020s: 15.0%, 1980s: 4.3%, 1970s: 1.3%, Pre-1970s: 0.5%) with <strong>0 films (0.0%) in Unknown Era</strong>.</li>
+<li><strong>Star Rating Extraction</strong>:</li>
+<li>Parses 10-point and 5-star ratings from import notes and CSV records into <code>userRating</code>, powering accurate rating distributions and top auteur averages.</li>
+</ul>
+<h3 id="ui-streamlining-screen-reclaim-issues-7-8-9-10">UI Streamlining &amp; Screen Reclaim (Issues #7, #8, #9, #10)</h3>
+<ul>
+<li><strong>Collapsible Spotlight (Issue #7)</strong>:</li>
+<li>Replaced fixed 220dp spotlight carousel with a collapsible header row.</li>
+<li>When collapsed, reduces to a compact 36dp header bar (<code>✨ Spotlight: Ready to Stream (X) • Tap to view [▾]</code>), reclaiming over 30% of vertical screen space on mobile.</li>
+<li>State persisted via <code>UserPreferencesManager.isSpotlightCollapsed</code>.</li>
+<li><strong>Streamlined Filter Header (Issue #8)</strong>:</li>
+<li>Eliminated noisy multi-select filter chip carousels from the top of the Watchlist tab.</li>
+<li>Replaced with a minimal, unified action row: <code>[✓ My Services]</code>, <code>[Free w/ Ads]</code>, and <code>[Filters (X)]</code> with active count badge.</li>
+<li>Multi-select platforms, genres, release decades, rating floors, and podcast filters are consolidated into <code>AdvancedFilterBottomSheet</code>.</li>
+<li><strong>Watched Vault Rework &amp; Decade Trend Capsules (Issue #9)</strong>:</li>
+<li>Added instant visual decade trend capsules (<code>2000s (34%)</code>, <code>2010s (26%)</code>, etc.) directly on <code>WatchedVaultOverviewCard</code>.</li>
+<li>Updated <code>WatchedMediaCard</code> and <code>WatchedGridPosterCard</code> to emphasize release years (<code>Title (Year)</code>), star rating badges, and watch dates.</li>
+<li>Encapsulated secondary CSV import/export buttons into a collapsible "CSV File Tools" drawer to declutter the diary view.</li>
+<li><strong>1-Tap Letterboxd + Google Sheet Sync (Issue #10)</strong>:</li>
+<li>Added prominent <code>[☁️ Sync Letterboxd &amp; Google Sheet]</code> button on <code>WatchedVaultOverviewCard</code> with indeterminate progress indicator and toast notifications.</li>
+</ul>
+<h2 id="22-design-system-modernization-ux-critic-audit-resolution-v158">22. Design System Modernization &amp; UX Critic Audit Resolution (v1.5.8)</h2>
+<p>Comprehensive resolution of the 14 critical findings identified in the Streamwise UX/UI Audit (<code>UX Critic-saved.html</code>):</p>
+<h3 id="standardized-button-component-system-tokens-styling">Standardized Button &amp; Component System (Tokens &amp; Styling)</h3>
+<ul>
+<li><strong>High-Contrast Input Tokens (<code>Color.kt</code>)</strong>:</li>
+<li><code>DarkInputBackground</code> (<code>0x14FFFFFF</code> / 8% surface fill): Elevates text field contrast against pure black AMOLED backgrounds.</li>
+<li><code>DarkBorderOutline</code> (<code>0x40FFFFFF</code> / 25% white opacity): Replaced 12% opacity borders to meet WCAG AA contrast for unfocused form fields.</li>
+<li><code>DarkOutlineVariant</code> (<code>0x2EFFFFFF</code> / 18% white opacity): Replaced 10% borders for subtler card and divider outlines.</li>
+<li><code>TextLowEmphasis</code> (<code>0x9EFFFFFF</code> / 62% white opacity): Replaced 38% opacity placeholder/label text to guarantee legibility.</li>
+<li><strong>Universal Field Application</strong>:</li>
+<li>Standardized <code>OutlinedTextFieldDefaults.colors</code> across all search bars (Watchlist, Watched Vault), dialogs (<code>AddMediaDialog</code>, <code>EditProviderDialog</code>, <code>CheckInDialog</code>, <code>FeedbackDialog</code>), and Settings configuration fields.</li>
+</ul>
+<h3 id="agent-screen-humanization-conversational-ergonomics">Agent Screen Humanization &amp; Conversational Ergonomics</h3>
+<ul>
+<li><strong>Technical Jargon Elimination</strong>:</li>
+<li>Replaced internal engineering references ("Gemma 4", "Gemini 3.1 Pro", "API Keys") with consumer-friendly framing: <em>"AI Film Companion"</em>, <em>"Personalized Film &amp; Taste Analysis"</em>, and <em>"Analyzing your cinematic vault..."</em>.</li>
+<li><strong>Floating Icon Collision Elimination</strong>:</li>
+<li>Replaced oversized 56dp floating send button with an ergonomic 52dp inline <code>FilledIconButton</code> positioned alongside the input field with automated keyboard avoidance.</li>
+<li>Suppressed the global <code>FloatingFeedbackButton</code> whenever the user is actively on the AI companion chat tab (<code>selectedTab == 3 &amp;&amp; exploreSubTab == 1</code>), eliminating touch target overlaps.</li>
+</ul>
+<h3 id="check-in-prompts-decision-clarity">Check-In Prompts &amp; Decision Clarity</h3>
+<ul>
+<li><strong>Hierarchical Action Buttons</strong>:</li>
+<li>Replaced ambiguous inline checkbox/toggle logic with explicit hierarchical buttons:<ul>
+<li>Primary: <code>[Yes, finished it →]</code> (<code>Button</code>)</li>
+<li>Secondary: <code>[Watched partially →]</code> (<code>FilledTonalButton</code>)</li>
+<li>Tertiary: <code>[Watched something else →]</code> (<code>OutlinedButton</code>)</li>
+<li>Dismissal: <code>[Didn't watch anything]</code> (<code>TextButton</code>)</li>
+</ul>
+</li>
+<li>Clear multi-step wizard preserves provider attribution, duration logging, and optional personal notes.</li>
+</ul>
+<h3 id="subscription-rotation-billing-transparency">Subscription Rotation &amp; Billing Transparency</h3>
+<ul>
+<li><strong>Advisor Transparency</strong>:</li>
+<li>Added an explicit disclaimer on the Single-Service Rotation card: <em>"Note: Streamwise tracks subscriptions to calculate savings and optimize your viewing schedule. Actual subscription changes must be managed directly with providers."</em></li>
+<li>Updated provider status toggle text in <code>EditProviderDialog</code> to <em>"Active (Tracked in Streamwise)"</em> and <em>"Inactive / Paused (Tracked in Streamwise)"</em>.</li>
+</ul>
+<h3 id="movie-card-polish-deduplication">Movie Card Polish &amp; Deduplication</h3>
+<ul>
+<li><strong>Free Badge &amp; Action Collision</strong>:</li>
+<li>Isolated the <code>FREE</code> indicator with a dedicated pill token (<code>FreeBadgeContainer</code> / <code>OnFreeBadgeContainer</code>) and capped provider badge rows with ellipsis truncation.</li>
+<li>Restricted movie synopsis previews to 1 line, ensuring the primary "Watch" button remains visually unobstructed.</li>
+<li><strong>Catalog Deduplication</strong>:</li>
+<li>Integrated <code>MediaTitleSanitizer.cleanCandidateTitle(it.title).lowercase()</code> deduplication across spotlight and watchlist feeds.</li>
+</ul>
+<h3 id="responsive-breakpoints">Responsive Breakpoints</h3>
+<ul>
+<li><strong>Landscape Navigation</strong>:</li>
+<li>Added orientation-aware height checks to <code>NavigationBar</code>, adjusting from 72dp in portrait to a compact 56dp in landscape to preserve vertical browsing real estate.</li>
+</ul>
+<h2 id="23-couch-first-poster-density-letterboxd-sub-navigation-zero-intermediary-deep-linking-v159">23. Couch-First Poster Density, Letterboxd Sub-Navigation &amp; Zero-Intermediary Deep Linking (v1.5.9)</h2>
+<p>Architecture updates addressing mobile visual density and couch-first discovery:</p>
+<h3 id="1-couch-first-3-column-poster-grid-view-mode-toggle">1. Couch-First 3-Column Poster Grid &amp; View Mode Toggle</h3>
+<ul>
+<li><strong><code>PosterGridItem</code> Composable (<code>HomeScreen.kt</code>)</strong>:</li>
+<li>High-density 3-column layout utilizing 2:3 aspect ratio posters with 10dp rounded corners.</li>
+<li>Overlay badges: Top-left gold star rating badge (<code>RatingGold</code> / <code>DarkGoldSurface</code>), top-right circular quick-play button (<code>DeepCouchOrange</code>), and bottom service attribution pill.</li>
+<li>Beneath poster: Single-line bold title, release year, and primary genre.</li>
+<li><strong>Sticky Header Integration (<code>LazyColumn</code>)</strong>:</li>
+<li>Chunked 3-column row rendering (<code>processedItems.chunked(3)</code>) inside <code>LazyColumn</code> rather than nested grids, maintaining seamless pinning of the search and filter ribbon via <code>stickyHeader</code>.</li>
+<li><strong>Persistent View Mode State</strong>:</li>
+<li>Backed by <code>UserPreferencesManager.isGridView</code> (default <code>true</code>), exposed via <code>StreamViewModel.isGridView: StateFlow&lt;Boolean&gt;</code>.</li>
+<li>Seamless toggle icon in <code>TopAppBar</code> (<code>Icons.Default.ViewAgenda</code> vs <code>Icons.Default.GridView</code>).</li>
+</ul>
+<h3 id="2-letterboxd-style-top-sub-navigation-tabs">2. Letterboxd-Style Top Sub-Navigation Tabs</h3>
+<ul>
+<li><strong>Watchlist Sub-Tabs</strong>:</li>
+<li><code>Ready on Subs (X)</code>: Dynamically counts and filters titles ready to stream on active subscriptions or free ad-supported platforms.</li>
+<li><code>All Saved (X)</code>: Shows complete saved catalog across all providers.</li>
+<li><code>Under 100m</code>: Filter for short runtime cinema (&lt;105 mins or comedy/animation/shorts).</li>
+<li><code>Podcast Picks (X)</code>: Dynamic count and filter for films covered on major cinema podcasts.</li>
+<li><strong>Watched Vault Sub-Tabs</strong>:</li>
+<li><code>Watched Diary (X)</code>: Chronological timeline with re-watch intents.</li>
+<li><code>Highest Rated</code>: Instant sort by user and community ratings.</li>
+<li><code>Analytics</code>: One-tap navigation to the Cinephile Viewing Analytics Hub.</li>
+</ul>
+<h3 id="3-zero-intermediary-streaming-app-deep-linking-streamingapplauncherkt">3. Zero-Intermediary Streaming App Deep Linking (<code>StreamingAppLauncher.kt</code>)</h3>
+<ul>
+<li><strong>Direct Couch Handoff</strong>:</li>
+<li>Tapping "Watch" resolves native Android package names, custom deep link URI schemes, and media search intents across 15+ streaming services:<ul>
+<li>Prime Video (<code>com.amazon.avod.thirdpartyclient</code>, <code>https://app.primevideo.com/detail?gti=...</code>)</li>
+<li>Netflix (<code>com.netflix.mediaclient</code>, <code>nflx://www.netflix.com/title/...</code>)</li>
+<li>Max (<code>com.wbd.stream</code>, <code>https://play.max.com/movie/...</code>)</li>
+<li>Disney+ (<code>com.disney.disneyplus</code>, <code>https://www.disneyplus.com/movies/...</code>)</li>
+<li>Hulu (<code>com.hulu.plus</code>, <code>https://www.hulu.com/movie/...</code>)</li>
+<li>Tubi (<code>com.tubitv</code>, <code>https://tubitv.com/movies/...</code>)</li>
+<li>Apple TV+ (<code>com.apple.atve.androidtv.appletv</code>, <code>https://tv.apple.com/movie/...</code>)</li>
+<li>Paramount+, Criterion Channel, Pluto TV, Peacock, Hoopla, Kanopy</li>
+</ul>
+</li>
+<li>Seamlessly activates <code>viewModel.launchAndIntendToWatch(context, item)</code>, updating the database status to <code>INTENDING_TO_WATCH</code> so the background check-in watcher triggers when the user returns.</li>
+</ul>
+<h3 id="4-high-performance-o1-catalog-indexing">4. High-Performance O(1) Catalog Indexing</h3>
+<ul>
+<li><strong>Startup ANR Elimination (<code>PodcastEpisodeCatalog.kt</code>)</strong>:</li>
+<li>Pre-indexes 2,300+ dynamic titles and static mentions into <code>allDynamicTitlesSet</code> and <code>staticMentionTitles</code> hash sets.</li>
+<li>Converts $O(N \times M)$ string search loops across 1,151 movies into instantaneous $O(1)$ hash set lookups (&lt;1ms), completely eliminating main-thread freezing and Android input dispatch timeouts.</li>
+</ul>
+<h2 id="10-share-multi-format-export-suite-sync-throttling-and-watched-vault-controls-issues-18-19-20">10. Share &amp; Multi-Format Export Suite, Sync Throttling, and Watched Vault Controls (Issues #18, #19, #20)</h2>
+<h3 id="1-interactive-share-suite-shareandexportdialog">1. Interactive Share Suite (<code>ShareAndExportDialog</code>)</h3>
+<ul>
+<li><strong>Intent Chooser (<code>ACTION_SEND</code>)</strong>:</li>
+<li><code>StreamViewModel.generateWatchlistShareText()</code> formats top watchlist recommendations with titles, release years, star ratings, and streaming provider badges.</li>
+<li>Passes formatted text to <code>Intent.createChooser</code> with <code>Intent.ACTION_SEND</code> and MIME type <code>text/plain</code>.</li>
+<li><strong>Multi-Format Local Exports</strong>:</li>
+<li>Integrated Markdown (Obsidian notes) export to <code>Downloads/StreamwiseVault</code>.</li>
+<li>Integrated Letterboxd Diary CSV export with standard headers (<code>Title</code>, <code>Year</code>, <code>Rating10</code>, <code>WatchedDate</code>).</li>
+<li>Integrated system clipboard copy for quick messaging.</li>
+</ul>
+<h3 id="2-ui-responsiveness-sync-throttling">2. UI Responsiveness &amp; Sync Throttling</h3>
+<ul>
+<li><strong>Throttled Immediate Sync</strong>:</li>
+<li><code>StreamViewModel.triggerImmediateSync(force = false)</code> enforces a 30-minute cooldown window stored in <code>UserPreferencesManager.lastImmediateSyncTime</code>.</li>
+<li>Removed unconditional foreground sync and redundant network discovery triggers on <code>MainActivity.onResume()</code>.</li>
+<li><strong>Cached Layout Lookups</strong>:</li>
+<li>Precomputed <code>activeOrFreeProviderIds: Set&lt;String&gt;</code> and <code>providerMap: Map&lt;String, StreamingProvider&gt;</code> within <code>WatchlistTabContent</code> via <code>remember(allProviders)</code>.</li>
+<li>Passed precomputed collections to <code>PosterGridItem</code> to eliminate expensive per-card list filtering and mapping during scroll passes.</li>
+</ul>
+<h3 id="3-card-removal-watched-state-management">3. Card Removal &amp; Watched State Management</h3>
+<ul>
+<li><strong><code>RemoveOrWatchedConfirmationDialog</code></strong>:</li>
+<li>Intercepts card removal <code>✕</code> tap and provides clear user choices:<ul>
+<li>Watchlist items: <code>Mark as Watched</code> (updates status to <code>WATCHED</code>, logs <code>WatchSession</code>, updates timestamp) vs <code>Delete</code> (purges from Room database).</li>
+<li>Watched items: <code>Move to Watchlist</code> (restores status to <code>WATCHLIST</code>) vs <code>Delete</code>.</li>
+</ul>
+</li>
+<li><strong>1-Tap Watched Shortcut</strong>:</li>
+<li>Direct <code>[✓]</code> button on <code>MediaItemCard</code> allowing instant 1-tap logging to the Watched Vault.</li>
+</ul>
+<h2 id="11-zero-wrap-ui-architecture-flexible-watch-date-logging-v161">11. Zero-Wrap UI Architecture &amp; Flexible Watch Date Logging (v1.6.1)</h2>
+<h3 id="1-two-row-non-wrapping-bottom-sheet-action-bar">1. Two-Row Non-Wrapping Bottom Sheet Action Bar</h3>
+<ul>
+<li><strong>Root Cause &amp; Solution</strong>:</li>
+<li>Previously, four action buttons (<code>OutlinedButton</code>, <code>FilledTonalButton</code>, <code>Button</code>, and <code>IconButton</code>) shared a single horizontal row. Material 3 default button horizontal padding (24dp $\times$ 2 = 48dp) constrained text to $&lt;30$dp, causing single-letter vertical text wrapping (e.g. <code>Let\nter\nbo\nxd</code>).</li>
+<li>Restructured into a clean 2-row layout:<ul>
+<li><strong>Row 1</strong>: Full-width, prominent primary action <code>Watch Now</code> button (48dp height).</li>
+<li><strong>Row 2</strong>: Spacious secondary actions: <code>[✓ Watched]</code> (or <code>[↶ Watchlist]</code>), <code>[↗ Letterboxd]</code>, and <code>[🗑 Delete]</code> with compact horizontal padding (8dp) and explicit <code>maxLines = 1</code>, <code>softWrap = false</code>.</li>
+</ul>
+</li>
+<li>Systematically audited and enforced <code>maxLines = 1</code>, <code>softWrap = false</code>, and <code>TextOverflow.Ellipsis</code> across all buttons, filter chips, navigation tab labels, and badge rows.</li>
+</ul>
+<h3 id="2-immediate-watched-transition-race-condition-fix">2. Immediate Watched Transition &amp; Race Condition Fix</h3>
+<ul>
+<li><strong>Callback Sequencing</strong>:</li>
+<li>Previously, <code>MovieDetailsBottomSheet</code> called <code>onDismiss()</code> before <code>onMarkWatchedClick()</code>, setting <code>detailMovieItem = null</code> before the callback executed.</li>
+<li>Now, callbacks directly capture <code>val m = detailMovieItem</code> and set <code>movieToMarkWatched = m</code> and <code>detailMovieItem = null</code> atomically, eliminating null references.</li>
+<li>Calling <code>viewModel.markItemAsWatched(...)</code> immediately updates Room database (<code>status = WATCHED</code>), which emits through Room's reactive <code>allMediaItems</code> Flow.</li>
+<li><code>HomeScreen</code> recalculates <code>watchlistItems</code> and <code>watchedItems</code> in real-time, removing the movie from the active queue and appending it to the vault instantly.</li>
+</ul>
+<h3 id="3-interactive-date-rating-dialog-markwatcheddialog">3. Interactive Date &amp; Rating Dialog (<code>MarkWatchedDialog</code>)</h3>
+<ul>
+<li><strong>Architecture</strong>:</li>
+<li><code>MarkWatchedDialog</code> presents flexible watch date logging:<ul>
+<li><code>No Date (Default)</code>: Sets <code>watchedAt = null</code>, grouping the film under "Undated Logs" without falling back to import timestamps.</li>
+<li><code>April 2025</code>: 1-tap option matching the historical bulk of Letterboxd diary entries (~55% of watched titles).</li>
+<li><code>Today</code>: Records current epoch timestamp.</li>
+<li><code>Pick Date...</code>: Invokes native Android <code>DatePickerDialog</code> for arbitrary date selection.</li>
+</ul>
+</li>
+<li>Optional star rating (1–5 stars) and viewing method/service attribution (Netflix, Max, Cinema, Physical Media).</li>
+<li>Movies already in the Watched Vault feature a dedicated Watch Date banner inside <code>MovieDetailsBottomSheet</code> with a <code>[Change]</code> button to edit dates and ratings at any time via <code>viewModel.updateWatchDate(item, newWatchedAt, rating)</code>.</li>
+</ul>
+<h2 id="12-autonomous-multi-machine-ai-mesh-architecture-v162">12. Autonomous Multi-Machine AI Mesh Architecture (v1.6.2)</h2>
+<h3 id="1-dual-node-local-compute-topology">1. Dual-Node Local Compute Topology</h3>
+<ul>
+<li><strong>Primary Compute Anchor (Workstation / Desktop)</strong>:</li>
+<li>Address: <code>192.168.1.100:11434</code> (User Configurable)</li>
+<li>Model: <code>qwen2.5-coder:7b</code> (High-performance code/reasoning anchor @ 48.2 tok/s).</li>
+<li>Role: Heavy contextual film recommendations, deep-wiki structured YAML cards, and multi-turn companion conversations.</li>
+<li><strong>Secondary Edge Unit (Laptop / Failover)</strong>:</li>
+<li>Address: <code>192.168.1.101:11434</code> (User Configurable)</li>
+<li>Model: <code>gemma4:e2b</code> / <code>gemma4:26b</code> (@ 26.5 tok/s).</li>
+<li>Role: Mobile roaming unit when off-desk or when the primary desktop anchor is in low-power standby.</li>
+</ul>
+<h3 id="2-intelligent-dynamic-model-resolution-aimeshcoordinator">2. Intelligent Dynamic Model Resolution (<code>AiMeshCoordinator</code>)</h3>
+<ul>
+<li><strong>Root Cause &amp; Solution</strong>:</li>
+<li>Previously, StreamWise hardcoded <code>model = "gemma4:e2b"</code> in <code>OllamaChatRequest</code>. When connected to nodes hosting other models, the Ollama daemon rejected requests with <code>404 model not found</code>.</li>
+<li>Upgraded <code>OllamaApiService</code> with <code>GET api/tags</code> to fetch live model metadata.</li>
+<li><code>AiMeshCoordinator.resolveActiveNode()</code> probes endpoints with non-blocking timeouts, inspects active model tags dynamically, and selects the optimal available model on each node without hardcoded assumptions.</li>
+</ul>
+<h3 id="3-real-time-hardware-attribution-ui-diagnostic-deck">3. Real-Time Hardware Attribution &amp; UI Diagnostic Deck</h3>
+<ul>
+<li><strong>Hardware Attribution</strong>:</li>
+<li>Responses generated by local models append the executing node name and model:
+    <code>*(Synthesized via Primary Node [qwen2.5-coder:7b])*</code></li>
+<li><strong>Settings Control Deck (Tab 3: System &amp; Updates)</strong>:</li>
+<li>Interactive "AI Mesh Coordinator" panel with editable IP addresses.</li>
+<li><code>Test Mesh Nodes</code> button pings both primary and secondary nodes concurrently, surfacing live ping latencies (ms) and active models with colored connection status indicators (🟢 Online vs 🔴 Offline).</li>
+</ul>
+<h3 id="4-background-synthesis-integration">4. Background Synthesis Integration</h3>
+<ul>
+<li><code>AvailabilitySyncWorker</code> leverages <code>AiMeshCoordinator.resolveActiveNode()</code> during scheduled 4-hour passes, routing movie research card generation to the highest-throughput active workstation node.</li>
+</ul>
+<p>&lt;&lt;&lt;&lt;&lt;&lt;&lt; Updated upstream</p>
+<h2 id="13-first-launch-onboarding-setup-wizard-architecture-v165">13. First-Launch Onboarding &amp; Setup Wizard Architecture (v1.6.5)</h2>
+<h3 id="1-persistence-state-machine">1. Persistence &amp; State Machine</h3>
+<ul>
+<li><strong>DataStore / SharedPreferences</strong>: <code>UserPreferencesManager.kt</code> persists <code>KEY_HAS_COMPLETED_ONBOARDING</code> (<code>hasCompletedOnboarding: Flow&lt;Boolean&gt;</code>), defaulting to <code>false</code> for fresh installs.</li>
+<li><strong>ViewModel Integration</strong>: <code>StreamViewModel.kt</code> exposes <code>hasCompletedOnboarding: StateFlow&lt;Boolean&gt;</code> via <code>stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)</code>.</li>
+<li>Calling <code>completeOnboarding()</code> flips the flag to <code>true</code> and saves to SharedPreferences.</li>
+<li>Calling <code>resetOnboarding()</code> flips the flag to <code>false</code> to allow manual re-running from Settings.</li>
+</ul>
+<h3 id="2-3-step-setup-wizard-dialog-onboardingdialog">2. 3-Step Setup Wizard Dialog (<code>OnboardingDialog</code>)</h3>
+<ul>
+<li><strong>Step 1 (Welcome &amp; Identity)</strong>: Welcomes the user, explains the core mission ("Maximize watch hours. Minimize streaming costs."), and collects a display name.</li>
+<li><strong>Step 2 (Data Sync &amp; Free TMDB Key)</strong>:</li>
+<li>Letterboxd account connection: Enter username for instant RSS diary/watchlist sync.</li>
+<li>Free TMDB API Key entry: Provides a 1-tap direct hyperlink to <code>https://www.themoviedb.org/settings/api</code> with clear instructions that personal keys are free, fast, and 100% private to their phone.</li>
+<li><strong>Step 3 (Active Streaming Subscriptions)</strong>:</li>
+<li>Multi-select chip grid of major streaming services (Netflix, Max, Prime Video, Hulu, Disney+, Apple TV+, Criterion, Tubi, etc.) to immediately tune the Watchlist and Rotation Advisor.</li>
+</ul>
+<h3 id="3-actionable-empty-states">3. Actionable Empty States</h3>
+<ul>
+<li>When <code>watchlist.isEmpty()</code> or <code>watchedMovies.isEmpty()</code>, instead of blank screens, Compose renders rich cards featuring:</li>
+<li>Clear iconography and welcoming introductory copy.</li>
+<li>1-tap call-to-action buttons:<ul>
+<li>Watchlist: "Import Letterboxd Watchlist", "Add Movie Manually", "Add Free TMDB Key", "Open 1-Minute Setup Guide".</li>
+<li>Watched Vault: "Import Letterboxd CSV / ZIP", "Sync Live Letterboxd RSS", "Open 1-Minute Setup Guide".</li>
+</ul>
+</li>
+</ul>
+<h3 id="4-settings-reorganization-essential-vs-advanced">4. Settings Reorganization (Essential vs. Advanced)</h3>
+<ul>
+<li><strong>Profile Tab</strong>: Cleaned up to focus purely on cinephile identity, display name, Letterboxd handle, and avatar URL. Developer webhooks removed.</li>
+<li><strong>Guides Tab</strong>: Features a 1-tap "First-Run Setup Wizard" card allowing users to re-run the 3-step walkthrough anytime.</li>
+<li><strong>System Tab</strong>: Dynamic version string (<code>v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})</code>), 1-tap browser links for TMDB and Gemini developer portals, and a collapsible "Advanced &amp; Developer Settings" card isolating Watchmode API keys, Google Sheets webhooks, multi-machine AI mesh IP addresses, and GitHub PATs.</li>
+</ul>
+<h2 id="14-watchlist-priority-stars-priority-aware-rotation-advisor-architecture-v165">14. Watchlist Priority Stars &amp; Priority-Aware Rotation Advisor Architecture (v1.6.5)</h2>
+<h3 id="1-problem-core-intent">1. Problem &amp; Core Intent</h3>
+<ul>
+<li>Users often curate watchlists exceeding 1,000+ films. While expansive queues are valuable, realistic viewing is driven by a smaller set of high-excitement priorities.</li>
+<li>Raw backlog counts can produce misleading service evaluation (e.g. Netflix showing 30 movies, but only 2 that the user is eager to watch, while Prime Video has 15 movies with 10 high-priority titles).</li>
+<li>StreamWise v1.6.5 introduces a native priority signal (<code>isStarred</code>) across the entire stack—from Room persistence to reactive UI toggles, dedicated filtering/sorting, and priority-weighted subscription rotation analysis.</li>
+</ul>
+<h3 id="2-room-database-architecture-migration-v9-v10">2. Room Database Architecture &amp; Migration (v9 -&gt; v10)</h3>
+<ul>
+<li><strong>Schema Update (<code>MediaItem.kt</code>)</strong>: Added <code>val isStarred: Boolean = false</code>.</li>
+<li><strong>Zero Data-Loss Protection</strong>: Starred items are explicitly immune from cleanup or unmatchable sweeps via <code>isUserProtected</code>:
+  <code>kotlin
+  val isUserProtected: Boolean
+      get() = customNotes != null || !userNotes.isNullOrBlank() || customProviders != null || isStarred</code></li>
+<li><strong>Migration Strategy (<code>AppDatabase.kt</code>)</strong>:
+  <code>kotlin
+  val MIGRATION_9_10 = object : Migration(9, 10) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+          db.execSQL("ALTER TABLE media_items ADD COLUMN isStarred INTEGER NOT NULL DEFAULT 0")
+      }
+  }</code></li>
+<li><strong>Merge Deduplication (<code>MediaDao.kt</code>)</strong>: During deduplication, if either conflicting row was starred, the merged result retains <code>isStarred = true</code>.</li>
+</ul>
+<h3 id="3-ui-toggles-reactive-feedback-loop">3. UI Toggles &amp; Reactive Feedback Loop</h3>
+<ul>
+<li><strong>1-Tap Toggles</strong>: Provided on Poster Grid items (<code>PosterGridItem</code>), Detailed Cards (<code>MediaItemCard</code>), Movie Details (<code>MovieDetailsBottomSheet</code>), Spotlight Carousel (<code>SpotlightCard</code>), and Service Detail sheets (<code>ServiceDetailBottomSheet</code>).</li>
+<li><strong>Reactive Toast</strong>: Toggling stars triggers an immediate confirmation toast:</li>
+<li><code>"Marked [Title] as priority ⭐"</code></li>
+<li><code>"Removed [Title] from priorities"</code></li>
+<li><strong>Dedicated Watchlist Sub-Tab &amp; Sort</strong>:</li>
+<li><code>⭐ Priorities (X)</code> tab in <code>ScrollableTabRow</code>.</li>
+<li><code>⭐ Priorities First</code> option in the Sort Selector dropdown (<code>sortBy = "priority"</code>), sorting by <code>isStarred</code> descending, then rating descending, then title.</li>
+</ul>
+<h3 id="4-priority-weighted-streaming-service-evaluation">4. Priority-Weighted Streaming Service Evaluation</h3>
+<ul>
+<li><strong>My Services (<code>MonthlyRoiContent</code>)</strong>:</li>
+<li>Computes <code>priorityCount</code> alongside <code>totalCount</code> for each platform:
+    <code>val (priorityCount, queueCount) = ...</code></li>
+<li>Active and inactive provider cards display live priority badges (e.g. <code>⭐ 2 Priority • 🎬 30 in Watchlist</code>).</li>
+<li><strong>Enhanced Single-Service Rotation Advisor</strong>:</li>
+<li>Sorts platforms by <code>priorityCount</code> descending first, then total volume:
+    <code>sortedWith(compareByDescending { it.second }.thenByDescending { it.third })</code></li>
+<li>Explicitly highlights priority volume in recommendation advice text.</li>
+<li><strong>Service Detail Sheet (<code>ServiceDetailBottomSheet</code>)</strong>:</li>
+<li>Features a <code>⭐ Priorities Only (X)</code> filter chip and per-title star toggle buttons to curate service-specific queues.</li>
+</ul>
+  </main>
+
+  <footer>
+    Master Hub Living Documentation System • Standalone Companion View
+  </footer>
+</body>
+</html>

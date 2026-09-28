@@ -42,6 +42,12 @@ interface MediaDao {
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMediaItemById(id: Long)
 
+    @Query("UPDATE media_items SET isStarred = :isStarred, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateStarredStatus(id: Long, isStarred: Boolean, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("SELECT COUNT(*) FROM media_items WHERE isStarred = 1 AND status != 'WATCHED'")
+    suspend fun getStarredWatchlistCount(): Int
+
     @Query("SELECT COUNT(*) FROM media_items")
     suspend fun getMediaItemCount(): Int
 
@@ -71,6 +77,7 @@ interface MediaDao {
 
         fun mergeGroup(group: List<MediaItem>): Pair<MediaItem, List<Long>> {
             val isWatched = group.any { it.status == MediaStatus.WATCHED.name }
+            val isStarred = group.any { it.isStarred }
             val bestWatchedAt = group.mapNotNull { it.watchedAt }.maxOrNull()
 
             val sorted = group.sortedWith(
@@ -119,6 +126,7 @@ interface MediaDao {
                 releaseDate = richestReleaseDate,
                 userNotes = mergedNotes,
                 importSource = mergedSource,
+                isStarred = isStarred,
                 updatedAt = System.currentTimeMillis()
             )
 

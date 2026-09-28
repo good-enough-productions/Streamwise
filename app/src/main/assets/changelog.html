@@ -21,12 +21,18 @@
 
     <div class="change-section">
         <h2><span class="version-badge">v1.6.5</span> <span class="date">September 2026</span></h2>
-        <h3>First-Launch 3-Step Setup Wizard, Welcoming Empty States & Settings Reorganization</h3>
+        <h3>First-Launch 3-Step Setup Wizard, Watchlist Priority Stars & Enhanced Rotation Advisor</h3>
         <ul>
             <li><strong>First-Launch 3-Step Onboarding Wizard:</strong> Welcomes first-time cinephiles on cold start with a warm 3-step setup guide: personalize your display name, connect Letterboxd with live RSS sync, add a free TMDB key with 1-tap browser links, and choose active streaming subscriptions. Re-launch anytime from Settings Guides or the Watchlist empty state.</li>
             <li><strong>Welcoming Empty State & Quick CTAs:</strong> Replaced the cold "No titles found" dead-end with an inviting onboarding card featuring 1-tap buttons to import Letterboxd watchlists, add films manually, link free TMDB API keys, or run the setup wizard.</li>
             <li><strong>Settings Reorganization:</strong> Cleaned up the Profile tab by moving technical Google Sheet webhook settings into a collapsible "Advanced & Developer Settings" card in System tab. Added direct "Get API Key" hyperlinks for TMDB, Gemini, and Watchmode.</li>
             <li><strong>Dynamic App Versioning:</strong> Upgraded the in-app OTA release card to dynamically reflect current build version name and code from Gradle.</li>
+            <li><strong>Watchlist Priority Star System (<code>isStarred</code>):</strong> Seamlessly tag must-watch films as high priorities among 1,000+ watchlist items. Instant 1-tap star toggling is available on Poster Grids, Media Cards, Spotlight Cards, Service Detail sheets, and the Movie Details sheet.</li>
+            <li><strong>Database Schema Migration (v9 &rarr; v10):</strong> Added persistent <code>isStarred</code> Room column with safe database migration and deduplication retention. Starred films are inherently protected from any automated cleanup sweeps.</li>
+            <li><strong>Dedicated Priorities Watchlist Sub-Tab & Sort:</strong> Introduced a prominent <code>⭐ Priorities (X)</code> tab directly in the Watchlist filter ribbon, alongside a new <code>⭐ Priorities First</code> sorting option.</li>
+            <li><strong>Priority-Aware Streaming Service Evaluation:</strong> The <em>My Services</em> dashboard now calculates priority counts on each platform (e.g. <code>⭐ 2 Priority • 30 Watchlist Titles</code>). Active and inactive cards clearly highlight where high-priority movies reside.</li>
+            <li><strong>Single-Service Rotation Advisor Optimization:</strong> The rotation advisor now factors priority counts when picking the top recommendation, ensuring users aren't directed to keep an expensive service active simply because of raw backlog volume when few titles are exciting.</li>
+            <li><strong>Service Detail Sheet Priority Filter:</strong> Tapping any streaming provider now offers an instant <code>⭐ Priorities Only</code> filter chip and inline star toggles to curate service-specific queues.</li>
         </ul>
     </div>
 

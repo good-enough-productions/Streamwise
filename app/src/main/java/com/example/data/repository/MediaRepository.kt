@@ -55,6 +55,10 @@ class MediaRepository(val mediaDao: MediaDao) {
         mediaDao.updateMediaItem(item)
     }
 
+    suspend fun updateStarredStatus(id: Long, isStarred: Boolean) {
+        mediaDao.updateStarredStatus(id, isStarred)
+    }
+
     suspend fun updateMediaItems(items: List<MediaItem>) {
         mediaDao.updateMediaItems(items)
     }

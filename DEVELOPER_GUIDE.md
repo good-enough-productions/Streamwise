@@ -427,6 +427,7 @@ Architecture updates addressing mobile visual density and couch-first discovery:
 ### 4. Background Synthesis Integration
 - `AvailabilitySyncWorker` leverages `AiMeshCoordinator.resolveActiveNode()` during scheduled 4-hour passes, routing movie research card generation to the highest-throughput active workstation node.
 
+<<<<<<< Updated upstream
 ## 13. First-Launch Onboarding & Setup Wizard Architecture (v1.6.5)
 
 ### 1. Persistence & State Machine
@@ -455,4 +456,48 @@ Architecture updates addressing mobile visual density and couch-first discovery:
 - **Guides Tab**: Features a 1-tap "First-Run Setup Wizard" card allowing users to re-run the 3-step walkthrough anytime.
 - **System Tab**: Dynamic version string (`v${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})`), 1-tap browser links for TMDB and Gemini developer portals, and a collapsible "Advanced & Developer Settings" card isolating Watchmode API keys, Google Sheets webhooks, multi-machine AI mesh IP addresses, and GitHub PATs.
 
+## 14. Watchlist Priority Stars & Priority-Aware Rotation Advisor Architecture (v1.6.5)
+
+### 1. Problem & Core Intent
+- Users often curate watchlists exceeding 1,000+ films. While expansive queues are valuable, realistic viewing is driven by a smaller set of high-excitement priorities.
+- Raw backlog counts can produce misleading service evaluation (e.g. Netflix showing 30 movies, but only 2 that the user is eager to watch, while Prime Video has 15 movies with 10 high-priority titles).
+- StreamWise v1.6.5 introduces a native priority signal (`isStarred`) across the entire stack—from Room persistence to reactive UI toggles, dedicated filtering/sorting, and priority-weighted subscription rotation analysis.
+
+### 2. Room Database Architecture & Migration (v9 -> v10)
+- **Schema Update (`MediaItem.kt`)**: Added `val isStarred: Boolean = false`.
+- **Zero Data-Loss Protection**: Starred items are explicitly immune from cleanup or unmatchable sweeps via `isUserProtected`:
+  ```kotlin
+  val isUserProtected: Boolean
+      get() = customNotes != null || !userNotes.isNullOrBlank() || customProviders != null || isStarred
+  ```
+- **Migration Strategy (`AppDatabase.kt`)**:
+  ```kotlin
+  val MIGRATION_9_10 = object : Migration(9, 10) {
+      override fun migrate(db: SupportSQLiteDatabase) {
+          db.execSQL("ALTER TABLE media_items ADD COLUMN isStarred INTEGER NOT NULL DEFAULT 0")
+      }
+  }
+  ```
+- **Merge Deduplication (`MediaDao.kt`)**: During deduplication, if either conflicting row was starred, the merged result retains `isStarred = true`.
+
+### 3. UI Toggles & Reactive Feedback Loop
+- **1-Tap Toggles**: Provided on Poster Grid items (`PosterGridItem`), Detailed Cards (`MediaItemCard`), Movie Details (`MovieDetailsBottomSheet`), Spotlight Carousel (`SpotlightCard`), and Service Detail sheets (`ServiceDetailBottomSheet`).
+- **Reactive Toast**: Toggling stars triggers an immediate confirmation toast:
+  - `"Marked [Title] as priority ⭐"`
+  - `"Removed [Title] from priorities"`
+- **Dedicated Watchlist Sub-Tab & Sort**:
+  - `⭐ Priorities (X)` tab in `ScrollableTabRow`.
+  - `⭐ Priorities First` option in the Sort Selector dropdown (`sortBy = "priority"`), sorting by `isStarred` descending, then rating descending, then title.
+
+### 4. Priority-Weighted Streaming Service Evaluation
+- **My Services (`MonthlyRoiContent`)**:
+  - Computes `priorityCount` alongside `totalCount` for each platform:
+    `val (priorityCount, queueCount) = ...`
+  - Active and inactive provider cards display live priority badges (e.g. `⭐ 2 Priority • 🎬 30 in Watchlist`).
+- **Enhanced Single-Service Rotation Advisor**:
+  - Sorts platforms by `priorityCount` descending first, then total volume:
+    `sortedWith(compareByDescending { it.second }.thenByDescending { it.third })`
+  - Explicitly highlights priority volume in recommendation advice text.
+- **Service Detail Sheet (`ServiceDetailBottomSheet`)**:
+  - Features a `⭐ Priorities Only (X)` filter chip and per-title star toggle buttons to curate service-specific queues.
 

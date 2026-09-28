@@ -1619,7 +1619,8 @@ class StreamViewModel(
         associatedProviders: List<String>,
         userNotes: String? = null,
         importSource: String? = null,
-        targetStatus: String = MediaStatus.WATCHLIST.name
+        targetStatus: String = MediaStatus.WATCHLIST.name,
+        isStarred: Boolean = false
     ) {
         viewModelScope.launch {
             val titles = multilineTitles
@@ -1646,7 +1647,8 @@ class StreamViewModel(
                     userNotes = userNotes?.trim()?.ifBlank { null },
                     importSource = resolvedSource,
                     releaseDate = extractedYear,
-                    watchedAt = if (isWatched) now else null
+                    watchedAt = if (isWatched) now else null,
+                    isStarred = if (isWatched) false else isStarred
                 )
                 val newId = repository.insertMediaItem(item)
                 if (isWatched) {
@@ -2219,6 +2221,22 @@ class StreamViewModel(
     fun updateMediaItem(item: MediaItem) {
         viewModelScope.launch(Dispatchers.IO) {
             repository.updateMediaItem(item)
+        }
+    }
+
+    /**
+     * Toggles priority star status for a media item.
+     * Updates Room datastore and delivers an immediate reactive feedback toast.
+     */
+    fun toggleStarred(item: MediaItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val newStarred = !item.isStarred
+            val updated = item.copy(
+                isStarred = newStarred,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateMediaItem(updated)
+            _statusMessage.value = if (newStarred) "⭐ Tagged \"${item.title}\" as Priority" else "Removed \"${item.title}\" from Priorities"
         }
     }
 

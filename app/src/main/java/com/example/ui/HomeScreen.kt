@@ -350,6 +350,7 @@ fun HomeScreen(
                         filterOnlyMyServices = filterOnlyMyServices,
                         onFilterToggle = { filterOnlyMyServices = it },
                         onWatchClick = { viewModel.launchAndIntendToWatch(context, it) },
+                        onToggleStarred = { viewModel.toggleStarred(it) },
                         onDeleteClick = { itemPendingRemoval = it },
                         onMarkWatchedClick = { movieToMarkWatched = it },
                         onSyncClick = { viewModel.triggerImmediateSync(force = true) },
@@ -442,8 +443,8 @@ fun HomeScreen(
             AddMediaDialog(
                 allProviders = allProviders,
                 onDismiss = { showAddDialog = false },
-                onAdd = { titlesInput, selectedProviderIds, notes, source, targetStatus ->
-                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source, targetStatus)
+                onAdd = { titlesInput, selectedProviderIds, notes, source, targetStatus, isStarred ->
+                    viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source, targetStatus, isStarred)
                     showAddDialog = false
                 }
             )
@@ -651,6 +652,9 @@ fun HomeScreen(
                 onMarkWatched = { movie ->
                     movieToMarkWatched = movie
                 },
+                onToggleStarred = { movie ->
+                    viewModel.toggleStarred(movie)
+                },
                 onUpdateProvider = { updated ->
                     viewModel.updateStreamingProvider(updated)
                     showServiceDetailProvider = null
@@ -784,6 +788,10 @@ fun HomeScreen(
                     detailMovieItem = null
                     if (m != null) viewModel.launchAndIntendToWatch(context, m)
                 },
+                onToggleStarred = { itemToToggle ->
+                    detailMovieItem = itemToToggle.copy(isStarred = !itemToToggle.isStarred)
+                    viewModel.toggleStarred(itemToToggle)
+                },
                 onDeleteClick = {
                     val m = detailMovieItem
                     detailMovieItem = null
@@ -895,6 +903,31 @@ fun SpotlightCard(
                         }
                     }
                 }
+
+                // Top-left Priority badge
+                if (item.isStarred) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFFFFB800),
+                        modifier = Modifier
+                            .padding(6.dp)
+                            .align(Alignment.TopStart)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Star, null, tint = Color.Black, modifier = Modifier.size(9.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = "PRIORITY",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -966,7 +999,8 @@ fun PosterGridItem(
     onWatchClick: () -> Unit,
     onMovieClick: () -> Unit,
     activeOrFreeProviderIds: Set<String>? = null,
-    providerMap: Map<String, StreamingProvider>? = null
+    providerMap: Map<String, StreamingProvider>? = null,
+    onToggleStarred: () -> Unit = {}
 ) {
     val activeOrFreeProvider = remember(item.providerIds, allProviders) {
         val activeIds = activeOrFreeProviderIds ?: allProviders.filter { it.isActive || it.costPerMonth == 0.0 }.map { it.id }.toSet()
@@ -1041,24 +1075,49 @@ fun PosterGridItem(
                     }
                 }
 
-                // Top-right quick launch button (Direct TV/App Launch)
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                // Top-right quick action controls: Priority Star toggle + Direct TV/App Launch
+                Row(
                     modifier = Modifier
                         .padding(4.dp)
-                        .size(26.dp)
-                        .align(Alignment.TopEnd)
-                        .clickable { onWatchClick() },
-                    shadowElevation = 4.dp
+                        .align(Alignment.TopEnd),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = "Watch now",
-                            modifier = Modifier.size(15.dp).offset(x = 1.dp)
-                        )
+                    Surface(
+                        shape = CircleShape,
+                        color = if (item.isStarred) Color(0xFFFFB800) else Color.Black.copy(alpha = 0.65f),
+                        contentColor = if (item.isStarred) Color.Black else Color.White,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clickable { onToggleStarred() },
+                        shadowElevation = 4.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = if (item.isStarred) Icons.Default.Star else Icons.Outlined.StarOutline,
+                                contentDescription = if (item.isStarred) "Priority title" else "Mark as priority",
+                                modifier = Modifier.size(15.dp),
+                                tint = if (item.isStarred) Color.Black else Color(0xFFFFD700)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clickable { onWatchClick() },
+                        shadowElevation = 4.dp
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Watch now",
+                                modifier = Modifier.size(15.dp).offset(x = 1.dp)
+                            )
+                        }
                     }
                 }
 
@@ -1154,7 +1213,8 @@ fun WatchlistTabContent(
     onToggleGridView: () -> Unit = {},
     onAddTitleClick: () -> Unit = {},
     onImportLetterboxdClick: () -> Unit = {},
-    onStartOnboardingClick: () -> Unit = {}
+    onStartOnboardingClick: () -> Unit = {},
+    onToggleStarred: (MediaItem) -> Unit = {}
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -1169,8 +1229,16 @@ fun WatchlistTabContent(
         allProviders.associateBy { it.id }
     }
 
-    // Letterboxd-Style Top Sub-Tabs (Ready on My Subs, All Saved, Under 100m, Podcast Picks)
-    var watchlistSubTab by remember { mutableStateOf("ready") } // "ready", "all", "short", "podcasts"
+    // Letterboxd-Style Top Sub-Tabs (Ready on My Subs, All Saved, Priorities, Under 100m, Podcast Picks)
+    var watchlistSubTab by remember { mutableStateOf("ready") } // "ready", "all", "starred", "short", "podcasts"
+
+    val starredCount = remember(watchlistItems) {
+        watchlistItems.count { item ->
+            item.status != MediaStatus.WATCHED.name &&
+            item.isStarred &&
+            (item.isUserProtected || !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title))
+        }
+    }
 
     val readyCount = remember(watchlistItems, activeProviderIds, freeProviderIds) {
         watchlistItems.count { item ->
@@ -1256,6 +1324,9 @@ fun WatchlistTabContent(
                     if (item.tmdbId != null && provs.none { activeProviderIds.contains(it) || freeProviderIds.contains(it) }) {
                         return@filter false
                     }
+                }
+                "starred" -> {
+                    if (!item.isStarred) return@filter false
                 }
                 "short" -> {
                     // Under 100m runtime filter
@@ -1360,6 +1431,10 @@ fun WatchlistTabContent(
             items = items.filter { it.title.contains(searchQuery, ignoreCase = true) }
         }
         when (sortBy) {
+            "priority" -> items.sortedWith(
+                compareByDescending<MediaItem> { it.isStarred }
+                    .thenByDescending { it.addedAt }
+            )
             "alpha" -> items.sortedBy { it.title.lowercase() }
             "rating" -> items.sortedByDescending { it.rating ?: 0.0 }
             else -> items.sortedByDescending { it.addedAt }
@@ -1475,13 +1550,14 @@ fun WatchlistTabContent(
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
-                        // 2a. Letterboxd Sub-Tabs (Ready on Subs, All Saved, Under 100m, Podcast Picks)
+                        // 2a. Letterboxd Sub-Tabs (Ready on Subs, All Saved, Priorities, Under 100m, Podcast Picks)
                         ScrollableTabRow(
                             selectedTabIndex = when (watchlistSubTab) {
                                 "ready" -> 0
                                 "all" -> 1
-                                "short" -> 2
-                                "podcasts" -> 3
+                                "starred" -> 2
+                                "short" -> 3
+                                "podcasts" -> 4
                                 else -> 0
                             },
                             edgePadding = 0.dp,
@@ -1513,6 +1589,18 @@ fun WatchlistTabContent(
                                         fontWeight = if (watchlistSubTab == "all") FontWeight.Bold else FontWeight.Normal,
                                         fontSize = 12.sp,
                                         color = if (watchlistSubTab == "all") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
+                            Tab(
+                                selected = watchlistSubTab == "starred",
+                                onClick = { watchlistSubTab = "starred" },
+                                text = {
+                                    Text(
+                                        "⭐ Priorities ($starredCount)",
+                                        fontWeight = if (watchlistSubTab == "starred") FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        color = if (watchlistSubTab == "starred") Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             )
@@ -1588,6 +1676,7 @@ fun WatchlistTabContent(
                                     contentPadding = PaddingValues(horizontal = 8.dp)
                                 ) {
                                     val sortLabel = when (sortBy) {
+                                        "priority" -> "⭐ Priority"
                                         "alpha" -> "A-Z"
                                         "rating" -> "Rating"
                                         else -> "Recent"
@@ -1600,6 +1689,13 @@ fun WatchlistTabContent(
                                     expanded = sortExpanded,
                                     onDismissRequest = { sortExpanded = false }
                                 ) {
+                                    DropdownMenuItem(
+                                        text = { Text("⭐ Priorities First") },
+                                        onClick = {
+                                            sortBy = "priority"
+                                            sortExpanded = false
+                                        }
+                                    )
                                     DropdownMenuItem(
                                         text = { Text("Recently Added") },
                                         onClick = {
@@ -1884,6 +1980,7 @@ fun WatchlistTabContent(
                                         allProviders = allProviders,
                                         onWatchClick = { onWatchClick(movie) },
                                         onMovieClick = { onMovieClick(movie) },
+                                        onToggleStarred = { onToggleStarred(movie) },
                                         activeOrFreeProviderIds = activeOrFreeProviderIds,
                                         providerMap = providerMap
                                     )
@@ -1901,6 +1998,7 @@ fun WatchlistTabContent(
                                 item = item,
                                 allProviders = allProviders,
                                 onWatchClick = { onWatchClick(item) },
+                                onToggleStarred = { onToggleStarred(item) },
                                 onMarkWatchedClick = onMarkWatchedClick?.let { cb -> { cb(item) } },
                                 onDeleteClick = { onDeleteClick(item) },
                                 onMovieClick = { onMovieClick(item) }
@@ -2254,7 +2352,8 @@ fun MediaItemCard(
     onWatchClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onMovieClick: () -> Unit,
-    onMarkWatchedClick: (() -> Unit)? = null
+    onMarkWatchedClick: (() -> Unit)? = null,
+    onToggleStarred: () -> Unit = {}
 ) {
     val activeSubscribedIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -2309,13 +2408,48 @@ fun MediaItemCard(
                             modifier = Modifier.weight(1f)
                         )
 
-                        IconButton(onClick = onDeleteClick, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Delete item",
-                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                                modifier = Modifier.size(18.dp)
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = onToggleStarred, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = if (item.isStarred) Icons.Default.Star else Icons.Outlined.StarOutline,
+                                    contentDescription = if (item.isStarred) "Priority title" else "Mark as priority",
+                                    tint = if (item.isStarred) Color(0xFFFFB800) else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            IconButton(onClick = onDeleteClick, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Delete item",
+                                    tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Priority Badge
+                    if (item.isStarred) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFFFFB800).copy(alpha = 0.18f),
+                            border = BorderStroke(1.dp, Color(0xFFFFB800).copy(alpha = 0.35f)),
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Star, null, tint = Color(0xFFFFB800), modifier = Modifier.size(10.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    "PRIORITY",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFFFFB800),
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
                         }
                     }
 
@@ -3842,11 +3976,13 @@ fun MonthlyRoiContent(
 
     val serviceQueuedCounts = remember(activeSubscribed, watchlistItems) {
         activeSubscribed.map { p ->
-            val count = watchlistItems.count { item ->
+            val matchingItems = watchlistItems.filter { item ->
                 item.providersList.any { it.equals(p.id, ignoreCase = true) || it.contains(p.name, ignoreCase = true) }
             }
-            p to count
-        }.sortedByDescending { it.second }
+            val priorityCount = matchingItems.count { it.isStarred }
+            val totalCount = matchingItems.size
+            Triple(p, priorityCount, totalCount)
+        }.sortedWith(compareByDescending<Triple<StreamingProvider, Int, Int>> { it.second }.thenByDescending { it.third })
     }
     val topQueued = serviceQueuedCounts.firstOrNull()
     val singleServiceCost = topQueued?.first?.costPerMonth ?: (activeSubscribed.maxOfOrNull { it.costPerMonth } ?: 15.99)
@@ -4048,8 +4184,9 @@ fun MonthlyRoiContent(
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.2f))
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
-                                if (topQueued != null && topQueued.second > 0) {
-                                    val monthsSupply = if (velocity > 0f) (topQueued.second / velocity).roundToInt().coerceAtLeast(1) else 1
+                                if (topQueued != null && topQueued.third > 0) {
+                                    val monthsSupply = if (velocity > 0f) (topQueued.third / velocity).roundToInt().coerceAtLeast(1) else 1
+                                    val prioritySnippet = if (topQueued.second > 0) "${topQueued.second} ⭐ priority (${topQueued.third} total)" else "${topQueued.third}"
                                     Text(
                                         "🎯 Top Rotation Pick: ${topQueued.first.name}",
                                         style = MaterialTheme.typography.labelMedium,
@@ -4058,7 +4195,7 @@ fun MonthlyRoiContent(
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        "You have ${topQueued.second} watchlist titles on ${topQueued.first.name} (~$monthsSupply months of backlog at your ~${String.format(Locale.US, "%.1f", velocity)} films/mo pace). Keep ${topQueued.first.name} active, pause the other ${activeSubscribed.size - 1} services, and save ~$${String.format(Locale.US, "%.0f", potentialMonthlySavings)}/mo with uninterrupted viewing!",
+                                        "You have $prioritySnippet watchlist titles on ${topQueued.first.name} (~$monthsSupply months of backlog at your ~${String.format(Locale.US, "%.1f", velocity)} films/mo pace). Keep ${topQueued.first.name} active, pause the other ${activeSubscribed.size - 1} services, and save ~$${String.format(Locale.US, "%.0f", potentialMonthlySavings)}/mo with uninterrupted viewing!",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -4187,21 +4324,42 @@ fun MonthlyRoiContent(
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            val queueCount = remember(watchlistItems, provider.id) {
-                                watchlistItems.count { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
+                            val (priorityCount, queueCount) = remember(watchlistItems, provider.id) {
+                                val pItems = watchlistItems.filter { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
+                                pItems.count { it.isStarred } to pItems.size
                             }
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = if (queueCount > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = if (queueCount > 0) "🎬 $queueCount Watchlist Titles" else "0 in Watchlist",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (queueCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                                if (priorityCount > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFFFFD700).copy(alpha = 0.2f),
+                                        border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            text = "⭐ $priorityCount Priority",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFFFD700),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (queueCount > 0) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                ) {
+                                    Text(
+                                        text = if (queueCount > 0) "🎬 $queueCount Watchlist Titles" else "0 in Watchlist",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (queueCount > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
                             }
                         }
 
@@ -4244,8 +4402,9 @@ fun MonthlyRoiContent(
             }
 
             items(inactiveProviders, key = { it.id }) { provider ->
-                val queueCount = remember(watchlistItems, provider.id) {
-                    watchlistItems.count { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
+                val (inactivePriorityCount, inactiveQueueCount) = remember(watchlistItems, provider.id) {
+                    val pItems = watchlistItems.filter { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
+                    pItems.count { it.isStarred } to pItems.size
                 }
                 Card(
                     modifier = Modifier
@@ -4265,13 +4424,28 @@ fun MonthlyRoiContent(
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(provider.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                if (queueCount > 0) {
+                                if (inactivePriorityCount > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color(0xFFFFD700).copy(alpha = 0.2f),
+                                        border = BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            "⭐ $inactivePriorityCount Priority",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFFFD700),
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                                if (inactiveQueueCount > 0) {
                                     Surface(
                                         shape = RoundedCornerShape(4.dp),
                                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
                                     ) {
                                         Text(
-                                            "🎬 $queueCount Queued",
+                                            "🎬 $inactiveQueueCount Queued",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -4408,12 +4582,13 @@ fun ManageServicesTabContent(
 fun AddMediaDialog(
     allProviders: List<StreamingProvider>,
     onDismiss: () -> Unit,
-    onAdd: (String, List<String>, String?, String?, String) -> Unit
+    onAdd: (String, List<String>, String?, String?, String, Boolean) -> Unit
 ) {
     var titlesInput by remember { mutableStateOf("") }
     var userNotes by remember { mutableStateOf("") }
     var importSource by remember { mutableStateOf("") }
     var targetStatus by remember { mutableStateOf(MediaStatus.WATCHLIST.name) }
+    var isStarred by remember { mutableStateOf(false) }
     val selectedProviders = remember { mutableStateListOf<String>() }
     val parsedTitles = remember(titlesInput) {
         titlesInput
@@ -4453,6 +4628,27 @@ fun AddMediaDialog(
                             { Icon(Icons.Default.Check, null, modifier = Modifier.size(14.dp)) }
                         } else null,
                         modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Priority Star Toggle (Only for Watchlist)
+                if (targetStatus == MediaStatus.WATCHLIST.name) {
+                    FilterChip(
+                        selected = isStarred,
+                        onClick = { isStarred = !isStarred },
+                        label = {
+                            Text(
+                                text = if (isStarred) "⭐ Tagged as Priority" else "⭐ Mark as Priority",
+                                fontSize = 12.sp,
+                                fontWeight = if (isStarred) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isStarred) Color(0xFFFFB800) else MaterialTheme.colorScheme.onSurface
+                            )
+                        },
+                        leadingIcon = if (isStarred) {
+                            { Icon(Icons.Default.Star, null, tint = Color(0xFFFFB800), modifier = Modifier.size(14.dp)) }
+                        } else null,
+                        border = if (isStarred) BorderStroke(1.dp, Color(0xFFFFB800).copy(alpha = 0.5f)) else null,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
@@ -4570,14 +4766,15 @@ fun AddMediaDialog(
             Button(
                 onClick = {
                     if (parsedTitles.isNotEmpty()) {
-                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource, targetStatus)
+                        onAdd(titlesInput, selectedProviders.toList(), userNotes, importSource, targetStatus, isStarred)
                     }
                 },
                 enabled = parsedTitles.isNotEmpty(),
                 modifier = Modifier.testTag("add_dialog_confirm")
             ) {
                 val dest = if (targetStatus == MediaStatus.WATCHED.name) "Watched Vault" else "Watchlist"
-                Text(if (parsedTitles.size > 1) "Add ${parsedTitles.size} Titles to $dest" else "Add to $dest")
+                val starPrefix = if (isStarred && targetStatus == MediaStatus.WATCHLIST.name) "⭐ " else ""
+                Text(if (parsedTitles.size > 1) "Add ${parsedTitles.size} Titles to $dest" else "${starPrefix}Add to $dest")
             }
         },
         dismissButton = {
@@ -4965,6 +5162,7 @@ fun ServiceDetailBottomSheet(
     onSelectMovie: (MediaItem) -> Unit = {},
     onWatchMovie: ((MediaItem) -> Unit)? = null,
     onMarkWatched: ((MediaItem) -> Unit)? = null,
+    onToggleStarred: ((MediaItem) -> Unit)? = null,
     onUpdateProvider: (StreamingProvider) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -5203,13 +5401,22 @@ fun ServiceDetailBottomSheet(
             val availableWatchlist = remember(watchlistItems, provider.id) {
                 watchlistItems.filter { it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) } }
             }
+            val priorityWatchlistCount = remember(availableWatchlist) {
+                availableWatchlist.count { it.isStarred }
+            }
+            var filterPrioritiesOnly by remember { mutableStateOf(false) }
+
             val availableWatched = remember(watchedItems, provider.id) {
                 watchedItems.filter {
                     it.providersList.any { p -> p.equals(provider.id, ignoreCase = true) }
                 }
             }
 
-            val currentLibraryList = if (libraryTab == 0) availableWatchlist else availableWatched
+            val currentLibraryList = remember(libraryTab, availableWatchlist, availableWatched, filterPrioritiesOnly) {
+                if (libraryTab == 0) {
+                    if (filterPrioritiesOnly) availableWatchlist.filter { it.isStarred } else availableWatchlist
+                } else availableWatched
+            }
             val filteredLibraryList = remember(currentLibraryList, librarySearchQuery) {
                 if (librarySearchQuery.isBlank()) currentLibraryList
                 else currentLibraryList.filter {
@@ -5305,6 +5512,33 @@ fun ServiceDetailBottomSheet(
                                 modifier = Modifier.padding(vertical = 6.dp)
                             )
                         }
+                    }
+
+                    // Optional Priority Filter Chip
+                    if (libraryTab == 0 && priorityWatchlistCount > 0) {
+                        FilterChip(
+                            selected = filterPrioritiesOnly,
+                            onClick = { filterPrioritiesOnly = !filterPrioritiesOnly },
+                            label = {
+                                Text(
+                                    "⭐ Priorities Only ($priorityWatchlistCount)",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (filterPrioritiesOnly) FontWeight.Bold else FontWeight.Normal
+                                )
+                            },
+                            leadingIcon = if (filterPrioritiesOnly) {
+                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                            } else null,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFFFD700).copy(alpha = 0.25f),
+                                selectedLabelColor = Color(0xFFFFD700)
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = filterPrioritiesOnly,
+                                borderColor = if (filterPrioritiesOnly) Color(0xFFFFD700) else MaterialTheme.colorScheme.outlineVariant
+                            )
+                        )
                     }
 
                     // Search input for service titles
@@ -5426,6 +5660,20 @@ fun ServiceDetailBottomSheet(
                                                 color = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.padding(end = 4.dp)
                                             )
+                                        }
+
+                                        if (onToggleStarred != null && libraryTab == 0) {
+                                            IconButton(
+                                                onClick = { onToggleStarred(item) },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (item.isStarred) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                                    contentDescription = if (item.isStarred) "Unstar priority" else "Mark priority",
+                                                    tint = if (item.isStarred) Color(0xFFFFD700) else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
 
                                         if (onWatchMovie != null) {
@@ -7418,6 +7666,7 @@ fun MovieDetailsBottomSheet(
     onDismiss: () -> Unit,
     onWatchClick: () -> Unit,
     onDeleteClick: () -> Unit,
+    onToggleStarred: ((MediaItem) -> Unit)? = null,
     onMarkWatchedClick: (() -> Unit)? = null,
     onMoveToWatchlistClick: (() -> Unit)? = null,
     onEditWatchDateClick: (() -> Unit)? = null,
@@ -7459,12 +7708,32 @@ fun MovieDetailsBottomSheet(
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = item.title,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (onToggleStarred != null) {
+                            IconButton(
+                                onClick = { onToggleStarred(item) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (item.isStarred) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                    contentDescription = if (item.isStarred) "Remove Priority" else "Mark Priority",
+                                    tint = if (item.isStarred) Color(0xFFFFD700) else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -7494,17 +7763,37 @@ fun MovieDetailsBottomSheet(
                         MediaStatus.WATCHED.name -> "Watched!"
                         else -> item.status
                     }
-                    Badge(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = statusLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            maxLines = 1,
-                            softWrap = false
-                        )
+                        Badge(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ) {
+                            Text(
+                                text = statusLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                        if (item.isStarred) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color(0xFFFFD700),
+                                modifier = Modifier.padding(vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "⭐ PRIORITY",
+                                    color = Color.Black,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }

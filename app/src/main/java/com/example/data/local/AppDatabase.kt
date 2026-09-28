@@ -17,7 +17,7 @@ import java.io.InputStreamReader
 
 @Database(
     entities = [MediaItem::class, StreamingProvider::class, WatchSession::class],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "stream_manager_database"
                 )
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                 .fallbackToDestructiveMigration()
                 .addCallback(DatabaseCallback(context.applicationContext, scope))
                 .build()
@@ -111,6 +111,12 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("UPDATE media_items SET userNotes = substr(userNotes, 1, 300) WHERE length(userNotes) > 300")
                 db.execSQL("UPDATE media_items SET overview = substr(overview, 1, 300) WHERE length(overview) > 300")
                 db.execSQL("UPDATE media_items SET trivia = NULL WHERE trivia IS NOT NULL")
+            }
+        }
+
+        private val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE media_items ADD COLUMN isStarred INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

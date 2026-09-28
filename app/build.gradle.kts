@@ -14,8 +14,8 @@ android {
     applicationId = "com.goodenoughproductions.streamwise"
     minSdk = 24
     targetSdk = 36
-    versionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 164
-    versionName = project.findProperty("versionName")?.toString() ?: "1.6.4"
+    versionCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 165
+    versionName = project.findProperty("versionName")?.toString() ?: "1.6.5"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

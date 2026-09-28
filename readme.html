@@ -1,276 +1,475 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Streamwise - Deep Review Documentation</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 960px; margin: 0 auto; padding: 20px; }
-        h1, h2, h3 { color: #2c3e50; }
-        h1 { border-bottom: 3px solid #2c3e50; padding-bottom: 10px; }
-        h2 { border-bottom: 1px solid #ddd; padding-bottom: 6px; margin-top: 0; }
-        code { background: #f4f4f4; padding: 2px 5px; border-radius: 4px; font-family: monospace; }
-        pre { background: #1e1e2e; color: #cdd6f4; padding: 16px; border-radius: 8px; overflow-x: auto; font-family: monospace; font-size: 0.9em; }
-        .section { background: #fff; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .tag { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: bold; margin-right: 5px; }
-        .tag.current  { background: #d4edda; color: #155724; }
-        .tag.backlog  { background: #fff3cd; color: #856404; }
-        .tag.broken   { background: #f8d7da; color: #721c24; }
-        .tag.fixed    { background: #cfe2ff; color: #084298; }
-        .tag.new      { background: #e2d9f3; color: #432874; }
-        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; vertical-align: top; }
-        th { background-color: #f2f2f2; font-weight: 600; }
-        .changelog-entry { border-left: 4px solid #2c3e50; padding: 10px 16px; margin-bottom: 12px; background: #fafafa; border-radius: 0 8px 8px 0; }
-        .changelog-entry h3 { margin: 0 0 6px 0; font-size: 1em; color: #2c3e50; }
-        .changelog-entry p  { margin: 0; font-size: 0.92em; color: #555; }
-        .commit-hash { font-family: monospace; font-size: 0.8em; background: #eee; padding: 2px 6px; border-radius: 4px; color: #444; }
-        .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 12px; }
-        .alert.info    { background: #cfe2ff; border: 1px solid #9ec5fe; color: #084298; }
-        .alert.warning { background: #fff3cd; border: 1px solid #ffecb5; color: #664d03; }
-        .alert.success { background: #d1e7dd; border: 1px solid #a3cfbb; color: #0a3622; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🎬 Streamwise</title>
+  <style>
+    :root {
+      --bg: #0f111a;
+      --card-bg: rgba(26, 29, 45, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-glow: rgba(137, 180, 250, 0.25);
+      --accent: #89b4fa;
+      --accent-green: #a6e3a1;
+      --accent-yellow: #f9e2af;
+      --accent-purple: #cba6f7;
+      --accent-red: #f38ba8;
+      --text: #cdd6f4;
+      --text-muted: #a6adc8;
+      --code-bg: #1e1e2e;
+      --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      padding: 24px;
+      line-height: 1.6;
+      background-image: radial-gradient(circle at 10% 20%, rgba(137, 180, 250, 0.04) 0%, transparent 40%),
+                        radial-gradient(circle at 90% 80%, rgba(166, 227, 161, 0.04) 0%, transparent 40%);
+      min-height: 100vh;
+    }
+    .nav-bar {
+      max-width: 900px;
+      margin: 0 auto 20px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: rgba(137, 180, 250, 0.1);
+      border: 1px solid var(--card-border-glow);
+      transition: all 0.2s ease;
+    }
+    .back-btn:hover {
+      background: rgba(137, 180, 250, 0.2);
+      transform: translateX(-2px);
+    }
+    .doc-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 36px 44px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+    h1, h2, h3, h4, h5, h6 {
+      color: #fff;
+      margin-top: 1.5em;
+      margin-bottom: 0.6em;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+    }
+    h1 {
+      font-size: 28px;
+      margin-top: 0;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-border);
+      color: var(--accent);
+    }
+    h2 {
+      font-size: 22px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 8px;
+    }
+    h3 { font-size: 18px; }
+    p { margin-bottom: 1em; }
+    ul, ol {
+      margin-bottom: 1.2em;
+      padding-left: 24px;
+    }
+    li { margin-bottom: 0.4em; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    blockquote {
+      border-left: 3px solid var(--accent);
+      background: rgba(137, 180, 250, 0.08);
+      padding: 12px 18px;
+      margin: 1.2em 0;
+      border-radius: 0 8px 8px 0;
+      color: var(--text);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+    code {
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 13px;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent-yellow);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      margin: 1.2em 0;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      border: none;
+      color: #f8f8f2;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5em 0;
+      font-size: 13px;
+    }
+    th, td {
+      padding: 10px 14px;
+      border: 1px solid var(--card-border);
+      text-align: left;
+    }
+    th {
+      background: rgba(137, 180, 250, 0.12);
+      color: #fff;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    hr {
+      border: none;
+      height: 1px;
+      background: var(--card-border);
+      margin: 2em 0;
+    }
+    .mermaid {
+      background: rgba(15, 17, 26, 0.6);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 20px;
+      margin: 1.5em 0;
+      display: flex;
+      justify-content: center;
+    }
+    footer {
+      max-width: 900px;
+      margin: 24px auto 0 auto;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function() {
+      mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+    });
+  </script>
 </head>
 <body>
-    <h1>Streamwise — Deep Review Documentation</h1>
-    <p><em>Maximize Watch Hours. Minimize Spent.</em></p>
-    <p style="color:#666; font-size:0.9em;">Last updated: 2026-05-31 &mdash; Post AI Studio export &amp; full local fix session.</p>
+  <div class="nav-bar">
+    <a href="../agent_dashboard.html" class="back-btn">← Back to Cockpit</a>
+    <div class="doc-meta">Generated from <code>README.md</code></div>
+  </div>
 
-    <!-- ============================================================ -->
-    <div class="section">
-        <h2>How-to Guide</h2>
-        <ol>
-            <li><strong>Add Media:</strong> Tap the Floating Action Button (+) to manually add a show or movie to your watchlist, or share a link from IMDb, Letterboxd, or any other source directly to the app using the Android Share sheet.</li>
-            <li><strong>Sync Streaming Availability:</strong> Tap the refresh icon (↺) at the top of the Watchlist tab to immediately trigger a TMDB API lookup for every item in your queue. Real provider data (Netflix, Hulu, Max, etc.) will appear on each card once your TMDB API key is configured.</li>
-            <li><strong>Configure Your TMDB API Key:</strong> Navigate to the <em>Settings</em> tab and paste your key into the "TMDB API Key" field. This key is saved locally in SharedPreferences and used by the background worker.</li>
-            <li><strong>Manage Subscriptions:</strong> Navigate to the <em>My Services</em> tab to toggle your active subscriptions and set their monthly costs for ROI calculations.</li>
-            <li><strong>Start Watching:</strong> On the <em>Watchlist</em> tab, optionally filter titles by "Available on My Services". Tap <em>Watch</em> on any item to flag it as your active viewing intent.</li>
-            <li><strong>Log Sessions:</strong> Next time you open the app after marking an intent, it automatically prompts a check-in sheet. Log the session as Finished, Partial, or Something Else, along with duration.</li>
-            <li><strong>Analyze Budget ROI:</strong> Check the <em>Budget ROI</em> tab to see cost-per-hour for each subscription, with flagging for services under 3 hours/month of tracked use.</li>
-        </ol>
-    </div>
+  <main class="container">
+    <div align="center">
 
-    <!-- ============================================================ -->
-    <div class="section">
-        <h2>Core Tech Stack</h2>
-        <table>
-            <tr><th>Layer</th><th>Technology</th></tr>
-            <tr><td>Platform</td><td>Android (Kotlin, Min SDK 24, Target SDK 36)</td></tr>
-            <tr><td>UI Architecture</td><td>Jetpack Compose with Material 3 Design</td></tr>
-            <tr><td>App Architecture</td><td>MVVM + Clean Architecture Repository Pattern</td></tr>
-            <tr><td>Concurrency &amp; State</td><td>Kotlin Coroutines, StateFlow, ViewModelScope</td></tr>
-            <tr><td>Local Storage</td><td>Room Database — entities: <code>MediaItem</code>, <code>StreamingProvider</code>, <code>WatchSession</code></td></tr>
-            <tr><td>Background Processing</td><td>WorkManager (periodic + one-shot TMDB availability sync)</td></tr>
-            <tr><td>Networking</td><td>Retrofit 2 + OkHttp + Moshi (calling TMDB REST API)</td></tr>
-            <tr><td>Image Loading</td><td>Coil Compose (<code>AsyncImage</code> for TMDB poster artwork)</td></tr>
-            <tr><td>Build System</td><td>Gradle 9.3.1 + Android Gradle Plugin 9.1.1 (Kotlin DSL)</td></tr>
-            <tr><td>Wireless Deployment</td><td>ADB over TLS (Wi-Fi) with <code>deploy.ps1</code> helper script</td></tr>
-        </table>
-    </div>
+# 🎬 Streamwise
+### Maximize watch hours. Minimize streaming costs.
 
-    <!-- ============================================================ -->
-    <div class="section">
-        <h2>Capabilities: Current vs Backlog vs Broken</h2>
-        <table>
-            <tr>
-                <th>Feature</th>
-                <th>Status</th>
-                <th>Details</th>
-            </tr>
-            <tr>
-                <td>Watchlist &amp; Intent Logging</td>
-                <td><span class="tag current">Working</span></td>
-                <td>Add titles manually or via Share sheet. Foreground check-in prompt fires automatically on app resume when an item is flagged <em>INTENDING_TO_WATCH</em>.</td>
-            </tr>
-            <tr>
-                <td>ROI Analyzer &amp; Budgeting</td>
-                <td><span class="tag current">Working</span></td>
-                <td>Cost-per-hour per provider calculated from <code>WatchSession</code> records. Highlights subscriptions below 3 hours/month as cancellation candidates.</td>
-            </tr>
-            <tr>
-                <td>Quick Share Intent (IMDb, Letterboxd, etc.)</td>
-                <td><span class="tag current">Working</span></td>
-                <td>Captures <code>ACTION_SEND</code> intent, parses title/URL from shared text, inserts under <code>PENDING_METADATA</code> status for background enrichment.</td>
-            </tr>
-            <tr>
-                <td>TMDB Metadata + Streaming Availability</td>
-                <td><span class="tag fixed">Fixed this session</span></td>
-                <td>Previously shipped with a mock function that hard-coded fake provider strings. Replaced with real Retrofit calls to <code>search/movie</code> and <code>movie/{id}/watch/providers</code>. Requires a user-supplied TMDB API key in Settings. Results persist to Room; shown as badge chips on each watchlist card.</td>
-            </tr>
-            <tr>
-                <td>Immediate Sync Button (↺)</td>
-                <td><span class="tag new">Added this session</span></td>
-                <td>One-tap <code>IconButton</code> in the Watchlist tab header enqueues a one-shot <code>AvailabilitySyncWorker</code> via WorkManager. Shows a status snackbar immediately on tap.</td>
-            </tr>
-            <tr>
-                <td>Settings Tab (TMDB API Key)</td>
-                <td><span class="tag current">Working</span></td>
-                <td>Runtime key stored in <code>SharedPreferences</code> via <code>UserPreferencesManager</code>. Worker picks up runtime key over build-time key automatically.</td>
-            </tr>
-            <tr>
-                <td>CSV Seed Data (Letterboxd Import)</td>
-                <td><span class="tag fixed">Fixed this session</span></td>
-                <td>Watchlist (33 items) and watch history (285 items) are seeded from bundled <code>assets/watchlist.csv</code> and <code>assets/watched_history.csv</code> on first launch. Database version bump and the <code>onDestructiveMigration</code> override now guarantee re-seeding survives schema wipes without data loss.</td>
-            </tr>
-            <tr>
-                <td>Wireless ADB Deploy Script</td>
-                <td><span class="tag new">Added this session</span></td>
-                <td><code>deploy.ps1</code> in the project root auto-discovers the wireless device via <code>adb devices</code>, installs the debug APK, and immediately launches the app. Run it after any build to push to your phone.</td>
-            </tr>
-            <tr>
-                <td>AI Studio Integration (Gemini)</td>
-                <td><span class="tag broken">Not implemented</span></td>
-                <td>Original <code>README.md</code> references a Gemini API key; Firebase AI dependencies are absent from the build. No Gemini calls exist in source code.</td>
-            </tr>
-            <tr>
-                <td>Cloud Sync &amp; Multi-User</td>
-                <td><span class="tag backlog">Backlog</span></td>
-                <td>Architecture is layered for a Firebase Auth + Firestore backend, but implementation is pending.</td>
-            </tr>
-        </table>
-    </div>
+A free, private, offline-first Android app for movie lovers and cinephiles.  
+Track your watchlist, see where films are actually streaming, sync with Letterboxd, and discover which subscription is worth keeping this month.
 
-    <!-- ============================================================ -->
-    <div class="section">
-        <h2>Session Changelog — AI Studio Export Fix (2026-05-31)</h2>
-        <p>The app was exported from Google AI Studio with several issues that prevented it from building, running, or displaying correct data locally. Below is the full chronological log of everything diagnosed and fixed.</p>
+[![Latest Release](https://img.shields.io/github/v/release/good-enough-productions/Streamwise?color=4CAF50&label=Latest%20Release)](https://github.com/good-enough-productions/Streamwise/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-brightgreen.svg)](https://developer.android.com)
+[![Letterboxd Ready](https://img.shields.io/badge/Letterboxd-Sync%20Ready-ff8000.svg)](https://letterboxd.com)
+[![Privacy First](https://img.shields.io/badge/Privacy-100%25%20Offline%20Local%20DB-9C27B0.svg)](#-100-free--privacy-first)
 
-        <div class="changelog-entry">
-            <h3><span class="commit-hash">b28c28d</span> &nbsp; CI: Fix ADB Deploy to use mDNS Wireless Debugging Auto-Discovery</h3>
-            <p><strong>Problem:</strong> The GitHub Actions workflow referenced a hard-coded IP:port for ADB which becomes stale every time the phone reconnects to Wi-Fi.<br>
-            <strong>Fix:</strong> Rewrote the deploy step to auto-detect the active wireless device serial from <code>adb devices</code> output, matching the mDNS TLS service name (<code>_adb-tls-connect._tcp</code>). Device is now discovered dynamically.</p>
-        </div>
+---
 
-        <div class="changelog-entry">
-            <h3><span class="commit-hash">6e4394e</span> &nbsp; Build: Bump Gradle Wrapper to 9.3.1; Add <code>deploy.ps1</code></h3>
-            <p><strong>Problem:</strong> The project shipped with a Gradle wrapper pinned to 8.11.1, which is incompatible with Android Gradle Plugin 9.1.1. Attempting any local build failed immediately with a version mismatch error.<br>
-            <strong>Fix:</strong> Updated <code>gradle/wrapper/gradle-wrapper.properties</code> to use <code>gradle-9.3.1-bin.zip</code> (the minimum version supported by AGP 9.1.1). Also added <code>deploy.ps1</code> to the project root — a one-command PowerShell script that builds, installs, and launches the app on a wirelessly connected phone.</p>
-        </div>
+</div>
 
-        <div class="changelog-entry">
-            <h3><span class="commit-hash">2c6a8e1 / 957cedd</span> &nbsp; Feat: Real TMDB Integration; Remove Fake Provider Data</h3>
-            <p><strong>Problem:</strong> The AI Studio export contained a function (<code>simulateTmdbWatchProviderLookUp</code>) that randomly assigned fake streaming providers like <code>"netflix,hulu,max"</code> to every item, regardless of actual availability. The Settings tab and TMDB API key input were not wired to any real network calls.<br>
-            <strong>Fix:</strong> Replaced the mock function entirely with a full Retrofit implementation in <code>TmdbApiService.kt</code> and <code>TmdbClient.kt</code>. The <code>AvailabilitySyncWorker</code> now calls TMDB's <code>search/movie</code> endpoint by title, then fetches <code>movie/{id}/watch/providers</code> for US flatrate availability. Provider names are mapped to local IDs (<code>netflix</code>, <code>hulu</code>, <code>max</code>, <code>disney</code>, <code>prime</code>, <code>apple</code>). Results are persisted to Room and shown as colored chips on each card. The worker respects a 1-second rate-limit delay between items.</p>
-        </div>
+<h2 id="why-streamwise">🍿 Why Streamwise?</h2>
+<p>How many times have you sat on your couch, scrolled through streaming menus for 45 minutes, found nothing, and realized you're paying <strong>\$80+ every month</strong> for five different subscriptions you barely use?</p>
+<p>Streaming has become fragmented, expensive, and overwhelming. <strong>Streamwise</strong> is built to put you back in control:</p>
+<ol>
+<li><strong>Centralize your queue</strong>: Keep everything you actually want to watch in one clean, beautiful place.</li>
+<li><strong>Eliminate subscription waste</strong>: See exactly how many movies on your watchlist are streaming on each service.</li>
+<li><strong>The Single-Service Rotation strategy</strong>: Rotate services month-to-month based on your watchlist volume and pocket <strong>\$50–\$70/month in savings</strong>.</li>
+<li><strong>Zero friction</strong>: Tap a movie, hit <strong>Watch</strong>, and it launches straight into the provider's Android app (Netflix, Max, Prime Video, Hulu, Disney+, Tubi, Criterion, etc.).</li>
+</ol>
+<hr />
+<h2 id="quick-start-install-in-30-seconds">⚡ Quick Start: Install in 30 Seconds</h2>
+<p>Streamwise is completely open-source and free. You don't need Android Studio or programming knowledge to use it!</p>
+<h3 id="option-a-direct-apk-download-easiest">Option A: Direct APK Download (Easiest)</h3>
+<ol>
+<li>Grab the latest <strong><code>app-debug.apk</code></strong> from <a href="https://github.com/good-enough-productions/Streamwise/releases/latest"><strong>GitHub Releases</strong></a>.</li>
+<li>Open the downloaded file on your Android phone and tap <strong>Install</strong> <em>(if prompted, allow installing from your browser)</em>.</li>
+<li>Launch Streamwise and start browsing!</li>
+</ol>
+<h3 id="option-b-auto-updates-with-obtainium-recommended">Option B: Auto-Updates with Obtainium (Recommended)</h3>
+<p>If you use <a href="https://github.com/ImranR98/Obtainium"><strong>Obtainium</strong></a> to manage open-source Android apps:
+1. Open Obtainium and tap <strong>Add App</strong>.
+2. Paste: <code>https://github.com/good-enough-productions/Streamwise</code>
+3. Tap <strong>Add</strong>. Obtainium will install the APK and automatically notify you when new updates land!</p>
+<h3 id="option-c-built-in-in-app-updates">Option C: Built-in In-App Updates</h3>
+<p>Streamwise includes an in-app updater. Whenever you open <strong>Settings (<code>⚙️</code>) &gt; Updates &amp; System</strong>, you can check for the latest release and update directly within the app.</p>
+<hr />
+<h2 id="features-youll-love">✨ Features You'll Love</h2>
+<h3 id="1-minute-first-launch-setup-wizard">🚀 1-Minute First-Launch Setup Wizard</h3>
+<ul>
+<li><strong>Zero Confusion Onboarding</strong>: When you open Streamwise for the first time, a friendly 3-step setup wizard introduces the app, connects your Letterboxd account, helps you grab a free TMDB API key in 1 tap, and selects your active streaming services.</li>
+<li><strong>Actionable Empty States</strong>: No intimidating blank screens. The Watchlist and Watched tabs feature warm welcome cards with 1-tap buttons to import Letterboxd CSVs, sync RSS, add movies manually, or re-run the setup guide anytime.</li>
+<li><strong>Reorganizable Settings Hub</strong>: Essential cinephile controls are front-and-center, with developer and advanced tools tucked into a collapsible card.</li>
+</ul>
+<h3 id="the-single-service-rotation-advisor">🔄 The Single-Service Rotation Advisor</h3>
+<ul>
+<li><strong>See where your watchlist actually lives</strong>: View live counts of queued movies per streaming platform (e.g., <code>Max: 95 Titles</code>, <code>Prime Video: 385 Titles</code>).</li>
+<li><strong>Cost-per-hour and ROI</strong>: Track your monthly spend and see what you're paying per hour of entertainment.</li>
+<li><strong>Smart cancellation guidance</strong>: Identifies the service with the deepest backlog so you can binge it for a month, cancel it, and rotate to the next one.</li>
+</ul>
+<h3 id="zero-intermediary-direct-launch">📱 Zero-Intermediary Direct Launch</h3>
+<ul>
+<li>Stop typing movie titles into sluggish TV search bars.</li>
+<li>Tapping <strong>Watch Now</strong> resolves deep links directly into native Android streaming apps across 15+ services (Netflix, Max, Prime Video, Disney+, Hulu, Tubi, Apple TV+, Criterion Channel, Peacock, Paramount+, and more).</li>
+</ul>
+<h3 id="letterboxd-integration">📋 Letterboxd Integration</h3>
+<ul>
+<li><strong>Live RSS Sync</strong>: Enter your Letterboxd username to pull in your latest diary logs and ratings automatically—no API keys required.</li>
+<li><strong>CSV &amp; ZIP Imports</strong>: Import your <code>watchlist.csv</code> and <code>watched.csv</code> data in seconds so you never have to start from scratch.</li>
+<li><strong>Two-Way Export</strong>: Export your queue anytime to standard CSV or linked Markdown notes for personal vaults like Obsidian.</li>
+</ul>
+<h3 id="cinema-podcast-filters">🎙️ Cinema Podcast Filters</h3>
+<p>Love hearing film analysis after you watch? Streamwise indexes movies discussed on premier cinema podcasts:
+- <em>The Rewatchables</em>
+- <em>The Big Picture</em>
+- <em>Unspooled</em>
+- <em>How Did This Get Made?</em>
+- <em>What Went Wrong</em>
+- <em>Blank Check</em></p>
+<p>Use the <strong>Podcasts &amp; Media Mentions</strong> filter to instantly surface queued films that have an accompanying podcast episode waiting for you!</p>
+<h3 id="cinephile-vault-viewing-analytics">📊 Cinephile Vault &amp; Viewing Analytics</h3>
+<ul>
+<li><strong>Decade &amp; Era Breakdown</strong>: 100% of your watched diary categorized across cinema history (Pre-1970s, 70s New Hollywood, 80s, 90s, 2000s, 2010s, 2020s).</li>
+<li><strong>Auteur &amp; Performer Tracking</strong>: Ranked counts and ratings across your most-watched directors (Coen Brothers, Nolan, Scorsese, Fincher, Spielberg) and actors.</li>
+<li><strong>Blind Spot Finder</strong>: Identifies eras or genres missing from your diary and highlights ready-to-stream classics from your watchlist to fill the gaps.</li>
+<li><strong>Actor Age at Release</strong>: In the movie details sheet, see how old each actor was when the film was released (<code>🎂 Age 38 at release</code>).</li>
+</ul>
+<h3 id="100-free-privacy-first">🔒 100% Free &amp; Privacy-First</h3>
+<ul>
+<li><strong>No accounts or sign-ups required</strong>.</li>
+<li><strong>No ads, banners, or tracking pixels</strong>.</li>
+<li><strong>100% offline-first</strong>: Your watchlist and watch history live in a local SQLite database directly on your phone.</li>
+</ul>
+<hr />
+<h2 id="community-feedback-everyone-is-welcome">💬 Community &amp; Feedback: Everyone Is Welcome!</h2>
+<blockquote>
+<p><strong>You do NOT need to write code to contribute to Streamwise!</strong></p>
+</blockquote>
+<p>Whether you're a movie buff, a casual streamer, or a UI enthusiast, your feedback is what shapes this app. We'd love your help with:
+- <strong>Feature Ideas</strong>: What would make your streaming life easier?
+- <strong>Streaming Service Quirks</strong>: Did a streaming app update its deep link or change its plan pricing?
+- <strong>Podcast Suggestions</strong>: Have a favorite movie podcast we should index next?
+- <strong>Bug Reports</strong>: Did something look weird or break on your specific phone model?
+- <strong>UI / UX Polish</strong>: Ideas to make buttons, cards, or browsing feel smoother.</p>
+<h3 id="how-to-share-your-thoughts">How to share your thoughts:</h3>
+<ul>
+<li>💡 <strong>In the App</strong>: Tap the <strong>Floating Feedback Button</strong> anywhere in the app to send your thoughts (with an optional screenshot) directly to our backlog.</li>
+<li>🐛 <strong>On GitHub</strong>: Open a quick ticket in our <a href="https://github.com/good-enough-productions/Streamwise/issues/new/choose"><strong>Issues section</strong></a>. We have friendly, non-technical templates ready for you!</li>
+<li>📖 <strong>Contribution Guide</strong>: Check out our <a href="./CONTRIBUTING.md"><strong>CONTRIBUTING.md</strong></a> for more details.</li>
+</ul>
+<hr />
+<details>
+<summary><b>🛠️ Developer Setup & Architecture (Click to expand)</b></summary>
+<br>
 
-        <div class="changelog-entry">
-            <h3><span class="commit-hash">1e56933</span> &nbsp; Feat: Add "Sync Now" Button (↺) to Watchlist Tab</h3>
-            <p><strong>Problem:</strong> After wiring up real TMDB calls, there was no way to trigger an immediate sync from inside the app — users had to wait for the 4-hour periodic WorkManager schedule.<br>
-            <strong>Fix:</strong> Added a small <code>IconButton</code> using <code>Icons.Default.Refresh</code> to the right side of the filter chip row in <code>WatchlistTabContent</code>. Tapping it calls <code>viewModel.triggerImmediateSync()</code>, which enqueues a one-shot <code>AvailabilitySyncWorker</code> request with a <em>CONNECTED</em> network constraint and immediately shows a status message.</p>
-        </div>
+### Tech Stack
+- **Language**: Kotlin 2.0+
+- **UI Toolkit**: Jetpack Compose with Material 3 Design
+- **Architecture**: MVVM + Clean Architecture Repository Pattern
+- **Persistence**: Room Database (SQLite) with multi-version migration suite
+- **Async & Reactive**: Kotlin Coroutines & Flow
+- **Background Work**: AndroidX WorkManager (metadata & provider periodic refresh)
+- **Deep Linking**: Android intent resolution across native provider packages
 
-        <div class="changelog-entry">
-            <h3><span class="commit-hash">7d3b680</span> &nbsp; Fix: Add INTERNET Permission; Bump Room DB to v2 to Clear Fake Seed Data</h3>
-            <p><strong>Problem 1 — SecurityException:</strong> Despite adding real Retrofit calls, the background worker was silently failing. Inspecting logs revealed a <code>java.lang.SecurityException: Permission denied (missing INTERNET permission?)</code> thrown inside OkHttp. The AI Studio export never declared <code>INTERNET</code> in the manifest.<br>
-            <strong>Fix:</strong> Added <code>&lt;uses-permission android:name="android.permission.INTERNET" /&gt;</code> to <code>AndroidManifest.xml</code>.</p>
-            <p style="margin-top:8px"><strong>Problem 2 — Stale Mock Data in Database:</strong> Even after adding the permission, existing watchlist items still displayed fake provider badges because the mock values (<code>"netflix,hulu,max"</code>) were already written to the Room SQLite database on the phone's local storage. The new worker code that sets <code>providerIds = null</code> on insert was never reached for existing rows.<br>
-            <strong>Fix:</strong> Incremented the Room <code>@Database(version = 2)</code> and enabled <code>.fallbackToDestructiveMigration()</code>. This instructs Room to drop and recreate all tables when the schema version changes, wiping the cached fake data.</p>
-        </div>
+### Building from Source
 
-        <div class="changelog-entry">
-            <h3>(This session) &nbsp; Fix: <code>onDestructiveMigration</code> Override — Watchlist Disappeared After Schema Wipe</h3>
-            <p><strong>Problem:</strong> After bumping the database to v2, the app's watchlist was completely empty. The Room database wipe (destructive migration) cleared all rows, but the seed data was never re-inserted. This happened because the <code>DatabaseCallback</code> in <code>AppDatabase.kt</code> only overrode <code>onCreate</code>, which Room only calls on a true fresh install — not on schema upgrades, even destructive ones.<br>
-            <strong>Fix:</strong> Added an <code>onDestructiveMigration</code> override to the nested <code>DatabaseCallback</code> class that calls the same <code>populateInitialProvidersAndLetterboxdData</code> coroutine as <code>onCreate</code>. Now when Room drops and recreates tables, it immediately re-seeds 33 watchlist items and 285 historical watch sessions from the bundled CSV assets.<br>
-            <strong>Verified:</strong> Cleared app data via <code>adb shell pm clear</code> and confirmed in live logcat:
-            <pre>D AppDatabase: Seeded 33 watchlist items from CSV successfully.
-D AppDatabase: Inserted 285 watched movies from CSV successfully.
-D AppDatabase: Seeded 285 historical watch sessions from CSV successfully.
-D AvailabilitySyncWorker: Found 33 items to sync.</pre></p>
-        </div>
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/good-enough-productions/Streamwise.git
+   cd Streamwise
+   ```
 
-        <div class="changelog-entry">
-            <h3>(This session) &nbsp; Feat: Synthesis 2.0 — Personalized Local LLM Research</h3>
-            <p><strong>Problem:</strong> Research notes were generic and didn't account for the user's specific cinematic history or preferences.<br>
-            <strong>Fix:</strong> 
-            <ul>
-                <li><strong>Ollama Integration:</strong> Built a custom Retrofit client to communicate with a local **Ollama** instance (running Gemma 2) on the user's laptop.</li>
-                <li><strong>Smart Sourcing:</strong> The research agent now summarizes the user's watch history and feeds it into the LLM prompt. This enables personalized "Historical Connection" and "Relevance Score" insights.</li>
-                <li><strong>Hybrid Architecture:</strong> If the local Ollama host is unreachable (e.g., while away from home), the agent gracefully falls back to a high-quality static template based on TMDB metadata.</li>
-                <li><strong>AI Settings:</strong> Added a new "AI/Local" tab in Settings to configure the Ollama Host IP.</li>
-            </ul>
-            <strong>Verified:</strong> Successfully generated personalized research cards using Gemma 2 and verified the fallback logic when the host was intentionally disconnected.</p>
-        </div>
+2. **Configure API Keys (Optional)**:
+   Create a `.env` file in the root directory if you want live TMDB poster artwork and availability metadata:
+   ```env
+   TMDB_API_KEY=your_tmdb_v3_api_key
+   GEMINI_API_KEY=your_gemini_api_key
+   ```
+   *(Note: You can also enter API keys directly in the in-app Settings menu on your phone!)*
 
-        <div class="changelog-entry">
-            <h3>(This session) &nbsp; Feat: Advanced Filtering & Personal Context Vault</h3>
-            <p><strong>Problem:</strong> The app was missing granular discovery tools like genre filtering and rating-based sorting. Additionally, there was no way to track personal notes or the original recommendation source (e.g., specific podcast episodes) for imported titles.<br>
-            <strong>Fix:</strong> 
-            <ul>
-                <li><strong>Personal Context:</strong> Migrated database to <strong>v4</strong>, adding <code>userNotes</code>, <code>importSource</code>, and <code>genres</code> fields. The CSV parser now supports 5th and 6th columns for these values.</li>
-                <li><strong>Discovery Engine:</strong> Added a dynamic <strong>Genre Filter Ribbon</strong> and a dedicated <strong>"Free w/ Ads"</strong> filter chip (targeting Tubi, Freevee, etc.).</li>
-                <li><strong>Sorting:</strong> Implemented <strong>"Highest Rated"</strong> sorting based on real TMDB vote averages.</li>
-                <li><strong>UI Enrichment:</strong> The Movie Details sheet now features a "Personal Context & Origins" section alongside the Monospace Agent Research vault.</li>
-            </ul>
-            <strong>Verified:</strong> Successfully imported a test CSV with custom notes and verified the "Agentic Research" section now triggers for existing items upon sync.</p>
-        </div>
+3. **Build the Debug APK**:
+   ```powershell
+   ./gradlew assembleDebug
+   ```
+   The compiled APK will be located at:
+   `app/build/outputs/apk/debug/app-debug.apk`
 
-        <div class="changelog-entry">
-            <h3>(This session) &nbsp; Feat: First-Launch 3-Step Setup Wizard & Welcoming Empty States</h3>
-            <p><strong>Problem:</strong> When a new user (such as a Reddit cinephile) downloaded Streamwise, they were dropped into an empty, confusing screen with no guidance, buried Letterboxd settings, intimidating developer options, and no easy way to get a TMDB API key.<br>
-            <strong>Fix:</strong> Built an automated 3-step First-Launch Onboarding Wizard (<code>OnboardingDialog</code>) that welcomes new cinephiles, configures their display name, syncs Letterboxd with live RSS, provides direct 1-tap browser links to free TMDB API keys, and sets up active streaming services. Transformed Watchlist and Watched empty states into actionable cards with 1-tap imports. Reorganized Settings into Essential (TMDB, Gemini) vs Advanced (collapsible card with Watchmode, Google Sheets webhooks, AI Mesh, GitHub PAT), and fixed hardcoded version numbers to use dynamic Gradle build fields.</p>
-        </div>
+4. **Run Unit Tests**:
+   ```powershell
+   ./gradlew testDebugUnitTest
+   ```
 
-        <div class="changelog-entry">
-            <h3>(Prior session) &nbsp; Feat: Watchlist Pre-Watch Synthesis Agent</h3>
-            <p><strong>Problem:</strong> The app lacked deep contextual insights for movies added to the watchlist, requiring manual research to understand "why" a title was recommended or what its cultural significance was.<br>
-            <strong>Fix:</strong> Expanded the <code>AvailabilitySyncWorker</code> into a full-scale research agent. In addition to availability, it now pulls movie keywords and cast details via new TMDB endpoints. This data is synthesized into a structured "Agentic Research Strategy" card (complete with YAML frontmatter) and persisted in a new <code>trivia</code> field in the Room database. The Movie Details sheet was updated with a monospaced "Research Vault" section to display these insights, helping users decide what to watch with professional-grade context.</p>
-        </div>
+5. **Deploy to Device via Wireless ADB**:
+   Ensure your phone has Wireless Debugging enabled on the same Wi-Fi network, then run:
+   ```powershell
+   ./deploy.ps1
+   ```
 
-        <div class="changelog-entry">
-            <h3>(This session) &nbsp; Feat: Room CSV Pre-Parser Refactor</h3>
-            <p><strong>Problem:</strong> The app's database initialization logic relied on a fragile string-splitting approach (<code>splitCsvLine</code>) for parsing the bundled Letterboxd CSV files. This method failed to properly handle escaped quotes (e.g., <code>""</code>) and commas nested deeply within multi-line fields, risking corrupted movie titles during the seed process.<br>
-            <strong>Fix:</strong> Replaced the brittle <code>splitCsvLine</code> with a robust character-by-character RFC 4180 compliant parser. The new logic uses <code>reader.mark()</code> and <code>reader.reset()</code> to safely parse nested quotes, handles embedded commas flawlessly, and seamlessly processes fields containing newlines. The database version was intentionally <em>not</em> bumped to preserve any existing user watch history/intents — the new parser will cleanly apply on fresh installs or future database wipes.</p>
-        </div>
-    </div>
+### Optional: Local AI Film Companion
+Streamwise features an optional private AI film companion that can run against local models via [Ollama](https://ollama.com) on your home Wi-Fi:
+- Supports models like `qwen2.5-coder:7b`, `gemma4:e2b`, or `llama3`.
+- Configure your local workstation IP address under **Settings (`⚙️`) > Updates & System**.
+- Responses cite the physical node that generated them with zero data leaving your home network.
 
-    <!-- ============================================================ -->
-    <div class="section">
-        <h2>Local Development — Quick Start</h2>
+### Mesh Node Architecture:
+1. **Desktop Fry (Primary Compute Anchor):**
+   - Address: `192.168.86.27:11434`
+   - Model: `qwen2.5-coder:7b` (High throughput @ 48.2 tok/s)
+   - Handles heavy contextual synthesis, deep-wiki research cards, and conversational analysis.
+2. **Laptop Maze (Edge Field Unit):**
+   - Address: `192.168.86.217:11434`
+   - Model: `gemma4:e2b` / `gemma4:26b` (@ 26.5 tok/s)
+   - Instant failover unit when roaming on Wi-Fi or when the desktop anchor is asleep.
+3. **Dynamic Discovery & Hardware Attribution:**
+   - Streamwise queries node capabilities via `/api/tags` and dynamically routes requests using the loaded model.
+   - Assistant responses cite the physical machine that generated them (e.g. `Synthesized by Olivia via Desktop Fry [qwen2.5-coder:7b]`).
+   - Interactive latency pinging, active model badges, and connection tests are available in Settings (Tab 3: Updates & System).
 
-        <h3>Prerequisites</h3>
-        <ul>
-            <li>JDK 17+</li>
-            <li>Android SDK with platform-tools (ADB) on your PATH or at <code>C:\Users\&lt;you&gt;\AppData\Local\Android\Sdk\platform-tools\</code></li>
-            <li>Wireless debugging enabled on your Android phone (Developer Options → Wireless Debugging)</li>
-            <li>A free <a href="https://www.themoviedb.org/settings/api" target="_blank">TMDB API key</a> (v3 auth, read-only access)</li>
-        </ul>
+</details>
 
-        <h3>Build &amp; Deploy</h3>
-        <pre># 1. Build the debug APK
-.\gradlew.bat assembleDebug
+<hr />
+<h2 id="wireless-debugging-auto-deploy">📱 Wireless Debugging &amp; Auto-Deploy</h2>
+<p>Streamwise is built for rapid iteration. Every push to GitHub triggers an automatic install on your physical phone over your home Wi-Fi.</p>
+<h3 id="enable-wireless-debugging">Enable Wireless Debugging</h3>
+<ol>
+<li><strong>Developer Options:</strong> Go to <em>Settings &gt; About Phone</em> and tap <strong>Build Number</strong> 7 times.</li>
+<li><strong>Toggle On:</strong> Go to <em>Settings &gt; System &gt; Developer Options &gt; Wireless Debugging</em> and turn it <strong>ON</strong>.</li>
+<li><strong>Stay Stable:</strong> 
+   - Keep the phone <strong>plugged into a charger</strong> to prevent power-saving from killing the connection.
+   - Keep the <strong>Wireless Debugging screen open</strong> while the Agent is deploying updates.</li>
+</ol>
+<hr />
+<h2 id="master-the-interface">🎬 Master the Interface</h2>
+<h3 id="the-4-main-tabs">The 4 Main Tabs</h3>
+<ol>
+<li><strong>Watchlist:</strong> Your upcoming queue with dynamic live title counts (<code>Watchlist • X Titles</code>, sticky summary <code>Showing X of Y titles</code>, and Bottom Nav badge counters). Features a <strong>Couch-First 3-Column Poster Grid</strong> (2:3 aspect ratio, gold star rating badge, orange quick-play button, and provider pill) paired with a persistent <strong>View Mode Toggle</strong> in the Top App Bar allowing instant switching between Poster Grid and Detailed Cards. Includes a <strong>Watchlist Priority Star System (⭐)</strong> allowing you to tag high-excitement priorities via 1-tap star toggling on Poster Grids, Media Cards, Spotlight Cards, and Movie Details. Includes <strong>Letterboxd-Style Top Sub-Navigation Tabs</strong> with dynamic count badges (<em>Ready on Subs</em>, <em>All Saved</em>, <em>⭐ Priorities</em>, <em>Under 100m</em>, <em>Podcast Picks</em>) and a <code>⭐ Priorities First</code> sort selector. Tapping the orange <strong>Watch</strong> button triggers <strong>Zero-Intermediary Deep Linking (<code>StreamingAppLauncher</code>)</strong>, resolving native Android packages, deep link URIs, and search intents across 15+ services (Netflix, Prime Video, Max, Disney+, Hulu, Tubi, Apple TV+, etc.) while seamlessly activating the background check-in watcher. Features a <strong>Collapsible Spotlight</strong> carousel ("Ready to Stream") with gold <code>PRIORITY</code> badges that collapses into a sleek 36dp header bar to save 1/3 of the screen, a sticky Search bar, and a <strong>Streamlined Filter Ribbon</strong> (<code>[✓ My Services]</code>, <code>[Free w/ Ads]</code>, <code>[Filters (X)]</code>). Deep multi-select filters are organized cleanly in the <strong>Advanced Filters</strong> sheet, supporting multi-genre selection, 19 streaming platforms, minimum rating thresholds (6.0+ to 8.5+), release eras, and <strong>Cinema Podcasts &amp; Media Mentions</strong> (<em>The Rewatchables</em>, <em>The Big Picture</em>, <em>Unspooled</em>, <em>How Did This Get Made?</em>, <em>What Went Wrong</em>, <em>Blank Check</em>) backed by an offline catalog of 2,300+ films with $O(1)$ indexed title lookup. All additions and syncs are strictly gated against TMDB with automated non-movie scrubbing (<code>MediaTitleSanitizer</code>) and 50MB CursorWindow support on Room v10. Opening any movie's <strong>Movie Details</strong> sheet reveals the <strong>Actor Age at Release</strong> horizontal scrollbar, displaying each actor's profile photo, character name, and exact age when the movie hit theaters (<code>🎂 Age 38 at release</code>) with deceased status indicators (<code>🕊️</code>).</li>
+<li><strong>Watched:</strong> The <strong>Cinephile Vault &amp; Diary</strong> (live count badge <code>Badge { 1131 }</code>). Features a streamlined layout dedicating over 90% of screen space to movie browsing with top sub-navigation tabs (<em>Watched Diary</em>, <em>Highest Rated</em>, <em>Analytics</em>), a slim sticky search/sort/view-mode bar, and a collapsible summary card (<code>🎬 1,131 Films • ~2,073h • ★ 7.1 • ~7.2/mo</code>) with visual decade trend capsules. Every film card features verified release years (<code>Title (Year)</code>), extracted star ratings, and watch date badges. Features a prominent 1-tap <strong>Sync Letterboxd &amp; Google Sheet</strong> button alongside the full <strong>Cinephile Viewing Analytics Hub</strong>:
+   - <strong>Zero Unknown Cinema Eras:</strong> 100% of all 1,131 logged films resolved into accurate decades: 2000s (34.3%), 2010s (25.9%), 1990s (18.6%), 2020s (15.0%), 1980s (4.3%), 1970s (1.3%), and Pre-1970s (0.5%) with 0% unknown.
+   - <strong>Top Directors &amp; Auteurs:</strong> Ranked film counts across 20+ prominent directors (Coen Brothers, Nolan, Scorsese, Fincher, Tarantino, Spielberg, etc.) with star ratings and sample title tags.
+   - <strong>Top Actors &amp; Screen Presence:</strong> Performer tracking across top stars (Tom Cruise, Matt Damon, Leonardo DiCaprio, Brad Pitt, Robert De Niro, etc.).
+   - <strong>Cinephile Blind Spots &amp; Watchlist Integration:</strong> Cross-references vault gaps (Pre-1970s, 70s New Hollywood, Westerns, Documentaries) against your 1,100+ Watchlist queue to surface queued classics ready to stream.
+   - <strong>TMDB Rating Enrichment:</strong> 1-tap vault rating backfill to enrich unrated diary items.
+   - <strong>Letterboxd Sync &amp; Multi-Way Tools:</strong> Live Letterboxd RSS sync, local CSV/ZIP imports (<code>watchlist.csv</code>, <code>watched.csv</code>, <code>diary.csv</code>, <code>ratings.csv</code>, and ZIP exports), two-way CSV export, and Google Sheet sync via Apps Script ($0/mo).</li>
+<li><strong>My Services:</strong> Track which streaming providers you actively pay for, your monthly spend, and real-world hourly return on investment. Features the <strong>Priority-Aware Single-Service Rotation Advisor &amp; Expected Value Card</strong>, using your actual watch velocity (~7.2 films/mo) to compute effective cost per film ($/film), potential monthly savings (up to ~$70/mo or ~$845/yr) from single-service rotation, and identifying the platform with the deepest <strong>Priority</strong> and watchlist backlog (e.g. prioritizing 5 starred titles over 30 unstarred ones). Provider cards display live <strong>Priority Badges &amp; Watchlist Volume</strong> (<code>⭐ 2 Priority • 🎬 30 Watchlist Titles</code>). Tap any provider card to open the <strong>Service Detail Bottom Sheet</strong>: inspect the exact queued watchlist movies on that platform, filter to <code>⭐ Priorities Only</code>, toggle stars directly, edit pricing/tier, set renewal day, track subscription tenure (months, days, start date), view watch time vs ROI $/hr, and launch 1-tap live deal searches on <em>The Streamable Deals</em>, <em>Slickdeals</em>, <em>Doctor of Credit</em>, and <em>Google Deals</em>.</li>
+<li><strong>Explore:</strong> Modular 4-subtab cinematic culture hub designed to eliminate excessive scrolling:
+   - <code>✨ AI &amp; Taste</code>: Dynamic Cinephile Taste Matrix, personalized thematic synthesis with core themes and auteur ties, tailored picks with 1-tap <code>+ Watchlist</code>, and quick conversation prompts.
+   - <code>💬 Olivia — AI Film Companion</code>: Dedicated fullscreen conversational cinema companion tailored to your personal vault history and taste matrix, featuring an ergonomic inline composer and suppressed floating feedback collisions during active chats.
+   - <code>🎙️ Podcasts Hub</code>: Filterable podcast directory (<em>The Rewatchables</em>, <em>The Big Picture</em>, <em>Unspooled</em>, <em>How Did This Get Made?</em>, <em>What Went Wrong</em>, <em>Blank Check</em>) with episode counts, <code>▶️ Listen</code> and <code>💬 Ask Olivia</code>.
+   - <code>📰 Film News Hub</code>: Live cinephile dispatches categorized by <em>Box Office</em>, <em>Festivals</em>, <em>Auteurs</em>, and <em>Streaming</em> with 1-tap <code>💬 Discuss with Olivia</code>.</li>
+</ol>
+<h3 id="unified-4-tab-settings-hub">⚙️ Unified 4-Tab Settings Hub</h3>
+<p>Access all configuration options from the Top App Bar gear icon:
+- <strong>Profile &amp; Letterboxd:</strong> User display name, Letterboxd username (<code>scriptedmind</code>), live RSS sync trigger, local CSV/ZIP file picker, export for Letterboxd, 1-tap direct web links (<code>watchlist/export/</code>, <code>settings/data/</code>, <code>import/</code>), 1-tap <strong>Gemini Spark Podcast Recs</strong> sync, and Google Sheet webhook.
+- <strong>Services (19):</strong> Toggle active subscriptions and customize monthly pricing across all 19 providers.
+- <strong>Guides &amp; Docs:</strong> Instant offline viewers for the in-app User Guide and Changelog.
+- <strong>Updates &amp; System:</strong> Built-in <strong>GitHub OTA Auto-Updater</strong> (checking releases, downloading APKs, and launching Android Package Installer) plus API secrets management.</p>
+<h3 id="beta-feedback-living-backlog">💡 Beta Feedback &amp; Living Backlog</h3>
+<ul>
+<li>Global floating feedback button captures screen screenshots and device telemetry.</li>
+<li><strong>Resilient Multi-Tier Webhook:</strong> Feedback routes through authenticated Cloud Run and Google Apps Script endpoints with sticky error alerts and Toast confirmations.</li>
+<li>Feedback lands on the GitHub backlog by default; check <strong>Assign to Jules (Autonomous AI)</strong> in the feedback dialog for autonomous AI code fixes.</li>
+</ul>
+<hr />
+<h2 id="troubleshooting">🛠 Troubleshooting</h2>
+<h3 id="sync-pending-or-no-images">"Sync Pending" or No Images?</h3>
+<ul>
+<li>Ensure your <strong>TMDB API Key</strong> is set in the Settings tab.</li>
+<li>Tap the <strong>Refresh (↺)</strong> icon in the Watchlist.</li>
+<li>If you just cleared app data, it may take 1-2 minutes for Olivia to re-process the list.</li>
+</ul>
+<h3 id="agent-connection-blocked">Agent Connection Blocked?</h3>
+<ul>
+<li>We have enabled <strong>Cleartext Traffic</strong> for local IPs. Ensure your phone and laptop are on the <strong>same Wi-Fi network</strong>.</li>
+<li>Verify that Ollama is actually running in your laptop's system tray.</li>
+<li>If response times are slow, we've extended the timeout to <strong>5 minutes</strong> to support complex local model reasoning.</li>
+</ul>
+<hr />
+<h2 id="architectural-architecture">🏗 Architectural Architecture</h2>
+<p>For deep-dive documentation on the "Self-Evolution" loop, GitHub integration, and Room database schemas, see <a href="./GEMINI.md"><strong>GEMINI.md</strong></a>.</p>
+<h2 id="recommended-enhancements-from-scraped-articles">Recommended Enhancements (from Scraped Articles)</h2>
+<p>The following opportunities were identified during a review of scraped technical articles:</p>
+<ul>
+<li><strong><a href="">Gemini task automation is slow, clunky, and super </a></strong> (Relevance: High)</li>
+<li><em>Concepts/Tools:</em> Model Context Protocol (MCP)</li>
+<li><em>Action:</em> Review article for best practices on this project.</li>
+<li><strong><a href="">Tom's Guide- Google just unlocked 'Agent Mode' for</a></strong> (Relevance: High)</li>
+<li><em>Concepts/Tools:</em> Agentic Design Patterns, Home Automation, Vibe Coding, Home Assistant, NotebookLM</li>
+<li><em>Action:</em> Review article for best practices on this project.</li>
+<li><strong><a href="">The Verge- Why does the Googlebook exist-</a></strong> (Relevance: High)</li>
+<li><em>Concepts/Tools:</em> Vibe Coding</li>
+<li><em>Action:</em> Review article for best practices on this project.</li>
+<li><strong><a href="">Stop Wasting Tokens- A Smarter Alternative to JSON</a></strong> (Relevance: Medium)</li>
+<li><em>Concepts/Tools:</em> Agentic Design Patterns, LLM Engineering, Vibe Coding, Claude Code, FastAPI, Python</li>
+<li><em>Action:</em> Review article for best practices on this project.</li>
+<li><strong><a href="https://share.google/YFweRkIOJUymRBi5r">How to Use Google Chrome’s New AI-Powered ‘Skills’ | WIRED</a></strong> (Relevance: Medium)</li>
+<li><em>Concepts/Tools:</em> Agentic Design Patterns, Vibe Coding</li>
+<li><em>Action:</em> Review article for best practices on this project.</li>
+<li><strong><a href="https://share.google/uSbjV8IzAeXDMV2vb">I Just Vibe Coded a Global Mass Surveillance Site in 2 Hours With OpenAI's Codex. It Was Terrifyingly Easy | PCMag</a></strong> (Relevance: High)</li>
+<li><em>Concepts/Tools:</em> Agentic Design Patterns, Vibe Coding, Claude Code</li>
+<li><em>Action:</em> Review article for best practices on this project.</li>
+<li><strong><a href="https://share.google/NO74YHvcEZx0SozJf">Google Brings Enterprise AI Agent Tools Under One Roof</a></strong> (Relevance: Medium)</li>
+<li><em>Concepts/Tools:</em> Model Context Protocol (MCP), Agentic Design Patterns, LLM Engineering</li>
+<li><em>Action:</em> Review article for best practices on this project.</li>
+<li><strong><a href="https://share.google/1ovRMys6HeqsNJKYO">Self-Hosted LLMs in the Real World: Limits, Workarounds, and Hard Lessons - KDnuggets</a></strong> (Relevance: High)</li>
+<li><em>Concepts/Tools:</em> Agentic Design Patterns, LLM Engineering, Local AI &amp; Self-Hosting, Vibe Coding, Ollama, Claude Code, Python</li>
+<li><em>Action:</em> Review article for best practices on this project.</li>
+</ul>
+<hr />
+<h2 id="license-trademark-notice">📄 License &amp; Trademark Notice</h2>
+<ul>
+<li><strong>Source Code</strong>: The code in this repository is open for personal use, inspection, local building, and community contributions under the <a href="LICENSE">MIT License with Trademark &amp; Platform Distribution Reservations</a>.</li>
+<li><strong>Trademark &amp; Brand Protection</strong>: The name <strong>Streamwise</strong>, logos, app iconography, and visual identity are exclusive trademarks of <strong>Good Enough Productions</strong>. Re-distributing, republishing, or commercializing this application on mobile app stores (including the Google Play Store) under the Streamwise name or branding is strictly prohibited without prior written authorization.</li>
+<li><strong>Official Distribution</strong>: Official releases are published exclusively by Good Enough Productions on <a href="https://github.com/good-enough-productions/Streamwise/releases">GitHub</a> and (in the future) on the Google Play Store.</li>
+</ul>
+  </main>
 
-# 2. Push to your wireless-connected phone and launch
-.\deploy.ps1</pre>
-
-        <h3>Configure TMDB Key at Runtime</h3>
-        <p>Open the app → <strong>Settings</strong> tab → paste your TMDB v3 API key → tap <strong>Save</strong>. Then tap the ↺ button on the Watchlist tab to immediately fetch real provider data.</p>
-
-        <div class="alert info">
-            <strong>Note:</strong> The TMDB key is stored in <code>SharedPreferences</code> on device and is never committed to source control. You do not need to set it at build time.
-        </div>
-
-        <h3>Database Reset (if needed)</h3>
-        <p>If you need to force a full database re-seed (e.g., after adding new CSV entries), either increment <code>@Database(version = N)</code> in <code>AppDatabase.kt</code> and rebuild, or clear app data manually:</p>
-        <pre>$adb = "C:\Users\&lt;you&gt;\AppData\Local\Android\Sdk\platform-tools\adb.exe"
-&amp; $adb shell pm clear com.goodenoughproductions.streamwise</pre>
-    </div>
-
-    <!-- ============================================================ -->
-    <div class="section">
-        <h2>Key Files Reference</h2>
-        <table>
-            <tr><th>File</th><th>Purpose</th></tr>
-            <tr><td><code>app/src/main/java/com/example/data/local/AppDatabase.kt</code></td><td>Room database setup, version management, CSV seeding callback (<code>onCreate</code> + <code>onDestructiveMigration</code>)</td></tr>
-            <tr><td><code>app/src/main/java/com/example/data/worker/AvailabilitySyncWorker.kt</code></td><td>WorkManager background job — calls TMDB search + watch/providers, maps results to local provider IDs, updates Room</td></tr>
-            <tr><td><code>app/src/main/java/com/example/data/remote/TmdbApiService.kt</code></td><td>Retrofit service interface + Moshi response models for TMDB REST API</td></tr>
-            <tr><td><code>app/src/main/java/com/example/data/remote/TmdbClient.kt</code></td><td>Singleton OkHttp + Retrofit client targeting <code>https://api.themoviedb.org/3/</code></td></tr>
-            <tr><td><code>app/src/main/java/com/example/ui/StreamViewModel.kt</code></td><td>MVVM ViewModel — exposes StateFlows, handles user actions, <code>triggerImmediateSync()</code></td></tr>
-            <tr><td><code>app/src/main/java/com/example/ui/HomeScreen.kt</code></td><td>Compose UI — tab layout, watchlist cards, sync button, check-in bottom sheet, settings panel</td></tr>
-            <tr><td><code>app/src/main/assets/watchlist.csv</code></td><td>Letterboxd watchlist export (33 titles) — seeded into Room on first install or schema wipe</td></tr>
-            <tr><td><code>app/src/main/assets/watched_history.csv</code></td><td>Letterboxd watched history export (285 titles) — seeded as <code>WATCHED</code> items + watch sessions</td></tr>
-            <tr><td><code>deploy.ps1</code></td><td>Windows PowerShell deploy helper — auto-discovers wireless ADB device, installs APK, launches app</td></tr>
-        </table>
-    </div>
-
+  <footer>
+    Master Hub Living Documentation System • Standalone Companion View
+  </footer>
 </body>
 </html>

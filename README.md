@@ -165,8 +165,114 @@ Streamwise features an optional private AI film companion that can run against l
 - Configure your local workstation IP address under **Settings (`⚙️`) > Updates & System**.
 - Responses cite the physical node that generated them with zero data leaving your home network.
 
+### Mesh Node Architecture:
+1. **Desktop Fry (Primary Compute Anchor):**
+   - Address: `192.168.86.27:11434`
+   - Model: `qwen2.5-coder:7b` (High throughput @ 48.2 tok/s)
+   - Handles heavy contextual synthesis, deep-wiki research cards, and conversational analysis.
+2. **Laptop Maze (Edge Field Unit):**
+   - Address: `192.168.86.217:11434`
+   - Model: `gemma4:e2b` / `gemma4:26b` (@ 26.5 tok/s)
+   - Instant failover unit when roaming on Wi-Fi or when the desktop anchor is asleep.
+3. **Dynamic Discovery & Hardware Attribution:**
+   - Streamwise queries node capabilities via `/api/tags` and dynamically routes requests using the loaded model.
+   - Assistant responses cite the physical machine that generated them (e.g. `Synthesized by Olivia via Desktop Fry [qwen2.5-coder:7b]`).
+   - Interactive latency pinging, active model badges, and connection tests are available in Settings (Tab 3: Updates & System).
+
 </details>
 
+---
+
+## 📱 Wireless Debugging & Auto-Deploy
+Streamwise is built for rapid iteration. Every push to GitHub triggers an automatic install on your physical phone over your home Wi-Fi.
+
+### Enable Wireless Debugging
+1. **Developer Options:** Go to *Settings > About Phone* and tap **Build Number** 7 times.
+2. **Toggle On:** Go to *Settings > System > Developer Options > Wireless Debugging* and turn it **ON**.
+3. **Stay Stable:** 
+   - Keep the phone **plugged into a charger** to prevent power-saving from killing the connection.
+   - Keep the **Wireless Debugging screen open** while the Agent is deploying updates.
+
+---
+
+## 🎬 Master the Interface
+
+### The 4 Main Tabs
+1. **Watchlist:** Your upcoming queue with dynamic live title counts (`Watchlist • X Titles`, sticky summary `Showing X of Y titles`, and Bottom Nav badge counters). Features a **Couch-First 3-Column Poster Grid** (2:3 aspect ratio, gold star rating badge, orange quick-play button, and provider pill) paired with a persistent **View Mode Toggle** in the Top App Bar allowing instant switching between Poster Grid and Detailed Cards. Includes a **Watchlist Priority Star System (⭐)** allowing you to tag high-excitement priorities via 1-tap star toggling on Poster Grids, Media Cards, Spotlight Cards, and Movie Details. Includes **Letterboxd-Style Top Sub-Navigation Tabs** with dynamic count badges (*Ready on Subs*, *All Saved*, *⭐ Priorities*, *Under 100m*, *Podcast Picks*) and a `⭐ Priorities First` sort selector. Tapping the orange **Watch** button triggers **Zero-Intermediary Deep Linking (`StreamingAppLauncher`)**, resolving native Android packages, deep link URIs, and search intents across 15+ services (Netflix, Prime Video, Max, Disney+, Hulu, Tubi, Apple TV+, etc.) while seamlessly activating the background check-in watcher. Features a **Collapsible Spotlight** carousel ("Ready to Stream") with gold `PRIORITY` badges that collapses into a sleek 36dp header bar to save 1/3 of the screen, a sticky Search bar, and a **Streamlined Filter Ribbon** (`[✓ My Services]`, `[Free w/ Ads]`, `[Filters (X)]`). Deep multi-select filters are organized cleanly in the **Advanced Filters** sheet, supporting multi-genre selection, 19 streaming platforms, minimum rating thresholds (6.0+ to 8.5+), release eras, and **Cinema Podcasts & Media Mentions** (*The Rewatchables*, *The Big Picture*, *Unspooled*, *How Did This Get Made?*, *What Went Wrong*, *Blank Check*) backed by an offline catalog of 2,300+ films with $O(1)$ indexed title lookup. All additions and syncs are strictly gated against TMDB with automated non-movie scrubbing (`MediaTitleSanitizer`) and 50MB CursorWindow support on Room v10. Opening any movie's **Movie Details** sheet reveals the **Actor Age at Release** horizontal scrollbar, displaying each actor's profile photo, character name, and exact age when the movie hit theaters (`🎂 Age 38 at release`) with deceased status indicators (`🕊️`).
+2. **Watched:** The **Cinephile Vault & Diary** (live count badge `Badge { 1131 }`). Features a streamlined layout dedicating over 90% of screen space to movie browsing with top sub-navigation tabs (*Watched Diary*, *Highest Rated*, *Analytics*), a slim sticky search/sort/view-mode bar, and a collapsible summary card (`🎬 1,131 Films • ~2,073h • ★ 7.1 • ~7.2/mo`) with visual decade trend capsules. Every film card features verified release years (`Title (Year)`), extracted star ratings, and watch date badges. Features a prominent 1-tap **Sync Letterboxd & Google Sheet** button alongside the full **Cinephile Viewing Analytics Hub**:
+   - **Zero Unknown Cinema Eras:** 100% of all 1,131 logged films resolved into accurate decades: 2000s (34.3%), 2010s (25.9%), 1990s (18.6%), 2020s (15.0%), 1980s (4.3%), 1970s (1.3%), and Pre-1970s (0.5%) with 0% unknown.
+   - **Top Directors & Auteurs:** Ranked film counts across 20+ prominent directors (Coen Brothers, Nolan, Scorsese, Fincher, Tarantino, Spielberg, etc.) with star ratings and sample title tags.
+   - **Top Actors & Screen Presence:** Performer tracking across top stars (Tom Cruise, Matt Damon, Leonardo DiCaprio, Brad Pitt, Robert De Niro, etc.).
+   - **Cinephile Blind Spots & Watchlist Integration:** Cross-references vault gaps (Pre-1970s, 70s New Hollywood, Westerns, Documentaries) against your 1,100+ Watchlist queue to surface queued classics ready to stream.
+   - **TMDB Rating Enrichment:** 1-tap vault rating backfill to enrich unrated diary items.
+   - **Letterboxd Sync & Multi-Way Tools:** Live Letterboxd RSS sync, local CSV/ZIP imports (`watchlist.csv`, `watched.csv`, `diary.csv`, `ratings.csv`, and ZIP exports), two-way CSV export, and Google Sheet sync via Apps Script ($0/mo).
+3. **My Services:** Track which streaming providers you actively pay for, your monthly spend, and real-world hourly return on investment. Features the **Priority-Aware Single-Service Rotation Advisor & Expected Value Card**, using your actual watch velocity (~7.2 films/mo) to compute effective cost per film ($/film), potential monthly savings (up to ~$70/mo or ~$845/yr) from single-service rotation, and identifying the platform with the deepest **Priority** and watchlist backlog (e.g. prioritizing 5 starred titles over 30 unstarred ones). Provider cards display live **Priority Badges & Watchlist Volume** (`⭐ 2 Priority • 🎬 30 Watchlist Titles`). Tap any provider card to open the **Service Detail Bottom Sheet**: inspect the exact queued watchlist movies on that platform, filter to `⭐ Priorities Only`, toggle stars directly, edit pricing/tier, set renewal day, track subscription tenure (months, days, start date), view watch time vs ROI $/hr, and launch 1-tap live deal searches on *The Streamable Deals*, *Slickdeals*, *Doctor of Credit*, and *Google Deals*.
+4. **Explore:** Modular 4-subtab cinematic culture hub designed to eliminate excessive scrolling:
+   - `✨ AI & Taste`: Dynamic Cinephile Taste Matrix, personalized thematic synthesis with core themes and auteur ties, tailored picks with 1-tap `+ Watchlist`, and quick conversation prompts.
+   - `💬 Olivia — AI Film Companion`: Dedicated fullscreen conversational cinema companion tailored to your personal vault history and taste matrix, featuring an ergonomic inline composer and suppressed floating feedback collisions during active chats.
+   - `🎙️ Podcasts Hub`: Filterable podcast directory (*The Rewatchables*, *The Big Picture*, *Unspooled*, *How Did This Get Made?*, *What Went Wrong*, *Blank Check*) with episode counts, `▶️ Listen` and `💬 Ask Olivia`.
+   - `📰 Film News Hub`: Live cinephile dispatches categorized by *Box Office*, *Festivals*, *Auteurs*, and *Streaming* with 1-tap `💬 Discuss with Olivia`.
+
+### ⚙️ Unified 4-Tab Settings Hub
+Access all configuration options from the Top App Bar gear icon:
+- **Profile & Letterboxd:** User display name, Letterboxd username (`scriptedmind`), live RSS sync trigger, local CSV/ZIP file picker, export for Letterboxd, 1-tap direct web links (`watchlist/export/`, `settings/data/`, `import/`), 1-tap **Gemini Spark Podcast Recs** sync, and Google Sheet webhook.
+- **Services (19):** Toggle active subscriptions and customize monthly pricing across all 19 providers.
+- **Guides & Docs:** Instant offline viewers for the in-app User Guide and Changelog.
+- **Updates & System:** Built-in **GitHub OTA Auto-Updater** (checking releases, downloading APKs, and launching Android Package Installer) plus API secrets management.
+
+### 💡 Beta Feedback & Living Backlog
+- Global floating feedback button captures screen screenshots and device telemetry.
+- **Resilient Multi-Tier Webhook:** Feedback routes through authenticated Cloud Run and Google Apps Script endpoints with sticky error alerts and Toast confirmations.
+- Feedback lands on the GitHub backlog by default; check **Assign to Jules (Autonomous AI)** in the feedback dialog for autonomous AI code fixes.
+
+---
+
+## 🛠 Troubleshooting
+
+### "Sync Pending" or No Images?
+- Ensure your **TMDB API Key** is set in the Settings tab.
+- Tap the **Refresh (↺)** icon in the Watchlist.
+- If you just cleared app data, it may take 1-2 minutes for Olivia to re-process the list.
+
+### Agent Connection Blocked?
+- We have enabled **Cleartext Traffic** for local IPs. Ensure your phone and laptop are on the **same Wi-Fi network**.
+- Verify that Ollama is actually running in your laptop's system tray.
+- If response times are slow, we've extended the timeout to **5 minutes** to support complex local model reasoning.
+
+---
+
+## 🏗 Architectural Architecture
+For deep-dive documentation on the "Self-Evolution" loop, GitHub integration, and Room database schemas, see [**GEMINI.md**](./GEMINI.md).
+
+
+## Recommended Enhancements (from Scraped Articles)
+
+The following opportunities were identified during a review of scraped technical articles:
+
+- **[Gemini task automation is slow, clunky, and super ]()** (Relevance: High)
+  - *Concepts/Tools:* Model Context Protocol (MCP)
+  - *Action:* Review article for best practices on this project.
+- **[Tom's Guide- Google just unlocked 'Agent Mode' for]()** (Relevance: High)
+  - *Concepts/Tools:* Agentic Design Patterns, Home Automation, Vibe Coding, Home Assistant, NotebookLM
+  - *Action:* Review article for best practices on this project.
+- **[The Verge- Why does the Googlebook exist-]()** (Relevance: High)
+  - *Concepts/Tools:* Vibe Coding
+  - *Action:* Review article for best practices on this project.
+- **[Stop Wasting Tokens- A Smarter Alternative to JSON]()** (Relevance: Medium)
+  - *Concepts/Tools:* Agentic Design Patterns, LLM Engineering, Vibe Coding, Claude Code, FastAPI, Python
+  - *Action:* Review article for best practices on this project.
+- **[How to Use Google Chrome’s New AI-Powered ‘Skills’ | WIRED](https://share.google/YFweRkIOJUymRBi5r)** (Relevance: Medium)
+  - *Concepts/Tools:* Agentic Design Patterns, Vibe Coding
+  - *Action:* Review article for best practices on this project.
+- **[I Just Vibe Coded a Global Mass Surveillance Site in 2 Hours With OpenAI's Codex. It Was Terrifyingly Easy | PCMag](https://share.google/uSbjV8IzAeXDMV2vb)** (Relevance: High)
+  - *Concepts/Tools:* Agentic Design Patterns, Vibe Coding, Claude Code
+  - *Action:* Review article for best practices on this project.
+- **[Google Brings Enterprise AI Agent Tools Under One Roof](https://share.google/NO74YHvcEZx0SozJf)** (Relevance: Medium)
+  - *Concepts/Tools:* Model Context Protocol (MCP), Agentic Design Patterns, LLM Engineering
+  - *Action:* Review article for best practices on this project.
+- **[Self-Hosted LLMs in the Real World: Limits, Workarounds, and Hard Lessons - KDnuggets](https://share.google/1ovRMys6HeqsNJKYO)** (Relevance: High)
+  - *Concepts/Tools:* Agentic Design Patterns, LLM Engineering, Local AI & Self-Hosting, Vibe Coding, Ollama, Claude Code, Python
+  - *Action:* Review article for best practices on this project.
 ---
 
 ## 📄 License & Trademark Notice
@@ -174,3 +280,4 @@ Streamwise features an optional private AI film companion that can run against l
 - **Source Code**: The code in this repository is open for personal use, inspection, local building, and community contributions under the [MIT License with Trademark & Platform Distribution Reservations](LICENSE).
 - **Trademark & Brand Protection**: The name **Streamwise**, logos, app iconography, and visual identity are exclusive trademarks of **Good Enough Productions**. Re-distributing, republishing, or commercializing this application on mobile app stores (including the Google Play Store) under the Streamwise name or branding is strictly prohibited without prior written authorization.
 - **Official Distribution**: Official releases are published exclusively by Good Enough Productions on [GitHub](https://github.com/good-enough-productions/Streamwise/releases) and (in the future) on the Google Play Store.
+

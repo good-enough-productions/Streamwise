@@ -35,7 +35,9 @@ data class MediaItem(
     // Comma-separated list of active provider IDs (e.g., "netflix,hulu,max") available for this media item
     val providerIds: String? = null,
     // Official release date from TMDB (e.g., "1989-08-09")
-    val releaseDate: String? = null
+    val releaseDate: String? = null,
+    // Whether this media item is starred/tagged as high priority
+    val isStarred: Boolean = false
 ) {
     // Utility to parse provider IDs array
     val providersList: List<String>
@@ -52,6 +54,7 @@ data class MediaItem(
      */
     val isUserProtected: Boolean
         get() {
+            if (isStarred) return true
             if (!userNotes.isNullOrBlank()) return true
             if (!providerIds.isNullOrBlank() && providerIds != "none") return true
             val src = importSource?.trim() ?: ""
