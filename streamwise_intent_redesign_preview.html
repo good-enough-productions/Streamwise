@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streamwise: Unified Intent OS & Browsing Paradigm</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          },
+          colors: {
+            netflix: '#E50914',
+            prime: '#00A8E1',
+            max: '#002BE7',
+            apple: '#D6D6D6',
+            disney: '#113CCF',
+            hulu: '#1CE783',
+            tubi: '#FA4E28',
+            criterion: '#1A1A1A'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .rail-scroll { scroll-behavior: smooth; }
+    .poster-card {
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .poster-card:hover {
+      transform: translateY(-4px) scale(1.03);
+    }
+    .glow-indigo {
+      box-shadow: 0 0 35px -5px rgba(99, 102, 241, 0.4);
+    }
+    .glow-amber {
+      box-shadow: 0 0 35px -5px rgba(245, 158, 11, 0.35);
+    }
+    .glow-emerald {
+      box-shadow: 0 0 35px -5px rgba(16, 185, 129, 0.35);
+    }
+    .glass-panel {
+      background: rgba(18, 24, 38, 0.85);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white antialiased">
+
+  <!-- ========================================================== -->
+  <!-- TOP STICKY NAVIGATION & PARADIGM SWITCHER BAR               -->
+  <!-- ========================================================== -->
+  <header class="sticky top-0 z-50 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/80 px-4 sm:px-6 py-3.5 shadow-xl">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-amber-500 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-600/30">
+          <i data-lucide="compass" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base font-black tracking-tight text-white">Streamwise</h1>
+            <span class="text-[10px] bg-indigo-500/20 text-indigo-300 font-mono font-bold px-2 py-0.5 rounded-full border border-indigo-500/30">Redesign Preview</span>
+          </div>
+          <p class="text-xs text-zinc-400">The 3-Horizon Flywheel: Intent Browsing &rarr; Streaming ROI &rarr; Film Culture Hub</p>
+        </div>
+      </div>
+
+      <!-- Interactive Segmented Controller Switch -->
+      <div class="flex items-center bg-zinc-900/90 p-1.5 rounded-2xl border border-zinc-800 shadow-inner">
+        <button id="tab-legacy" onclick="switchMode('legacy')" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2 bg-zinc-800 text-white shadow">
+          <i data-lucide="boxes" class="w-4 h-4 text-red-400"></i>
+          1. Current Reality: App Silos
+        </button>
+        <button id="tab-future" onclick="switchMode('future')" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2 text-zinc-400 hover:text-zinc-200">
+          <i data-lucide="sparkles" class="w-4 h-4 text-indigo-400"></i>
+          2. Proposed: Unified Intent OS
+        </button>
+      </div>
+
+      <!-- Quick Analysis Breakdown Trigger -->
+      <div class="flex items-center gap-2">
+        <button onclick="toggleCritiqueDrawer()" class="text-xs bg-zinc-900 hover:bg-zinc-800 text-zinc-300 px-3.5 py-2 rounded-xl border border-zinc-800 flex items-center gap-1.5 transition">
+          <i data-lucide="info" class="w-4 h-4 text-indigo-400"></i>
+          <span>Strategic Comparison</span>
+        </button>
+        <button onclick="toggleNewsDrawer()" class="text-xs bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 px-3.5 py-2 rounded-xl border border-indigo-500/40 flex items-center gap-1.5 transition">
+          <i data-lucide="newspaper" class="w-4 h-4 text-indigo-400"></i>
+          <span class="hidden sm:inline">First Stop:</span> News & Podcasts
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================== -->
+  <!-- ARCHITECTURAL CRITIQUE DRAWER (COLLAPSIBLE)                 -->
+  <!-- ========================================================== -->
+  <div id="critique-drawer" class="hidden bg-zinc-900/95 border-b border-zinc-800 px-4 py-6 transition-all">
+    <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 text-xs sm:text-sm">
+      <div class="p-5 rounded-2xl bg-red-950/20 border border-red-900/40 text-red-200/90 space-y-3">
+        <div class="font-bold flex items-center gap-2 text-red-400 text-sm">
+          <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+          Why Current Streaming UX Fails the User (The Friction)
+        </div>
+        <ul class="list-disc pl-5 space-y-1.5 text-zinc-300 leading-relaxed">
+          <li><strong>Provider agenda over user intent:</strong> Netflix, Prime, and Max push content they've paid to license or high-margin originals, not what you actually care to watch.</li>
+          <li><strong>Buried watchlist as an afterthought:</strong> Your personal watchlist is relegated to row 5 or 6 as an unsorted, unmanageable 80-item junk drawer.</li>
+          <li><strong>Cognitive silo fatigue:</strong> You bounce between 4 apps, forgetting which service holds *Heat* or *Severance*, repeatedly getting hit with sign-in prompts.</li>
+        </ul>
+      </div>
+
+      <div class="p-5 rounded-2xl bg-indigo-950/20 border border-indigo-900/40 text-indigo-200/90 space-y-3">
+        <div class="font-bold flex items-center gap-2 text-indigo-400 text-sm">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          The Proposed Streamwise 3-Horizon Flywheel
+        </div>
+        <ul class="list-disc pl-5 space-y-1.5 text-zinc-300 leading-relaxed">
+          <li><strong>1. The Hook (Browsing):</strong> Watchlist *is* the operating system. AI & semantic metadata cluster your queue into dynamic shelves (Brad Pitt, 90s Thrillers, Under 95m).</li>
+          <li><strong>2. The Retention (ROI & Rotation):</strong> Instantly filter by active subscriptions. "Reactivation Radar" flags inactive services when enough saved items justify a 30-day binge.</li>
+          <li><strong>3. The Moat (First Stop Culture):</strong> Cinema news, trailer alerts, and matching podcasts (*The Rewatchables*, *The Big Picture*) right next to your queue.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- HORIZON 3 DRAWER: FILM NEWS & PODCAST COMPANION             -->
+  <!-- ========================================================== -->
+  <div id="news-drawer" class="hidden bg-zinc-900/95 border-b border-zinc-800 px-4 py-5 shadow-2xl">
+    <div class="max-w-7xl mx-auto space-y-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="inline-block w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+          <h3 class="text-sm font-bold text-white uppercase tracking-wider">Horizon 3: The Daily Cinema Culture Companion</h3>
+        </div>
+        <span class="text-xs text-zinc-400">Live Cinema News & Podcast Ticker</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- News Card 1 -->
+        <div class="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-indigo-500/50 transition">
+          <div class="flex items-center justify-between text-[11px] text-zinc-400 mb-1">
+            <span class="text-indigo-400 font-semibold font-mono">BREAKING NEWS</span>
+            <span>15m ago • Variety</span>
+          </div>
+          <h4 class="text-xs font-bold text-white">Denis Villeneuve fast-tracks 'Dune: Messiah' for 2026 production</h4>
+          <p class="text-[11px] text-zinc-400 mt-1 line-clamp-2">Villeneuve confirms script polish is complete. Explores Paul Atreides' descent in final trilogy chapter.</p>
+        </div>
+
+        <!-- News Card 2 -->
+        <div class="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-indigo-500/50 transition">
+          <div class="flex items-center justify-between text-[11px] text-zinc-400 mb-1">
+            <span class="text-amber-400 font-semibold font-mono">PODCAST DROP</span>
+            <span>1h ago • The Rewatchables</span>
+          </div>
+          <h4 class="text-xs font-bold text-white">Bill Simmons & Chris Ryan re-examine 'Heat' (1995) for the 30th Anniversary</h4>
+          <p class="text-[11px] text-zinc-400 mt-1 line-clamp-2">Deep dive into Pacino vs De Niro coffee shop scene. Matches film on your '90s Neo-Noir' shelf.</p>
+        </div>
+
+        <!-- News Card 3 -->
+        <div class="p-3.5 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-indigo-500/50 transition">
+          <div class="flex items-center justify-between text-[11px] text-zinc-400 mb-1">
+            <span class="text-emerald-400 font-semibold font-mono">STREAMING SHUFFLE</span>
+            <span>4h ago • JustWatch</span>
+          </div>
+          <h4 class="text-xs font-bold text-white">Criterion Channel adds 25 Japanese New Wave masterworks this Friday</h4>
+          <p class="text-[11px] text-zinc-400 mt-1 line-clamp-2">Including 4 titles on your cinephile wishlist. Streamwise alert queued for rotation.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- MAIN WORKSPACE CONTAINER                                    -->
+  <!-- ========================================================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- ========================================================== -->
+    <!-- VIEW 1: CURRENT FRAGMENTED STREAMING MODEL (LEGACY)        -->
+    <!-- ========================================================== -->
+    <div id="view-legacy" class="space-y-8 animate-fadeIn">
+      
+      <!-- Sub-app switcher to simulate app-hopping -->
+      <div class="bg-zinc-900/80 border border-zinc-800 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+            <span class="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+            Simulated TV Device OS (Fire TV / Apple TV / Roku)
+          </div>
+          <p class="text-sm text-zinc-200 mt-0.5">Switch apps to experience the manual hopping and isolated siloed libraries:</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button onclick="selectLegacyApp('netflix')" id="btn-app-netflix" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600/30 transition">Netflix</button>
+          <button onclick="selectLegacyApp('max')" id="btn-app-max" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white transition">Max</button>
+          <button onclick="selectLegacyApp('prime')" id="btn-app-prime" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white transition">Prime Video</button>
+          <button onclick="selectLegacyApp('disney')" id="btn-app-disney" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white transition">Disney+</button>
+        </div>
+      </div>
+
+      <!-- Active App Mockup Container -->
+      <div class="border border-zinc-800 rounded-3xl overflow-hidden bg-zinc-950 shadow-2xl relative">
+        <!-- App Header Banner -->
+        <div id="legacy-app-header" class="h-14 px-6 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-900/50">
+          <div class="flex items-center gap-3">
+            <span id="legacy-app-logo" class="font-black text-xl tracking-tighter text-red-600">NETFLIX</span>
+            <span class="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded">Isolated App Environment</span>
+          </div>
+          <div class="flex items-center gap-4 text-xs text-zinc-400">
+            <span class="hover:text-white cursor-pointer">Home</span>
+            <span class="hover:text-white cursor-pointer">Series</span>
+            <span class="hover:text-white cursor-pointer">Films</span>
+            <span class="text-white font-medium">My List</span>
+            <div class="w-6 h-6 rounded bg-red-600 flex items-center justify-center text-[10px] text-white font-bold">U</div>
+          </div>
+        </div>
+
+        <!-- Giant Promotional Billboard (What the platform wants you to watch) -->
+        <div id="legacy-billboard" class="relative h-72 sm:h-80 w-full overflow-hidden flex items-end p-6 sm:p-10 bg-gradient-to-t from-zinc-950 via-zinc-950/60 to-transparent">
+          <div class="absolute inset-0 -z-10 bg-cover bg-center transition-all duration-500 opacity-40 filter saturate-150" 
+               id="legacy-billboard-bg"
+               style="background-image: url('https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=1200&q=80');">
+          </div>
+          <div class="max-w-xl space-y-2">
+            <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <i data-lucide="flame" class="w-3.5 h-3.5 text-amber-400"></i>
+              #1 PROMOTED TODAY BY PROVIDER
+            </div>
+            <h2 id="legacy-billboard-title" class="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">Red Notice: The Franchise</h2>
+            <p id="legacy-billboard-desc" class="text-xs sm:text-sm text-zinc-300 line-clamp-2">High-budget platform-exclusive action comedy pushed aggressively to all subscribers regardless of personal tastes.</p>
+            <div class="flex items-center gap-3 pt-2">
+              <button class="px-5 py-2 rounded-lg bg-white text-black font-semibold text-xs flex items-center gap-2 hover:bg-zinc-200 transition">
+                <i data-lucide="play" class="w-3.5 h-3.5 fill-current"></i> Play
+              </button>
+              <button class="px-4 py-2 rounded-lg bg-zinc-800/80 backdrop-blur text-white text-xs font-semibold hover:bg-zinc-700 transition">More Info</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rails in Current Model -->
+        <div class="p-6 space-y-6">
+          
+          <!-- Rail 1: Top 10 Algorithm Push -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm sm:text-base font-bold text-zinc-200 flex items-center gap-2">
+                <span>Top 10 in the US Today</span>
+                <span class="text-[10px] text-zinc-400 font-normal border border-zinc-700 px-1.5 py-0.5 rounded font-mono">Algorithmic Push</span>
+              </h3>
+            </div>
+            <div class="flex gap-4 overflow-x-auto hide-scrollbar pb-2" id="legacy-top10-rail">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Rail 2: Commercial Category Push -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-sm sm:text-base font-bold text-zinc-200 flex items-center gap-2">
+                <span>Trending Reality TV & Dramas</span>
+                <span class="text-[10px] text-zinc-400 font-normal border border-zinc-700 px-1.5 py-0.5 rounded font-mono">High Engagement Bait</span>
+              </h3>
+            </div>
+            <div class="flex gap-4 overflow-x-auto hide-scrollbar pb-2" id="legacy-trending-rail">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Rail 3: Your actual watchlist (buried way down, unorganized mess) -->
+          <div class="p-4 rounded-2xl bg-zinc-900/60 border border-dashed border-red-500/30 relative">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="h-2 w-2 rounded-full bg-yellow-400"></span>
+                <h3 class="text-sm sm:text-base font-bold text-yellow-300">Your Watchlist (Buried Rail #3)</h3>
+                <span class="text-[10px] bg-yellow-400/20 text-yellow-200 px-2 py-0.5 rounded font-mono font-bold">Unsorted FIFO dump</span>
+              </div>
+              <span class="text-xs text-zinc-400">Items you actually wanted to watch</span>
+            </div>
+            <p class="text-xs text-zinc-400 mb-3">Notice: Brad Pitt movies, 90s hits, and documentaries are dumped into one linear 60-item row with zero categorical division.</p>
+            <div class="flex gap-3 overflow-x-auto hide-scrollbar pb-1" id="legacy-watchlist-rail">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================== -->
+    <!-- VIEW 2: UNIFIED INTENT-FIRST WATCHLIST OS (PROPOSED)        -->
+    <!-- ========================================================== -->
+    <div id="view-future" class="hidden space-y-6 animate-fadeIn">
+      
+      <!-- Top Intent Control Hub -->
+      <div class="bg-zinc-900/90 border border-indigo-500/30 p-5 rounded-3xl shadow-xl space-y-4">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+              <i data-lucide="target" class="w-3.5 h-3.5 text-indigo-400"></i>
+              Watchlist-First Operating System
+            </div>
+            <h2 class="text-xl sm:text-2xl font-black text-white mt-1">Your Personal Media Architecture</h2>
+            <p class="text-xs sm:text-sm text-zinc-400">Zero corporate algorithmic pushes. Strictly films you saved, intelligently grouped into personal semantic shelves.</p>
+          </div>
+
+          <!-- Dynamic Shelf Creator Action -->
+          <div class="flex items-center gap-2">
+            <button onclick="openCustomShelfModal()" class="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs sm:text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition transform active:scale-95">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Ask / Create Smart Shelf</span>
+            </button>
+            <button onclick="toggleRoiMetricsSummary()" class="px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs sm:text-sm font-semibold border border-zinc-700 flex items-center gap-2 transition">
+              <i data-lucide="dollar-sign" class="w-4 h-4 text-emerald-400"></i>
+              <span>Monthly Spend: $37.98</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter Controls (Active Services, Inactive Services Radar, and Smart Expansions) -->
+        <div class="pt-3 border-t border-zinc-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          
+          <!-- Filter 1: Service Availability Filter -->
+          <div class="bg-zinc-950/70 p-3 rounded-xl border border-zinc-800 flex items-center justify-between hover:border-zinc-700 transition">
+            <div>
+              <span class="text-xs font-bold text-zinc-200 block">Available to Stream Now</span>
+              <span class="text-[11px] text-zinc-400">On active subs (Netflix, Max, Prime)</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggle-active-only" checked onchange="handleFutureFilterChange()" class="sr-only peer">
+              <div class="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
+          </div>
+
+          <!-- Filter 2: Churn & Reactivation Radar -->
+          <div class="bg-zinc-950/70 p-3 rounded-xl border border-zinc-800 flex items-center justify-between hover:border-zinc-700 transition">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-bold text-amber-300">Reactivation Radar</span>
+                <span class="text-[9px] bg-amber-500/20 text-amber-300 px-1 rounded font-mono font-bold">Inactive Subs</span>
+              </div>
+              <span class="text-[11px] text-zinc-400">Show titles on Apple TV+ & Disney+</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggle-inactive-services" onchange="handleFutureFilterChange()" class="sr-only peer">
+              <div class="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+            </label>
+          </div>
+
+          <!-- Filter 3: Contextual Smart Expansions -->
+          <div class="bg-zinc-950/70 p-3 rounded-xl border border-zinc-800 flex items-center justify-between hover:border-zinc-700 transition">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-bold text-violet-300">Category Expansions</span>
+                <span class="text-[9px] bg-violet-500/20 text-violet-300 px-1 rounded font-mono font-bold">Smart Alg</span>
+              </div>
+              <span class="text-[11px] text-zinc-400">Surface unlisted gems matching shelf</span>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="toggle-smart-suggestions" checked onchange="handleFutureFilterChange()" class="sr-only peer">
+              <div class="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-violet-600"></div>
+            </label>
+          </div>
+
+        </div>
+
+        <!-- Collapsible ROI Metrics Card -->
+        <div id="roi-metrics-summary" class="hidden p-4 rounded-2xl bg-zinc-950 border border-emerald-500/30 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="space-y-1">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-semibold">Active Subscriptions</span>
+            <div class="text-lg font-bold text-white flex items-center gap-2">
+              <span>3 Services</span>
+              <span class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">$37.98/mo</span>
+            </div>
+            <p class="text-[11px] text-zinc-400">Netflix ($15.49), Max ($15.99), Prime ($6.50)</p>
+          </div>
+          <div class="space-y-1">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-semibold">Entertainment Cost/Hour</span>
+            <div class="text-lg font-bold text-white flex items-center gap-2">
+              <span>$0.61 / hr</span>
+              <span class="text-xs font-mono text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded border border-indigo-500/20">62 hrs watched</span>
+            </div>
+            <p class="text-[11px] text-zinc-400">Excellent value (Target &lt; $1.00/hr)</p>
+          </div>
+          <div class="space-y-1">
+            <span class="text-[11px] text-zinc-400 uppercase tracking-wider font-semibold">Recommended Rotation</span>
+            <div class="text-lg font-bold text-amber-300 flex items-center gap-1.5">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>Pause Max &rarr; Apple TV+</span>
+            </div>
+            <p class="text-[11px] text-zinc-400">Only 2 unwatched Max items left vs 8 on Apple TV+</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========================================================== -->
+      <!-- DYNAMIC SEMANTIC SHELVES (THE CORE INTENT FEED)            -->
+      <!-- ========================================================== -->
+      <div id="future-shelves-container" class="space-y-8">
+        <!-- Dynamically rendered via JS -->
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================================== -->
+  <!-- MOVIE DETAIL & LAUNCH MODAL                                -->
+  <!-- ========================================================== -->
+  <div id="movie-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl animate-scaleUp">
+      <div class="relative h-64 sm:h-72 w-full bg-cover bg-center flex items-end p-6" id="modal-backdrop">
+        <div class="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/60 to-transparent"></div>
+        <button onclick="closeMovieModal()" class="absolute top-4 right-4 w-9 h-9 rounded-full bg-black/60 border border-zinc-700 text-white flex items-center justify-center hover:bg-zinc-800 transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+        <div class="relative z-10 space-y-1">
+          <div class="flex items-center gap-2" id="modal-tags">
+            <!-- Badges -->
+          </div>
+          <h2 class="text-2xl sm:text-3xl font-black text-white" id="modal-title">Movie Title</h2>
+          <div class="flex items-center gap-3 text-xs text-zinc-300" id="modal-meta">
+            <!-- Year, Runtime, Director -->
+          </div>
+        </div>
+      </div>
+
+      <div class="p-6 space-y-5">
+        <div>
+          <span class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider block mb-1">Synopsis</span>
+          <p class="text-xs sm:text-sm text-zinc-300 leading-relaxed" id="modal-overview">Movie overview text...</p>
+        </div>
+
+        <!-- Semantic Shelf Placement Reason -->
+        <div class="p-3.5 rounded-xl bg-indigo-950/30 border border-indigo-500/30 flex items-start gap-3">
+          <i data-lucide="sparkles" class="w-5 h-5 text-indigo-400 shrink-0 mt-0.5"></i>
+          <div>
+            <span class="text-xs font-bold text-indigo-300 block">Why this shelf?</span>
+            <p class="text-xs text-zinc-300" id="modal-shelf-reason">Matched on 90s gritty neo-noir aesthetic & high director rating.</p>
+          </div>
+        </div>
+
+        <!-- Linked Podcast Discussion Companion -->
+        <div id="modal-podcast-card" class="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/30 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400">
+              <i data-lucide="mic" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <span class="text-xs font-bold text-amber-300 block" id="modal-podcast-title">The Rewatchables Podcast</span>
+              <span class="text-[11px] text-zinc-400" id="modal-podcast-ep">Bill Simmons, Chris Ryan on 'Apex Mountain'</span>
+            </div>
+          </div>
+          <button class="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold flex items-center gap-1.5 transition">
+            <i data-lucide="play" class="w-3 h-3 fill-current"></i>
+            <span>Listen</span>
+          </button>
+        </div>
+
+        <!-- Action Watch Bar -->
+        <div class="pt-4 border-t border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-zinc-400">Available On:</span>
+            <span id="modal-provider-badge" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-600/30 text-blue-300 border border-blue-500/30">MAX</span>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <button onclick="simulateWatchLaunch()" class="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-white text-black hover:bg-zinc-200 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition shadow-lg">
+              <i data-lucide="play" class="w-4 h-4 fill-current"></i>
+              <span id="modal-watch-button">Watch Now on Max</span>
+            </button>
+            <button onclick="toggleWatchlistMark()" id="modal-mark-watched" class="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold text-xs transition">
+              Mark Watched
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- CUSTOM SMART SHELF MODAL                                    -->
+  <!-- ========================================================== -->
+  <div id="shelf-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="sparkles" class="w-5 h-5 text-indigo-400"></i>
+          <h3 class="text-base font-bold text-white">Ask for a Smart Shelf</h3>
+        </div>
+        <button onclick="closeCustomShelfModal()" class="text-zinc-400 hover:text-white">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <p class="text-xs text-zinc-400">Describe the mood, director, era, or constraint. Streamwise clusters your saved films and surfaces 1 matching gem:</p>
+      
+      <div class="space-y-3">
+        <input type="text" id="custom-shelf-input" placeholder="e.g. 'Coen Brothers dark comedies', 'Under 90 min thriller'" 
+               class="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-indigo-500 font-sans">
+        
+        <div class="flex flex-wrap gap-1.5 pt-1">
+          <button onclick="setShelfPrompt('Coen Brothers Masterpieces')" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded-md">Coen Brothers</button>
+          <button onclick="setShelfPrompt('Late 70s Paranoia Thrillers')" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded-md">70s Paranoia</button>
+          <button onclick="setShelfPrompt('Sub-90 Min Weekend Watches')" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded-md">Sub-90 Mins</button>
+          <button onclick="setShelfPrompt('David Fincher Mind Games')" class="text-[10px] bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-1 rounded-md">David Fincher</button>
+        </div>
+      </div>
+
+      <div class="pt-2 flex justify-end gap-2">
+        <button onclick="closeCustomShelfModal()" class="px-4 py-2 rounded-xl text-xs text-zinc-400 hover:text-white">Cancel</button>
+        <button onclick="createCustomShelf()" class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">Synthesize Shelf</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 hidden bg-zinc-900 border border-indigo-500/50 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-fadeIn">
+    <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toast-text" class="text-xs font-medium">Notification message</span>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- JAVASCRIPT ENGINE & DYNAMIC DATA                           -->
+  <!-- ========================================================== -->
+  <script>
+    // State
+    let currentMode = 'legacy'; // 'legacy' or 'future'
+    let currentLegacyApp = 'netflix';
+    let filterActiveOnly = true;
+    let filterInactiveRadar = false;
+    let filterSmartSuggestions = true;
+
+    // Rich catalog database
+    const mediaDatabase = [
+      {
+        id: 'fight_club',
+        title: 'Fight Club',
+        year: 1999,
+        runtime: '139m',
+        director: 'David Fincher',
+        starring: 'Brad Pitt, Edward Norton',
+        service: 'Max',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?auto=format&fit=crop&w=1200&q=80',
+        score: '88% Rotten Tomatoes • 4.3 Letterboxd',
+        overview: 'An insomniac office worker looking for a way to change his life crosses paths with a devil-may-care soap maker and forms an underground fight club.',
+        shelfTags: ['brad_pitt', '90s_thrillers', 'fincher'],
+        isSuggestion: false,
+        podcast: { show: 'The Rewatchables', ep: 'Fight Club: Apex Mountain for Edward Norton?' }
+      },
+      {
+        id: 'seven',
+        title: 'Se7en',
+        year: 1995,
+        runtime: '127m',
+        director: 'David Fincher',
+        starring: 'Brad Pitt, Morgan Freeman',
+        service: 'Max',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1509281373149-e957c6296406?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1509281373149-e957c6296406?auto=format&fit=crop&w=1200&q=80',
+        score: '83% Rotten Tomatoes • 4.4 Letterboxd',
+        overview: 'Two detectives, a rookie and a veteran, hunt a serial killer who uses the seven deadly sins as his motives.',
+        shelfTags: ['brad_pitt', '90s_thrillers', 'fincher'],
+        isSuggestion: true, // Contextual Expansion!
+        podcast: { show: 'The Big Picture', ep: 'Fincher Draft: The Legacy of Se7en' }
+      },
+      {
+        id: 'ouatih',
+        title: 'Once Upon a Time in Hollywood',
+        year: 2019,
+        runtime: '161m',
+        director: 'Quentin Tarantino',
+        starring: 'Leonardo DiCaprio, Brad Pitt',
+        service: 'Netflix',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=1200&q=80',
+        score: '85% Rotten Tomatoes • 4.1 Letterboxd',
+        overview: 'A faded television actor and his stunt double strive to achieve fame and success in the film industry during the final years of Hollywood Golden Age in 1969 Los Angeles.',
+        shelfTags: ['brad_pitt', 'tarantino'],
+        isSuggestion: false,
+        podcast: { show: 'The Rewatchables', ep: 'Once Upon a Time in Hollywood: The Tarantino Masterclass' }
+      },
+      {
+        id: 'snatch',
+        title: 'Snatch',
+        year: 2000,
+        runtime: '102m',
+        director: 'Guy Ritchie',
+        starring: 'Brad Pitt, Jason Statham',
+        service: 'Prime',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1518676590629-3dcbd9c5a5c9?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1518676590629-3dcbd9c5a5c9?auto=format&fit=crop&w=1200&q=80',
+        score: '74% Rotten Tomatoes • 3.9 Letterboxd',
+        overview: 'Unscrupulous boxing promoters, violent bookmakers, a Russian gangster, incompetent amateur robbers and supposed Jewish jewelers fight to track down a priceless stolen diamond.',
+        shelfTags: ['brad_pitt', 'heist'],
+        isSuggestion: false,
+        podcast: { show: 'Blank Check', ep: 'Guy Ritchie Early Years' }
+      },
+      {
+        id: 'heat',
+        title: 'Heat',
+        year: 1995,
+        runtime: '170m',
+        director: 'Michael Mann',
+        starring: 'Al Pacino, Robert De Niro',
+        service: 'Max',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=1200&q=80',
+        score: '88% Rotten Tomatoes • 4.3 Letterboxd',
+        overview: 'A group of high-end professional thieves start to feel the LAPD around them when they unwittingly leave a clue at their latest heist.',
+        shelfTags: ['90s_thrillers', 'mann'],
+        isSuggestion: false,
+        podcast: { show: 'The Rewatchables', ep: 'Heat 30th Anniversary Special' }
+      },
+      {
+        id: 'la_confidential',
+        title: 'L.A. Confidential',
+        year: 1997,
+        runtime: '138m',
+        director: 'Curtis Hanson',
+        starring: 'Kevin Spacey, Russell Crowe, Guy Pearce',
+        service: 'Netflix',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1512070679279-8988d32161be?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1512070679279-8988d32161be?auto=format&fit=crop&w=1200&q=80',
+        score: '99% Rotten Tomatoes • 4.2 Letterboxd',
+        overview: 'As corruption grows in 1950s Los Angeles, three policemen - one straight-laced, one brutal, and one sleazy - investigate a series of murders with their own brand of justice.',
+        shelfTags: ['90s_thrillers'],
+        isSuggestion: false,
+        podcast: { show: 'The Big Picture', ep: 'The Best Films of 1997' }
+      },
+      {
+        id: 'fargo',
+        title: 'Fargo',
+        year: 1996,
+        runtime: '98m',
+        director: 'Joel Coen',
+        starring: 'Frances McDormand, William H. Macy',
+        service: 'Prime',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1542204165-65bf26472b9b?auto=format&fit=crop&w=1200&q=80',
+        score: '94% Rotten Tomatoes • 4.2 Letterboxd',
+        overview: 'Jerry Lundegaard\'s inept crime falls apart due to his and his henchmen\'s bungling and the persistent police work of the quite pregnant Marge Gunderson.',
+        shelfTags: ['90s_thrillers', 'coen'],
+        isSuggestion: true, // Contextual Expansion!
+        podcast: { show: 'The Rewatchables', ep: 'Fargo: Oh Ya Betcha!' }
+      },
+      {
+        id: 'run_lola_run',
+        title: 'Run Lola Run',
+        year: 1998,
+        runtime: '81m',
+        director: 'Tom Tykwer',
+        starring: 'Franka Potente, Moritz Bleibtreu',
+        service: 'Prime',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=80',
+        score: '93% Rotten Tomatoes • 4.0 Letterboxd',
+        overview: 'After a botched money delivery, Lola has 20 minutes to come up with 100,000 Deutschmarks to save her boyfriend\'s life.',
+        shelfTags: ['sub_95', '90s_thrillers'],
+        isSuggestion: false,
+        podcast: null
+      },
+      {
+        id: 'before_sunset',
+        title: 'Before Sunset',
+        year: 2004,
+        runtime: '80m',
+        director: 'Richard Linklater',
+        starring: 'Ethan Hawke, Julie Delpy',
+        service: 'Max',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?auto=format&fit=crop&w=1200&q=80',
+        score: '95% Rotten Tomatoes • 4.4 Letterboxd',
+        overview: 'Nine years after Jesse and Celine first met, they encounter each other again on the French leg of Jesse\'s book tour.',
+        shelfTags: ['sub_95'],
+        isSuggestion: false,
+        podcast: { show: 'The Big Picture', ep: 'The Before Trilogy Retrospective' }
+      },
+      {
+        id: 'coherence',
+        title: 'Coherence',
+        year: 2013,
+        runtime: '89m',
+        director: 'James Ward Byrkit',
+        starring: 'Emily Baldoni, Maury Sterling',
+        service: 'Prime',
+        isActiveService: true,
+        poster: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80',
+        score: '88% Rotten Tomatoes • 3.9 Letterboxd',
+        overview: 'Strange things begin to happen when a group of friends gather for a dinner party on an evening when a comet is passing overhead.',
+        shelfTags: ['sub_95', 'sci_fi'],
+        isSuggestion: true, // Contextual Expansion!
+        podcast: null
+      },
+      // Inactive Subscription Titles (Apple TV+ and Disney+)
+      {
+        id: 'severance',
+        title: 'Severance (Season 1)',
+        year: 2022,
+        runtime: '9 Episodes',
+        director: 'Ben Stiller',
+        starring: 'Adam Scott, Patricia Arquette',
+        service: 'Apple TV+',
+        isActiveService: false,
+        poster: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?auto=format&fit=crop&w=1200&q=80',
+        score: '97% Rotten Tomatoes • 4.5 Letterboxd',
+        overview: 'Mark leads a team of office workers whose memories have been surgically divided between their work and personal lives.',
+        shelfTags: ['apple_vault', 'sci_fi'],
+        isSuggestion: false,
+        podcast: { show: 'The Watch', ep: 'Severance Finale Breakdown' }
+      },
+      {
+        id: 'killers_flower_moon',
+        title: 'Killers of the Flower Moon',
+        year: 2023,
+        runtime: '206m',
+        director: 'Martin Scorsese',
+        starring: 'Leonardo DiCaprio, Robert De Niro, Lily Gladstone',
+        service: 'Apple TV+',
+        isActiveService: false,
+        poster: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?auto=format&fit=crop&w=1200&q=80',
+        score: '93% Rotten Tomatoes • 4.1 Letterboxd',
+        overview: 'When oil is discovered in 1920s Oklahoma under Osage Nation land, the Osage people are murdered one by one.',
+        shelfTags: ['apple_vault', 'scorsese'],
+        isSuggestion: false,
+        podcast: { show: 'The Big Picture', ep: 'Scorsese Deep Dive: Flower Moon' }
+      },
+      {
+        id: 'slow_horses',
+        title: 'Slow Horses',
+        year: 2022,
+        runtime: 'Series',
+        director: 'James Hawes',
+        starring: 'Gary Oldman, Jack Lowden',
+        service: 'Apple TV+',
+        isActiveService: false,
+        poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=500&q=80',
+        backdrop: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80',
+        score: '98% Rotten Tomatoes • 4.3 Letterboxd',
+        overview: 'Follows a dysfunctional team of MI5 agents and their obnoxious boss, Jackson Lamb, as they navigate the espionage world.',
+        shelfTags: ['apple_vault'],
+        isSuggestion: false,
+        podcast: { show: 'The Watch', ep: 'Gary Oldman & The Magic of Slow Horses' }
+      }
+    ];
+
+    // Initial render
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      renderLegacyRails();
+      renderFutureShelves();
+    });
+
+    // Paradigm Switcher
+    function switchMode(mode) {
+      currentMode = mode;
+      const btnLegacy = document.getElementById('tab-legacy');
+      const btnFuture = document.getElementById('tab-future');
+      const viewLegacy = document.getElementById('view-legacy');
+      const viewFuture = document.getElementById('view-future');
+
+      if (mode === 'legacy') {
+        btnLegacy.className = 'px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2 bg-zinc-800 text-white shadow';
+        btnFuture.className = 'px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2 text-zinc-400 hover:text-zinc-200';
+        viewLegacy.classList.remove('hidden');
+        viewFuture.classList.add('hidden');
+      } else {
+        btnFuture.className = 'px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2 bg-indigo-600 text-white shadow-lg shadow-indigo-600/30';
+        btnLegacy.className = 'px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 flex items-center gap-2 text-zinc-400 hover:text-zinc-200';
+        viewLegacy.classList.add('hidden');
+        viewFuture.classList.remove('hidden');
+      }
+      lucide.createIcons();
+    }
+
+    // Toggle Critique Drawer
+    function toggleCritiqueDrawer() {
+      const drawer = document.getElementById('critique-drawer');
+      drawer.classList.toggle('hidden');
+      lucide.createIcons();
+    }
+
+    // Toggle News Drawer
+    function toggleNewsDrawer() {
+      const drawer = document.getElementById('news-drawer');
+      drawer.classList.toggle('hidden');
+      lucide.createIcons();
+    }
+
+    // Toggle ROI Metrics Summary
+    function toggleRoiMetricsSummary() {
+      const summary = document.getElementById('roi-metrics-summary');
+      summary.classList.toggle('hidden');
+      lucide.createIcons();
+    }
+
+    // Legacy App Switcher Simulation
+    function selectLegacyApp(appName) {
+      currentLegacyApp = appName;
+      const apps = ['netflix', 'max', 'prime', 'disney'];
+      apps.forEach(app => {
+        const btn = document.getElementById(`btn-app-${app}`);
+        if (app === appName) {
+          btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600/30 transition';
+        } else {
+          btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700 hover:text-white transition';
+        }
+      });
+
+      const logo = document.getElementById('legacy-app-logo');
+      const billboardTitle = document.getElementById('legacy-billboard-title');
+      const billboardDesc = document.getElementById('legacy-billboard-desc');
+      const billboardBg = document.getElementById('legacy-billboard-bg');
+
+      if (appName === 'netflix') {
+        logo.textContent = 'NETFLIX';
+        logo.className = 'font-black text-xl tracking-tighter text-red-600';
+        billboardTitle.textContent = 'Red Notice: The Franchise';
+        billboardDesc.textContent = 'High-budget platform-exclusive action comedy pushed aggressively to all subscribers regardless of personal tastes.';
+        billboardBg.style.backgroundImage = "url('https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=1200&q=80')";
+      } else if (appName === 'max') {
+        logo.textContent = 'MAX';
+        logo.className = 'font-black text-xl tracking-tighter text-blue-500';
+        billboardTitle.textContent = 'House of the Dragon: Season 3 Trailer';
+        billboardDesc.textContent = 'Promoted Warner Bros franchise billboard dominating the screen above your personal saved queue.';
+        billboardBg.style.backgroundImage = "url('https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80')";
+      } else if (appName === 'prime') {
+        logo.textContent = 'PRIME VIDEO';
+        logo.className = 'font-black text-xl tracking-tighter text-cyan-400';
+        billboardTitle.textContent = 'Rings of Power & Store Rentals';
+        billboardDesc.textContent = 'Mixed feed of subscription content alongside $19.99 paid rentals and commercial banners.';
+        billboardBg.style.backgroundImage = "url('https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?auto=format&fit=crop&w=1200&q=80')";
+      } else if (appName === 'disney') {
+        logo.textContent = 'DISNEY+';
+        logo.className = 'font-black text-xl tracking-tighter text-blue-600';
+        billboardTitle.textContent = 'Star Wars: The Acolyte';
+        billboardDesc.textContent = 'Heavy corporate synergy push for subscribers with zero customization to adult cinephile tastes.';
+        billboardBg.style.backgroundImage = "url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&w=1200&q=80')";
+      }
+      renderLegacyRails();
+    }
+
+    // Render Legacy Rails
+    function renderLegacyRails() {
+      const top10Rail = document.getElementById('legacy-top10-rail');
+      const trendingRail = document.getElementById('legacy-trending-rail');
+      const watchlistRail = document.getElementById('legacy-watchlist-rail');
+
+      top10Rail.innerHTML = `
+        <div class="min-w-[130px] sm:min-w-[150px] space-y-1.5 opacity-75">
+          <div class="h-44 rounded-xl bg-zinc-800 border border-zinc-700/60 overflow-hidden relative">
+            <span class="absolute top-2 left-2 text-2xl font-black text-white/50">#1</span>
+            <img src="https://images.unsplash.com/photo-1536440136628-849c177e76a1?auto=format&fit=crop&w=400&q=80" class="w-full h-full object-cover">
+          </div>
+          <p class="text-xs font-semibold text-zinc-300 truncate">Generic Blockbuster 4</p>
+        </div>
+        <div class="min-w-[130px] sm:min-w-[150px] space-y-1.5 opacity-75">
+          <div class="h-44 rounded-xl bg-zinc-800 border border-zinc-700/60 overflow-hidden relative">
+            <span class="absolute top-2 left-2 text-2xl font-black text-white/50">#2</span>
+            <img src="https://images.unsplash.com/photo-1518676590629-3dcbd9c5a5c9?auto=format&fit=crop&w=400&q=80" class="w-full h-full object-cover">
+          </div>
+          <p class="text-xs font-semibold text-zinc-300 truncate">Celebrity Reality Spinoff</p>
+        </div>
+        <div class="min-w-[130px] sm:min-w-[150px] space-y-1.5 opacity-75">
+          <div class="h-44 rounded-xl bg-zinc-800 border border-zinc-700/60 overflow-hidden relative">
+            <span class="absolute top-2 left-2 text-2xl font-black text-white/50">#3</span>
+            <img src="https://images.unsplash.com/photo-1509281373149-e957c6296406?auto=format&fit=crop&w=400&q=80" class="w-full h-full object-cover">
+          </div>
+          <p class="text-xs font-semibold text-zinc-300 truncate">True Crime Mini-Series</p>
+        </div>
+      `;
+
+      trendingRail.innerHTML = `
+        <div class="min-w-[180px] h-28 rounded-xl bg-zinc-900 border border-zinc-800 p-3 flex flex-col justify-end opacity-70">
+          <span class="text-[10px] text-zinc-400 font-mono">SEASON 6</span>
+          <span class="text-xs font-bold text-zinc-200">Love is a Blind Date</span>
+        </div>
+        <div class="min-w-[180px] h-28 rounded-xl bg-zinc-900 border border-zinc-800 p-3 flex flex-col justify-end opacity-70">
+          <span class="text-[10px] text-zinc-400 font-mono">REALITY SHOW</span>
+          <span class="text-xs font-bold text-zinc-200">Baking Disasters UK</span>
+        </div>
+        <div class="min-w-[180px] h-28 rounded-xl bg-zinc-900 border border-zinc-800 p-3 flex flex-col justify-end opacity-70">
+          <span class="text-[10px] text-zinc-400 font-mono">GAME SHOW</span>
+          <span class="text-xs font-bold text-zinc-200">The Floor is Cash</span>
+        </div>
+      `;
+
+      watchlistRail.innerHTML = mediaDatabase.slice(0, 5).map(m => `
+        <div onclick="openMovieDetail('${m.id}')" class="min-w-[120px] sm:min-w-[135px] cursor-pointer space-y-1 poster-card">
+          <div class="h-40 rounded-xl bg-zinc-800 border border-zinc-700 overflow-hidden relative">
+            <img src="${m.poster}" class="w-full h-full object-cover">
+            <div class="absolute bottom-1 right-1 text-[9px] font-mono bg-black/80 px-1 py-0.5 rounded text-zinc-300">${m.service}</div>
+          </div>
+          <p class="text-xs font-medium text-zinc-200 truncate">${m.title}</p>
+        </div>
+      `).join('');
+    }
+
+    // Filter Handlers for Future View
+    function handleFutureFilterChange() {
+      filterActiveOnly = document.getElementById('toggle-active-only').checked;
+      filterInactiveRadar = document.getElementById('toggle-inactive-services').checked;
+      filterSmartSuggestions = document.getElementById('toggle-smart-suggestions').checked;
+      renderFutureShelves();
+    }
+
+    // Render Unified Intent OS Dynamic Semantic Shelves
+    function renderFutureShelves() {
+      const container = document.getElementById('future-shelves-container');
+      container.innerHTML = '';
+
+      // Define semantic shelves
+      const shelves = [
+        {
+          id: 'shelf_pitt',
+          title: 'Brad Pitt: Peak Grit & Star Power',
+          badge: 'Semantic Actor Shelf',
+          badgeColor: 'border-amber-500/40 text-amber-300 bg-amber-500/10',
+          desc: 'Your saved favorites spanning peak Fincher, Tarantino, and Ritchie eras.',
+          tag: 'brad_pitt'
+        },
+        {
+          id: 'shelf_90s',
+          title: '90s High-Stakes Neo-Noirs & Thrillers',
+          badge: 'Micro-Era & Tone',
+          badgeColor: 'border-indigo-500/40 text-indigo-300 bg-indigo-500/10',
+          desc: 'Pacing, moral ambiguity, and practical street-level cinematography.',
+          tag: '90s_thrillers'
+        },
+        {
+          id: 'shelf_short',
+          title: 'Tight Weekend Watches (Under 95 Mins)',
+          badge: 'Zero Decision Paralysis',
+          badgeColor: 'border-emerald-500/40 text-emerald-300 bg-emerald-500/10',
+          desc: 'High-signal cinema when you don\'t have 3 hours for an epic sit.',
+          tag: 'sub_95'
+        }
+      ];
+
+      // Add Reactivation Radar shelf if toggled on
+      if (filterInactiveRadar) {
+        shelves.unshift({
+          id: 'shelf_apple',
+          title: 'Reactivation Radar: Apple TV+ Vault',
+          badge: '8 Saved Titles • $1.25/Title ROI',
+          badgeColor: 'border-amber-400 text-amber-300 bg-amber-500/20 font-bold glow-amber',
+          desc: 'You\'ve saved enough top-tier films to justify a 30-day reactivation binge.',
+          tag: 'apple_vault'
+        });
+      }
+
+      shelves.forEach(shelf => {
+        let items = mediaDatabase.filter(m => m.shelfTags.includes(shelf.tag));
+
+        // Filter based on active service toggle
+        if (filterActiveOnly && !filterInactiveRadar && shelf.id !== 'shelf_apple') {
+          items = items.filter(m => m.isActiveService);
+        }
+
+        // Filter based on suggestions toggle
+        if (!filterSmartSuggestions) {
+          items = items.filter(m => !m.isSuggestion);
+        }
+
+        if (items.length === 0) return;
+
+        const shelfEl = document.createElement('div');
+        shelfEl.className = 'space-y-3';
+        shelfEl.innerHTML = `
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-base sm:text-lg font-black text-white tracking-tight">${shelf.title}</h3>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded-full border ${shelf.badgeColor}">${shelf.badge}</span>
+              </div>
+              <p class="text-xs text-zinc-400 mt-0.5">${shelf.desc}</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono text-zinc-400">${items.length} titles</span>
+            </div>
+          </div>
+
+          <div class="flex gap-4 overflow-x-auto hide-scrollbar py-2">
+            ${items.map(item => `
+              <div onclick="openMovieDetail('${item.id}')" class="min-w-[145px] sm:min-w-[170px] cursor-pointer space-y-2 poster-card relative">
+                <div class="h-56 sm:h-64 rounded-2xl bg-zinc-900 border ${item.isSuggestion ? 'border-violet-500/60 shadow-lg shadow-violet-500/20' : 'border-zinc-800'} overflow-hidden relative group">
+                  <img src="${item.poster}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+                  
+                  <!-- Suggestions Tag -->
+                  ${item.isSuggestion ? `
+                    <div class="absolute top-2 left-2 px-1.5 py-0.5 rounded text-[9px] font-bold font-mono bg-violet-600 text-white shadow">
+                      SUGGESTED
+                    </div>
+                  ` : ''}
+
+                  <!-- Service Chip -->
+                  <div class="absolute bottom-2 right-2 px-2 py-0.5 rounded-md text-[10px] font-bold font-mono bg-black/80 backdrop-blur border border-zinc-700/60 text-white flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full ${item.isActiveService ? 'bg-emerald-400' : 'bg-amber-400'}"></span>
+                    <span>${item.service}</span>
+                  </div>
+
+                  <!-- Podcast Indicator -->
+                  ${item.podcast ? `
+                    <div class="absolute bottom-2 left-2 p-1 rounded-md bg-black/80 backdrop-blur border border-zinc-700/60 text-amber-400" title="${item.podcast.show}">
+                      <i data-lucide="mic" class="w-3.5 h-3.5"></i>
+                    </div>
+                  ` : ''}
+                </div>
+
+                <div>
+                  <h4 class="text-xs sm:text-sm font-bold text-white truncate">${item.title}</h4>
+                  <div class="flex items-center justify-between text-[11px] text-zinc-400 mt-0.5">
+                    <span>${item.year} • ${item.runtime}</span>
+                    <span class="text-amber-400 font-mono text-[10px]">${item.director.split(' ').pop()}</span>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        container.appendChild(shelfEl);
+      });
+
+      lucide.createIcons();
+    }
+
+    // Open Movie Detail Modal
+    let activeMovie = null;
+    function openMovieDetail(movieId) {
+      activeMovie = mediaDatabase.find(m => m.id === movieId);
+      if (!activeMovie) return;
+
+      document.getElementById('modal-title').textContent = activeMovie.title;
+      document.getElementById('modal-overview').textContent = activeMovie.overview;
+      document.getElementById('modal-backdrop').style.backgroundImage = `url('${activeMovie.backdrop}')`;
+      document.getElementById('modal-provider-badge').textContent = activeMovie.service.toUpperCase();
+      document.getElementById('modal-watch-button').textContent = `Watch Now on ${activeMovie.service}`;
+
+      const meta = document.getElementById('modal-meta');
+      meta.innerHTML = `
+        <span>${activeMovie.year}</span> •
+        <span>${activeMovie.runtime}</span> •
+        <span>Dir. ${activeMovie.director}</span> •
+        <span>${activeMovie.starring}</span>
+      `;
+
+      const tags = document.getElementById('modal-tags');
+      tags.innerHTML = `
+        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-white/20 text-white">${activeMovie.score}</span>
+        ${activeMovie.isSuggestion ? '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-violet-600 text-white">Suggested Taste Gem</span>' : '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-600 text-white">In Your Watchlist</span>'}
+      `;
+
+      const reason = document.getElementById('modal-shelf-reason');
+      reason.textContent = activeMovie.isSuggestion 
+        ? `Recommended because you have 3 other ${activeMovie.director} films in your queue and it is streaming on ${activeMovie.service}.`
+        : `Added from your Letterboxd queue. Streaming right now on your active ${activeMovie.service} subscription.`;
+
+      const podcastCard = document.getElementById('modal-podcast-card');
+      if (activeMovie.podcast) {
+        podcastCard.classList.remove('hidden');
+        document.getElementById('modal-podcast-title').textContent = activeMovie.podcast.show;
+        document.getElementById('modal-podcast-ep').textContent = activeMovie.podcast.ep;
+      } else {
+        podcastCard.classList.add('hidden');
+      }
+
+      document.getElementById('movie-modal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeMovieModal() {
+      document.getElementById('movie-modal').classList.add('hidden');
+    }
+
+    function simulateWatchLaunch() {
+      if (!activeMovie) return;
+      showToast(`Launching ${activeMovie.service} app to play "${activeMovie.title}"...`);
+      closeMovieModal();
+    }
+
+    function toggleWatchlistMark() {
+      if (!activeMovie) return;
+      showToast(`Marked "${activeMovie.title}" as watched! Added to your diary.`);
+      closeMovieModal();
+    }
+
+    // Custom Shelf Modal
+    function openCustomShelfModal() {
+      document.getElementById('shelf-modal').classList.remove('hidden');
+    }
+
+    function closeCustomShelfModal() {
+      document.getElementById('shelf-modal').classList.add('hidden');
+    }
+
+    function setShelfPrompt(text) {
+      document.getElementById('custom-shelf-input').value = text;
+    }
+
+    function createCustomShelf() {
+      const input = document.getElementById('custom-shelf-input').value.trim();
+      if (!input) return;
+      showToast(`Synthesizing dynamic smart shelf: "${input}"...`);
+      closeCustomShelfModal();
+    }
+
+    // Toast
+    function showToast(text) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-text').textContent = text;
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 3500);
+      lucide.createIcons();
+    }
+  </script>
+</body>
+</html>
