@@ -1684,6 +1684,122 @@ class StreamViewModel(
     }
 
     /**
+     * 1-Tap Watchlist toggle for items viewed inside 3rd-party/curated lists.
+     * If the item is already in the database:
+     *   - If in watchlist, toggle star priority.
+     *   - If in watched, notify user.
+     * If not in database:
+     *   - Inserts as new Watchlist item with TMDB release date and import source badge.
+     */
+    fun addOrToggleCuratedItem(curatedItem: com.example.data.model.CuratedListItem, existingMedia: MediaItem?) {
+        viewModelScope.launch {
+            if (existingMedia != null) {
+                if (existingMedia.status != MediaStatus.WATCHED.name) {
+                    val newStarred = !existingMedia.isStarred
+                    repository.updateStarredStatus(existingMedia.id, newStarred)
+                    _statusMessage.value = if (newStarred) {
+                        "⭐ Added \"${existingMedia.title}\" to Focus Queue!"
+                    } else {
+                        "Removed star from \"${existingMedia.title}\"."
+                    }
+                } else {
+                    _statusMessage.value = "\"${existingMedia.title}\" is already in your Watched Vault!"
+                }
+            } else {
+                val item = MediaItem(
+                    title = curatedItem.title,
+                    status = MediaStatus.WATCHLIST.name,
+                    releaseDate = curatedItem.year?.toString(),
+                    importSource = curatedItem.badge ?: "Curated List",
+                    userNotes = curatedItem.note,
+                    isStarred = true,
+                    addedAt = System.currentTimeMillis()
+                )
+                repository.insertMediaItem(item)
+                enqueueTmdbSync(showMessage = false)
+                _statusMessage.value = "⭐ Added \"${curatedItem.title}\" to Focus Queue & Watchlist!"
+            }
+        }
+    }
+
+    /**
+     * 1-Tap mark watched for items viewed inside 3rd-party/curated lists.
+     */
+    fun markCuratedItemWatched(curatedItem: com.example.data.model.CuratedListItem, existingMedia: MediaItem?, rating: Double? = null) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            if (existingMedia != null) {
+                val updated = existingMedia.copy(
+                    status = MediaStatus.WATCHED.name,
+                    watchedAt = now,
+                    rating = rating ?: existingMedia.rating ?: 7.0,
+                    updatedAt = now
+                )
+                repository.updateMediaItem(updated)
+                repository.mediaDao.insertWatchSession(
+                    WatchSession(
+                        mediaItemId = existingMedia.id,
+                        mediaItemTitle = existingMedia.title,
+                        providerId = existingMedia.providersList.firstOrNull(),
+                        durationMinutes = 110,
+                        watchedAt = now
+                    )
+                )
+                _statusMessage.value = "✓ Logged \"${existingMedia.title}\" in Watched Vault!"
+            } else {
+                val item = MediaItem(
+                    title = curatedItem.title,
+                    status = MediaStatus.WATCHED.name,
+                    releaseDate = curatedItem.year?.toString(),
+                    importSource = curatedItem.badge ?: "Curated List",
+                    userNotes = curatedItem.note,
+                    rating = rating ?: 7.0,
+                    watchedAt = now,
+                    addedAt = now
+                )
+                val newId = repository.insertMediaItem(item)
+                repository.mediaDao.insertWatchSession(
+                    WatchSession(
+                        mediaItemId = newId,
+                        mediaItemTitle = curatedItem.title,
+                        providerId = null,
+                        durationMinutes = 110,
+                        watchedAt = now
+                    )
+                )
+                enqueueTmdbSync(showMessage = false)
+                _statusMessage.value = "✓ Logged \"${curatedItem.title}\" in Watched Vault!"
+            }
+        }
+    }
+
+    /**
+     * Moves an existing Watchlist item directly into the Watched Vault (e.g. from Triage Sheet).
+     */
+    fun moveItemToWatched(item: MediaItem, rating: Double? = null) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val updated = item.copy(
+                status = MediaStatus.WATCHED.name,
+                watchedAt = now,
+                rating = rating ?: item.rating ?: 7.0,
+                updatedAt = now
+            )
+            repository.updateMediaItem(updated)
+            repository.mediaDao.insertWatchSession(
+                WatchSession(
+                    mediaItemId = item.id,
+                    mediaItemTitle = item.title,
+                    providerId = item.providersList.firstOrNull(),
+                    durationMinutes = 110,
+                    watchedAt = now
+                )
+            )
+            _statusMessage.value = "✓ Logged \"${item.title}\" to Watched Vault!"
+        }
+    }
+
+    /**
      * Toggles subscription activity states in Settings/Budget panels to filter lists dynamically.
      */
     fun toggleStreamingProvider(providerId: String, isActive: Boolean) {

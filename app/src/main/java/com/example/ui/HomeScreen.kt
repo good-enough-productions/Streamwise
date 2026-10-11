@@ -101,7 +101,7 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Explore
-    var exploreSubTab by remember { mutableStateOf(0) } // 0: AI & Taste, 1: AI Companion, 2: Podcasts, 3: Film News
+    var exploreSubTab by remember { mutableStateOf(0) } // 0: AI & Taste, 1: Curated Lists, 2: AI Companion, 3: Podcasts, 4: Film News
     var filterOnlyMyServices by remember { mutableStateOf(true) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -116,6 +116,7 @@ fun HomeScreen(
     var showShareExportDialog by remember { mutableStateOf(false) }
     var itemPendingRemoval by remember { mutableStateOf<MediaItem?>(null) }
     var movieToMarkWatched by remember { mutableStateOf<MediaItem?>(null) }
+    var showTriageSheet by remember { mutableStateOf(false) }
 
     // Android Document Picker launcher for Letterboxd CSV/ZIP files
     val letterboxdFileLauncher = rememberLauncherForActivityResult(
@@ -304,7 +305,7 @@ fun HomeScreen(
         },
         floatingActionButton = {
             // Suppress global feedback FAB when actively chatting with AI to prevent overlapping input controls
-            val isChattingWithAi = selectedTab == 3 && exploreSubTab == 1
+            val isChattingWithAi = selectedTab == 3 && exploreSubTab == 2
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -365,7 +366,12 @@ fun HomeScreen(
                         onImportLetterboxdClick = {
                             letterboxdFileLauncher.launch(arrayOf("*/*", "text/*", "text/csv", "application/zip"))
                         },
-                        onStartOnboardingClick = { showOnboardingDialog = true }
+                        onStartOnboardingClick = { showOnboardingDialog = true },
+                        onOpenTriage = { showTriageSheet = true },
+                        onOpenCuratedLists = {
+                            selectedTab = 3
+                            exploreSubTab = 1
+                        }
                     )
                     1 -> {
                         val watchedItems by viewModel.watchedItems.collectAsState()
@@ -431,7 +437,14 @@ fun HomeScreen(
                             watchedItems = watchedItems,
                             isSyncingPodcasts = isSyncingPodcasts,
                             onSyncPodcastRecs = { viewModel.syncPodcastRecommendations() },
-                            onAddRecommendation = { title, reason -> viewModel.addRecommendationToWatchlist(title, reason) }
+                            onAddRecommendation = { title, reason -> viewModel.addRecommendationToWatchlist(title, reason) },
+                            allItems = allItems,
+                            allProviders = allProviders,
+                            onAddOrToggleWatchlist = { curated, media -> viewModel.addOrToggleCuratedItem(curated, media) },
+                            onToggleStarred = { viewModel.toggleStarred(it) },
+                            onMarkWatched = { curated, media -> viewModel.markCuratedItemWatched(curated, media) },
+                            onWatchClick = { viewModel.launchAndIntendToWatch(context, it) },
+                            onMovieClick = { detailMovieItem = it }
                         )
                     }
                 }
@@ -447,6 +460,21 @@ fun HomeScreen(
                     viewModel.addCustomWatchlistItemsBulk(titlesInput, selectedProviderIds, notes, source, targetStatus, isStarred)
                     showAddDialog = false
                 }
+            )
+        }
+
+        // Backlog Triage Mode (for taming 1k+ unstarred movies)
+        if (showTriageSheet) {
+            val unstarredBacklog = remember(watchlistItems) {
+                watchlistItems.filter { !it.isStarred && it.status != MediaStatus.WATCHED.name }
+            }
+            WatchlistTriageSheet(
+                unstarredItems = unstarredBacklog,
+                allProviders = allProviders,
+                onToggleStar = { viewModel.toggleStarred(it) },
+                onMarkWatched = { viewModel.moveItemToWatched(it) },
+                onRemoveFromQueue = { viewModel.deleteItem(it) },
+                onDismiss = { showTriageSheet = false }
             )
         }
 
@@ -814,7 +842,7 @@ fun HomeScreen(
                 },
                 onDiscussInExplore = { prompt ->
                     detailMovieItem = null
-                    exploreSubTab = 1
+                    exploreSubTab = 2
                     selectedTab = 3
                     viewModel.sendChatMessage(prompt)
                 },
@@ -1214,7 +1242,9 @@ fun WatchlistTabContent(
     onAddTitleClick: () -> Unit = {},
     onImportLetterboxdClick: () -> Unit = {},
     onStartOnboardingClick: () -> Unit = {},
-    onToggleStarred: (MediaItem) -> Unit = {}
+    onToggleStarred: (MediaItem) -> Unit = {},
+    onOpenTriage: () -> Unit = {},
+    onOpenCuratedLists: () -> Unit = {}
 ) {
     val activeProviderIds = remember(allProviders) {
         allProviders.filter { it.isActive }.map { it.id }.toSet()
@@ -1258,6 +1288,19 @@ fun WatchlistTabContent(
             item.status != MediaStatus.WATCHED.name &&
             (item.isUserProtected || !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) &&
             com.example.data.model.PodcastEpisodeCatalog.isCoveredOnAnyPodcast(item.title, item.importSource, item.userNotes)
+        }
+    }
+    val allCuratedNormTitles = remember {
+        com.example.data.model.CuratedListCatalog.getAllLists()
+            .flatMap { it.items }
+            .map { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
+            .toSet()
+    }
+    val curatedCount = remember(watchlistItems, allCuratedNormTitles) {
+        watchlistItems.count { item ->
+            item.status != MediaStatus.WATCHED.name &&
+            (item.isUserProtected || !com.example.data.util.MediaTitleSanitizer.isNonMovieEpisode(item.title)) &&
+            allCuratedNormTitles.contains(com.example.data.remote.TmdbMatchingHelper.normalizeTitle(item.title))
         }
     }
 
@@ -1350,6 +1393,10 @@ fun WatchlistTabContent(
                         notes = item.userNotes
                     )
                     if (!covered) return@filter false
+                }
+                "curated" -> {
+                    val normTitle = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(item.title)
+                    if (!allCuratedNormTitles.contains(normTitle)) return@filter false
                 }
                 "all" -> {
                     // All saved titles
@@ -1556,8 +1603,9 @@ fun WatchlistTabContent(
                                 "ready" -> 0
                                 "all" -> 1
                                 "starred" -> 2
-                                "short" -> 3
-                                "podcasts" -> 4
+                                "curated" -> 3
+                                "short" -> 4
+                                "podcasts" -> 5
                                 else -> 0
                             },
                             edgePadding = 0.dp,
@@ -1601,6 +1649,18 @@ fun WatchlistTabContent(
                                         fontWeight = if (watchlistSubTab == "starred") FontWeight.Bold else FontWeight.Normal,
                                         fontSize = 12.sp,
                                         color = if (watchlistSubTab == "starred") Color(0xFFFFD700) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            )
+                            Tab(
+                                selected = watchlistSubTab == "curated",
+                                onClick = { watchlistSubTab = "curated" },
+                                text = {
+                                    Text(
+                                        "🏆 Curated Canon ($curatedCount)",
+                                        fontWeight = if (watchlistSubTab == "curated") FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 12.sp,
+                                        color = if (watchlistSubTab == "curated") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             )
@@ -1718,6 +1778,61 @@ fun WatchlistTabContent(
                                         }
                                     )
                                 }
+                            }
+
+                            // Triage Button (⚡)
+                            IconButton(
+                                onClick = onOpenTriage,
+                                modifier = Modifier.size(50.dp)
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.Bolt, contentDescription = "Triage Backlog", tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(22.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        // 3rd-Party Curated Lists Banner
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onOpenCuratedLists)
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text("📜", fontSize = 14.sp)
+                                    Text(
+                                        "Explore 3rd-Party Lists (Oscars • AFI • Podcasts)",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
                             }
                         }
 
@@ -8356,7 +8471,14 @@ fun ExploreTabContent(
     watchedItems: List<MediaItem> = emptyList(),
     isSyncingPodcasts: Boolean = false,
     onSyncPodcastRecs: () -> Unit = {},
-    onAddRecommendation: ((String, String) -> Unit)? = null
+    onAddRecommendation: ((String, String) -> Unit)? = null,
+    allItems: List<MediaItem> = emptyList(),
+    allProviders: List<StreamingProvider> = emptyList(),
+    onAddOrToggleWatchlist: (com.example.data.model.CuratedListItem, MediaItem?) -> Unit = { _, _ -> },
+    onToggleStarred: (MediaItem) -> Unit = {},
+    onMarkWatched: (com.example.data.model.CuratedListItem, MediaItem?) -> Unit = { _, _ -> },
+    onWatchClick: (MediaItem) -> Unit = {},
+    onMovieClick: (MediaItem) -> Unit = {}
 ) {
     Column(
         modifier = Modifier
@@ -8396,10 +8518,29 @@ fun ExploreTabContent(
                     )
                 )
 
-                // Tab 1: Chat with AI Companion
+                // Tab 1: Curated Lists
                 FilterChip(
                     selected = selectedSubTab == 1,
                     onClick = { onSubTabChange(1) },
+                    label = { Text("📜 Curated Lists", fontWeight = FontWeight.Bold) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.FormatListNumbered,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("subtab_curated_lists"),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+
+                // Tab 2: Chat with AI Companion
+                FilterChip(
+                    selected = selectedSubTab == 2,
+                    onClick = { onSubTabChange(2) },
                     label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("💬 AI Companion", fontWeight = FontWeight.Bold)
@@ -8436,10 +8577,10 @@ fun ExploreTabContent(
                     )
                 )
 
-                // Tab 2: Podcasts
+                // Tab 3: Podcasts
                 FilterChip(
-                    selected = selectedSubTab == 2,
-                    onClick = { onSubTabChange(2) },
+                    selected = selectedSubTab == 3,
+                    onClick = { onSubTabChange(3) },
                     label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("🎙️ Podcasts", fontWeight = FontWeight.Bold)
@@ -8476,10 +8617,10 @@ fun ExploreTabContent(
                     )
                 )
 
-                // Tab 3: Film News
+                // Tab 4: Film News
                 FilterChip(
-                    selected = selectedSubTab == 3,
-                    onClick = { onSubTabChange(3) },
+                    selected = selectedSubTab == 4,
+                    onClick = { onSubTabChange(4) },
                     label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("📰 Film News", fontWeight = FontWeight.Bold)
@@ -8879,7 +9020,7 @@ fun ExploreTabContent(
                                 // Action button: Chat about this analysis
                                 OutlinedButton(
                                     onClick = {
-                                        onSubTabChange(1)
+                                        onSubTabChange(2)
                                         onSendMessage("Tell me more about the cinema analysis of my vault: ${geminiAnalysis.headline}")
                                     },
                                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -8928,7 +9069,7 @@ fun ExploreTabContent(
                             prompts.forEach { p ->
                                 SuggestionChip(
                                     onClick = {
-                                        onSubTabChange(1)
+                                        onSubTabChange(2)
                                         onSendMessage(p)
                                     },
                                     label = { Text(p, fontSize = 11.sp) },
@@ -8943,7 +9084,20 @@ fun ExploreTabContent(
             }
 
             1 -> {
-                // SubTab 1: Chat with AI Companion
+                // SubTab 1: 📜 Curated & 3rd-Party Lists Hub
+                CuratedListsScreen(
+                    allItems = allItems,
+                    allProviders = allProviders,
+                    onAddOrToggleWatchlist = onAddOrToggleWatchlist,
+                    onToggleStarred = onToggleStarred,
+                    onMarkWatched = onMarkWatched,
+                    onWatchClick = onWatchClick,
+                    onMovieClick = onMovieClick
+                )
+            }
+
+            2 -> {
+                // SubTab 2: Chat with AI Companion
                 AgentChatTabContent(
                     chatMessages = chatMessages,
                     isLoading = isLoading,
@@ -8951,25 +9105,25 @@ fun ExploreTabContent(
                 )
             }
 
-            2 -> {
-                // SubTab 2: 🎙️ Podcasts Hub
+            3 -> {
+                // SubTab 3: 🎙️ Podcasts Hub
                 PodcastsExploreView(
                     podcastEpisodes = podcastEpisodes,
                     isSyncingPodcasts = isSyncingPodcasts,
                     onSyncPodcastRecs = onSyncPodcastRecs,
                     onAskAi = { prompt ->
-                        onSubTabChange(1)
+                        onSubTabChange(2)
                         onSendMessage(prompt)
                     }
                 )
             }
 
-            3 -> {
-                // SubTab 3: 📰 Film News Hub
+            4 -> {
+                // SubTab 4: 📰 Film News Hub
                 NewsExploreView(
                     movieNews = movieNews,
                     onDiscussWithAi = { prompt ->
-                        onSubTabChange(1)
+                        onSubTabChange(2)
                         onSendMessage(prompt)
                     }
                 )

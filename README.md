@@ -65,6 +65,22 @@ Streamwise includes an in-app updater. Whenever you open **Settings (`⚙️`) >
 - Stop typing movie titles into sluggish TV search bars.
 - Tapping **Watch Now** resolves deep links directly into native Android streaming apps across 15+ services (Netflix, Max, Prime Video, Disney+, Hulu, Tubi, Apple TV+, Criterion Channel, Peacock, Paramount+, and more).
 
+### 📜 Curated & 3rd-Party Lists Hub (Zero-Pollution Browsing)
+- **Browse Canonical Cinema Without Backlog Bloat**: Explore premier curated lists—Oscar Best Picture Winners (1927–2024), AFI's 100 Greatest American Films, Sight & Sound Top 50, Criterion Channel Essentials, IMDb Top 50 Classics, and podcast essentials (*The Rewatchables*, *The Big Picture*, *Blank Check*)—without dumping hundreds of foreign movies into your personal database.
+- **Triple-State Real-Time Badges**: Every single film across any 3rd-party list dynamically reflects your personal library:
+  - `✓ Watched` badge + your personal Letterboxd diary star rating.
+  - `📌 In Queue` badge + 1-tap ⭐ Priority star and watchlist toggle.
+  - **Streaming availability** matched against your active subscriptions with a 1-tap `▶ Watch` launcher.
+- **Ad-Hoc Letterboxd List Viewer**: Paste any public Letterboxd list URL or newline titles to preview the list in-memory. Cross-reference what you've seen, what's in your queue, and where to stream the rest without database clutter.
+
+### ⚡ Watchlist Backlog Triage Mode (Tame 1,000+ Film Queues)
+- **Couch-Friendly Rapid-Fire Review**: When your watchlist swells to 1k+ titles, deciding what to watch becomes paralyzing. Tap **⚡ Triage** to enter a focused one-by-one card stack.
+- **4 Instant 1-Tap Actions**:
+  - `⭐ Focus Queue`: Elevates the film to your starred priority queue.
+  - `✓ Already Watched`: Directly records the title into your Watched Vault diary.
+  - `✕ Not Interested`: Cleans the film from your backlog.
+  - `⏩ Skip`: Leaves the title in backlog and moves to the next.
+
 ### 📋 Letterboxd Integration
 - **Live RSS Sync**: Enter your Letterboxd username to pull in your latest diary logs and ratings automatically—no API keys required.
 - **CSV & ZIP Imports**: Import your `watchlist.csv` and `watched.csv` data in seconds so you never have to start from scratch.

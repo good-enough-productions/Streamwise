@@ -501,3 +501,41 @@ Architecture updates addressing mobile visual density and couch-first discovery:
 - **Service Detail Sheet (`ServiceDetailBottomSheet`)**:
   - Features a `⭐ Priorities Only (X)` filter chip and per-title star toggle buttons to curate service-specific queues.
 
+---
+
+## 15. Curated & 3rd-Party Lists Hub & Watchlist Backlog Triage Architecture (v1.7.0)
+
+### 1. Zero-Pollution External List Browsing
+To solve the "1,000+ movie backlog overwhelm" without adding hundreds more unverified entries to the user's personal SQLite database:
+- **`CuratedListCatalog.kt`**: Houses canonical film collections completely in-memory as static data models (`CuratedListItem`, `CuratedList`):
+  - 🏆 *Oscar Best Picture Winners (1927–2024)* (96 films with directors & notes).
+  - 🏛️ *AFI's 100 Greatest American Films (10th Anniv)* (#1–#100 canonical ranks).
+  - 🍿 *The Rewatchables Hall of Fame* (50+ films).
+  - 🎬 *The Big Picture Essentials & Movie Draft Picks*.
+  - 📽️ *Sight & Sound Top 50 (BFI Critics Poll)*.
+  - 📀 *Criterion Channel Essentials*.
+  - 🎟️ *Blank Check Miniseries Highlights*.
+  - ⭐ *IMDb Top 50 Classics*.
+- **Dynamic Cross-Referencing (`CuratedListCatalog.crossReference`)**:
+  - Compares list titles against the user's offline Room DB (`allItems`) using normalized title matching and release year verification.
+  - Emits `EnrichedCuratedItem` models tracking `isWatched`, `watchedRating`, `isInWatchlist`, `isStarred`, and matching streaming services active on the user's phone.
+- **Ad-Hoc / Letterboxd List Parser (`CuratedListCatalog.parseAdHocList`)**:
+  - Parses arbitrary Letterboxd URLs (`letterboxd.com/user/list/...`) or newline titles into an in-memory `CuratedList`.
+  - Enables immediate cross-referencing without inserting a single row into the user's database unless explicitly tapped.
+
+### 2. Triple-State UI Badging (`CuratedListsView.kt`)
+Every item rendered across Curated List Detail views presents a distinct triple-state badge layout:
+1. **Watched Status**: `✓ Watched` badge (green container) with personal diary star rating (e.g. `★ 4.5`).
+2. **Watchlist Status**: `📌 In Queue` badge (primary container) with 1-tap ⭐ Priority star toggle and `+ Watchlist` button.
+3. **Streaming Services**: Provider chips matching active user subscriptions (Max, Netflix, Prime, Criterion, etc.) with a 1-tap `▶ Watch` button that deep-links into native streaming apps.
+
+### 3. Watchlist Backlog Triage Mode (`WatchlistTriageSheet.kt`)
+- **Triage Workflow**: Designed specifically to tame overwhelming queues (1k+ titles).
+- Filter selects unstarred backlog movies (`watchlistItems.filter { !it.isStarred && it.status != MediaStatus.WATCHED.name }`).
+- Renders titles one-by-one in an uncluttered, high-focus bottom sheet with 4 immediate 1-tap actions:
+  1. `⭐ Focus Queue`: Tags the title with `isStarred = true` and updates Room DB.
+  2. `✓ Already Watched`: Invokes `moveItemToWatched(item)`, logging it to the Watched Vault and creating a `WatchSession`.
+  3. `✕ Not Interested`: Cleans the title from the queue via `deleteItem(item)`.
+  4. `⏩ Skip / Next`: Advances the index to the next backlog item without altering state.
+
+
