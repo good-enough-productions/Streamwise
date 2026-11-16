@@ -191,6 +191,15 @@ class StreamViewModel(
         _hasCompletedOnboarding.value = false
     }
 
+    // Post-Update What's New Version Tracking
+    private val _lastSeenVersionCode = MutableStateFlow(userPreferences.lastSeenVersionCode)
+    val lastSeenVersionCode: StateFlow<Int> = _lastSeenVersionCode.asStateFlow()
+
+    fun markVersionSeen(versionCode: Int = BuildConfig.VERSION_CODE) {
+        userPreferences.lastSeenVersionCode = versionCode
+        _lastSeenVersionCode.value = versionCode
+    }
+
     // Google Sheet Webhook Setting
     private val _googleSheetWebhookUrl = MutableStateFlow(userPreferences.googleSheetWebhookUrl)
     val googleSheetWebhookUrl: StateFlow<String> = _googleSheetWebhookUrl.asStateFlow()

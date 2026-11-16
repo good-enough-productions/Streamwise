@@ -95,7 +95,7 @@ fun FeedbackDialog(
     var delegateToJules by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var updateStatusText by remember { mutableStateOf("v1.6.2 (Current)") }
+    var updateStatusText by remember { mutableStateOf("v${com.example.BuildConfig.VERSION_NAME} (Current)") }
     var isCheckingUpdates by remember { mutableStateOf(false) }
 
     // Capture screenshot on dialog open

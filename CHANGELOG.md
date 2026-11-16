@@ -2,6 +2,24 @@
 
 All notable changes to Streamwise will be documented in this file.
 
+## [1.6.6] - 2026-11-14
+
+### Added
+- **Interactive SeeCode Visual Architecture Atlas (`architecture_atlas.html`)**:
+  - Bundled 5 high-DPI vector system diagrams directly into **Settings (`⚙️`) → Guides & Docs**:
+    1. **End-to-End Data Flow**: Voice/Share intake → TMDB + Watchmode cache → Room v14 DB → 30-Day Rotation Advisor.
+    2. **Room v14 Database ERD**: Visual entity-relationship schema of `media_items`, `streaming_providers`, and `watch_sessions`.
+    3. **30-Day Rotation Loop**: Single-service binge and cancellation flywheel saving $50–$70/month.
+    4. **Cloud & API Sync Sequence**: Step-by-step sequence from share/add intent to non-destructive provider unioning and Google Sheet webhook sync.
+    5. **Service Volume Breakdown**: Comparative catalog distribution across streaming services.
+- **Post-Update What's New Changelog Dialog (`WhatsNewDialog`)**:
+  - Automatically displays once per version upgrade (`lastSeenVersionCode` in `UserPreferencesManager`) summarizing plain-English release highlights with a single "Got It" CTA and a "📐 View Visual Atlas" shortcut, plus a persistent trigger in Settings → Guides & Docs.
+
+### Fixed
+- **Beta Feedback Watched Vault Count & Version Telemetry**:
+  - Fixed a bug in `HomeScreen.kt` where `watchedCount` passed to `FeedbackDialog` was filtering `watchlistItems` (which already excluded `WATCHED` items, always reporting `0`) instead of using `watchedItems.size`.
+  - Replaced hardcoded `"v1.6.2 (Current)"` in `FeedbackDialog.kt` with dynamic `"v${BuildConfig.VERSION_NAME} (Current)"`.
+
 ## [1.6.5] - 2026-09-25
 
 ### Added

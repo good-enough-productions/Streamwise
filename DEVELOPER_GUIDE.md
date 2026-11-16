@@ -1,10 +1,10 @@
-# Streamwise Developer Guide
+# Streamwise Developer Guide (v1.6.6)
 
-This guide details the architectural design, local build setup, and synchronization patterns for Streamwise.
+This guide details the architectural design, local build setup, and synchronization patterns for Streamwise (`v1.6.6`, `versionCode = 166`, `com.goodenoughproductions.streamwise`).
 
 ## 1. Architecture Overview
 
-- **UI Layer**: Jetpack Compose with Material 3 theming (`com.example.ui`).
+- **UI Layer**: Jetpack Compose with Material 3 theming (`com.example.ui`), including `WhatsNewDialog` (post-update changelog once per `lastSeenVersionCode`) and `HtmlAssetViewerDialog` serving `architecture_atlas.html` (5 offline SeeCode v0.6.3 vector diagrams).
 - **ViewModel**: `StreamViewModel.kt` managing UI state, live reactive Flows, and direct coroutine metadata sync via `viewModelScope`.
 - **Database**: Room database (`AppDatabase.kt`) caching titles (`MediaItem`), providers, and watch history offline.
 - **Remote APIs**:

@@ -96,6 +96,7 @@ fun HomeScreen(
     val isBackfillingTmdb by viewModel.isBackfillingTmdb.collectAsState()
     val backfillProgress by viewModel.backfillProgress.collectAsState()
     val hasCompletedOnboarding by viewModel.hasCompletedOnboarding.collectAsState()
+    val lastSeenVersionCode by viewModel.lastSeenVersionCode.collectAsState()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -106,6 +107,9 @@ fun HomeScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showOnboardingDialog by remember(hasCompletedOnboarding) { mutableStateOf(!hasCompletedOnboarding) }
+    var showWhatsNewDialog by remember(hasCompletedOnboarding, lastSeenVersionCode) {
+        mutableStateOf(hasCompletedOnboarding && lastSeenVersionCode < BuildConfig.VERSION_CODE)
+    }
     var showFeedbackDialog by remember { mutableStateOf(false) }
     var detailMovieItem by remember { mutableStateOf<MediaItem?>(null) }
     var showServiceDetailProvider by remember { mutableStateOf<StreamingProvider?>(null) }
@@ -113,6 +117,7 @@ fun HomeScreen(
     var showLetterboxdImportDialog by remember { mutableStateOf(false) }
     var showUserGuideDialog by remember { mutableStateOf(false) }
     var showChangelogDialog by remember { mutableStateOf(false) }
+    var showArchitectureAtlasDialog by remember { mutableStateOf(false) }
     var showShareExportDialog by remember { mutableStateOf(false) }
     var itemPendingRemoval by remember { mutableStateOf<MediaItem?>(null) }
     var movieToMarkWatched by remember { mutableStateOf<MediaItem?>(null) }
@@ -604,6 +609,8 @@ fun HomeScreen(
                 },
                 onOpenUserGuide = { showUserGuideDialog = true },
                 onOpenChangelog = { showChangelogDialog = true },
+                onOpenArchitectureAtlas = { showArchitectureAtlasDialog = true },
+                onOpenWhatsNew = { showWhatsNewDialog = true },
                 updateStatus = updateStatus,
                 onCheckForUpdates = { viewModel.checkForUpdates() },
                 onDownloadAndInstallUpdate = { viewModel.downloadAndInstallUpdate(it) },
@@ -658,7 +665,23 @@ fun HomeScreen(
                 onSyncLetterboxdLive = { viewModel.syncLetterboxdLive() },
                 onComplete = {
                     viewModel.completeOnboarding()
+                    viewModel.markVersionSeen()
                     showOnboardingDialog = false
+                }
+            )
+        }
+
+        // Post-Update What's New Changelog Dialog (once per version bump)
+        if (showWhatsNewDialog && !showOnboardingDialog) {
+            WhatsNewDialog(
+                onOpenArchitectureAtlas = {
+                    viewModel.markVersionSeen()
+                    showWhatsNewDialog = false
+                    showArchitectureAtlasDialog = true
+                },
+                onDismiss = {
+                    viewModel.markVersionSeen()
+                    showWhatsNewDialog = false
                 }
             )
         }
@@ -769,6 +792,15 @@ fun HomeScreen(
             )
         }
 
+        // In-App Interactive SeeCode Architecture & Flow Atlas Dialog
+        if (showArchitectureAtlasDialog) {
+            HtmlAssetViewerDialog(
+                title = "Streamwise Visual Architecture (SeeCode)",
+                assetFileName = "architecture_atlas.html",
+                onDismiss = { showArchitectureAtlasDialog = false }
+            )
+        }
+
         // Beta Feedback Dialog (Backlog-first, Jules opt-in)
         if (showFeedbackDialog) {
             val githubToken by viewModel.githubToken.collectAsState()
@@ -782,8 +814,8 @@ fun HomeScreen(
             FeedbackDialog(
                 githubToken = githubToken,
                 currentTabName = currentTabName,
-                watchlistCount = watchlistItems.count { it.status != MediaStatus.WATCHED.name },
-                watchedCount = watchlistItems.count { it.status == MediaStatus.WATCHED.name },
+                watchlistCount = watchlistItems.size,
+                watchedCount = watchedItems.size,
                 onDismiss = { showFeedbackDialog = false },
                 onSubmitSuccess = { msg ->
                     coroutineScope.launch {
@@ -6435,6 +6467,88 @@ fun OnboardingDialog(
 }
 
 // ==========================================
+// COMPOSABLE: Post-Update What's New Dialog
+// ==========================================
+@Composable
+fun WhatsNewDialog(
+    onOpenArchitectureAtlas: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column {
+                    Text("What's New in v${BuildConfig.VERSION_NAME}", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Build ${BuildConfig.VERSION_CODE} • Plain-English Release Summary",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("1. 📐 Interactive SeeCode Visual Architecture Atlas", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Explore 5 visual diagrams of how Streamwise works right inside Settings → Guides & Docs (End-to-End Data Flow, Room v14 Database ERD, 30-Day Rotation Loop, Cloud Sync Sequence, and Service Volume).",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("2. 🎯 Accurate Watched Vault & Version Telemetry", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Beta Feedback now reports your exact Watched Vault count and live BuildConfig version instead of static placeholders.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("3. 🚀 Post-Update What's New Summary", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(
+                            "Shows once per version upgrade so you always know what changed in plain English—and stays accessible anytime in Settings → Guides & Docs.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("Got It")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onOpenArchitectureAtlas) {
+                Text("📐 View Visual Atlas")
+            }
+        }
+    )
+}
+
+// ==========================================
 // COMPOSABLE: Settings Dialog (4-Tab Unified Hub)
 // ==========================================
 @Composable
@@ -6448,6 +6562,8 @@ fun SettingsDialog(
     onSyncLetterboxdLive: () -> Unit,
     onOpenUserGuide: () -> Unit,
     onOpenChangelog: () -> Unit,
+    onOpenArchitectureAtlas: () -> Unit = {},
+    onOpenWhatsNew: () -> Unit = {},
     updateStatus: UpdateStatus,
     onCheckForUpdates: () -> Unit,
     onDownloadAndInstallUpdate: (String) -> Unit,
@@ -6804,6 +6920,30 @@ fun SettingsDialog(
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        Text("SeeCode Visual Architecture Atlas (5 Diagrams)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                    }
+                                    Text(
+                                        "Explore interactive vector diagrams of Streamwise: End-to-End Data Flow, Room v14 Database ERD, 30-Day Rotation Loop, Cloud Sync Sequence, and Service Volume.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Button(
+                                        onClick = onOpenArchitectureAtlas,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text("📐 Open Interactive Architecture Atlas", fontSize = 12.sp)
+                                    }
+                                }
+                            }
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
@@ -6834,19 +6974,31 @@ fun SettingsDialog(
                                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
-                                        Text("Streamwise Changelog", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                        Text("Streamwise Changelog (v${BuildConfig.VERSION_NAME})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                     }
                                     Text(
-                                        "Review the latest updates across v1.4.0, v1.3.1, and earlier releases with detailed feature breakdowns.",
+                                        "Review the latest updates across v1.6.6, v1.6.5, v1.5.0, and earlier releases with plain-English feature breakdowns.",
                                         style = MaterialTheme.typography.bodySmall
                                     )
-                                    Button(
-                                        onClick = onOpenChangelog,
+                                    Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Text("Open Changelog", fontSize = 12.sp)
+                                        Button(
+                                            onClick = onOpenChangelog,
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                        ) {
+                                            Text("Full Changelog", fontSize = 12.sp)
+                                        }
+                                        OutlinedButton(
+                                            onClick = onOpenWhatsNew,
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(8.dp)
+                                        ) {
+                                            Text("What's New Popup", fontSize = 12.sp)
+                                        }
                                     }
                                 }
                             }
