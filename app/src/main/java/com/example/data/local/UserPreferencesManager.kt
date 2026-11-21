@@ -51,7 +51,7 @@ class UserPreferencesManager(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_ENABLE_BETA_FEEDBACK, value).apply()
 
     var googleSheetWebhookUrl: String
-        get() = prefs.getString(KEY_GOOGLE_SHEET_WEBHOOK_URL, "") ?: ""
+        get() = prefs.getString(KEY_GOOGLE_SHEET_WEBHOOK_URL, DEFAULT_WEBHOOK_URL)?.ifBlank { DEFAULT_WEBHOOK_URL } ?: DEFAULT_WEBHOOK_URL
         set(value) = prefs.edit().putString(KEY_GOOGLE_SHEET_WEBHOOK_URL, value.trim()).apply()
 
     var isSpotlightCollapsed: Boolean
@@ -59,8 +59,12 @@ class UserPreferencesManager(context: Context) {
         set(value) = prefs.edit().putBoolean(KEY_SPOTLIGHT_COLLAPSED, value).apply()
 
     var letterboxdUsername: String
-        get() = prefs.getString(KEY_LETTERBOXD_USERNAME, "") ?: ""
+        get() = prefs.getString(KEY_LETTERBOXD_USERNAME, DEFAULT_LETTERBOXD_USERNAME)?.ifBlank { DEFAULT_LETTERBOXD_USERNAME } ?: DEFAULT_LETTERBOXD_USERNAME
         set(value) = prefs.edit().putString(KEY_LETTERBOXD_USERNAME, value.trim()).apply()
+
+    var customPlaylistsJson: String
+        get() = prefs.getString(KEY_CUSTOM_PLAYLISTS_JSON, "[]") ?: "[]"
+        set(value) = prefs.edit().putString(KEY_CUSTOM_PLAYLISTS_JSON, value).apply()
 
     var userName: String
         get() = prefs.getString(KEY_USER_NAME, "Cinephile") ?: "Cinephile"
@@ -107,5 +111,8 @@ class UserPreferencesManager(context: Context) {
         private const val KEY_IS_GRID_VIEW = "is_grid_view"
         private const val KEY_HAS_COMPLETED_ONBOARDING = "has_completed_onboarding"
         private const val KEY_LAST_SEEN_VERSION_CODE = "last_seen_version_code"
+        private const val KEY_CUSTOM_PLAYLISTS_JSON = "custom_playlists_json"
+        private const val DEFAULT_LETTERBOXD_USERNAME = "scriptedmind"
+        private const val DEFAULT_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzsbZfiDbXXGJunAmJX2xb9OtpnigwVl69M6qbBQ5bNBuyAdj6TtkW-LflbSxSFJJoI0w/exec"
     }
 }

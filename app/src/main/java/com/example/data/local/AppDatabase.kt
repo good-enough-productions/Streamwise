@@ -148,21 +148,20 @@ abstract class AppDatabase : RoomDatabase() {
         override fun onOpen(db: SupportSQLiteDatabase) {
             super.onOpen(db)
             try {
-                // Synchronously purge non-movie podcast entries from Watchlist before DAO cursor iteration
+                // Synchronously purge non-movie podcast entries from Watchlist and oversized strings before DAO cursor iteration
                 db.execSQL("DELETE FROM media_items WHERE status = 'WATCHLIST' AND (tmdbId IS NULL OR tmdbId = '')")
                 db.execSQL("UPDATE media_items SET userNotes = substr(userNotes, 1, 300) WHERE length(userNotes) > 300")
                 db.execSQL("UPDATE media_items SET overview = substr(overview, 1, 300) WHERE length(overview) > 300")
                 db.execSQL("UPDATE media_items SET trivia = NULL WHERE trivia IS NOT NULL")
+                db.execSQL("UPDATE media_items SET imageUrl = NULL WHERE length(imageUrl) > 1000")
+                db.execSQL("UPDATE media_items SET sharedUrl = NULL WHERE length(sharedUrl) > 1000")
             } catch (e: Exception) {
                 Log.e("AppDatabase", "Error during onOpen integrity scrub", e)
             }
             INSTANCE?.let { database ->
                 scope.launch(Dispatchers.IO) {
-                    val watchedCount = database.mediaDao().getWatchedCount()
-                    if (watchedCount < 1000) {
-                        Log.d("AppDatabase", "Detected only $watchedCount watched items, supplementing from full Letterboxd archive...")
-                        populateInitialProvidersAndLetterboxdData(database.mediaDao())
-                    }
+                    // Always merge any newly bundled watchlist/watched CSV entries (e.g., June–Nov 2026 updates)
+                    populateInitialProvidersAndLetterboxdData(database.mediaDao())
                     // Ensure all 19 streaming providers exist in database
                     val existing = database.mediaDao().getAllStreamingProviders().map { it.id }.toSet()
                     val missing = DEFAULT_STREAMING_PROVIDERS.filter { !existing.contains(it.id) }
@@ -209,20 +208,35 @@ abstract class AppDatabase : RoomDatabase() {
             try {
                 dao.insertStreamingProviders(DEFAULT_STREAMING_PROVIDERS)
 
-                val existingTitles = dao.getAllTitles().map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toMutableSet()
+                val existingList = dao.getAllMediaItemsList()
+                val existingByTitleYear = mutableMapOf<String, MediaItem>()
+                val existingByTitle = mutableMapOf<String, MediaItem>()
+                for (item in existingList) {
+                    val norm = item.title.trim().lowercase()
+                    if (norm.isBlank()) continue
+                    val yr = item.releaseDate?.take(4)?.takeIf { it.length == 4 } ?: ""
+                    if (yr.isNotBlank()) {
+                        existingByTitleYear["$norm|$yr"] = item
+                    }
+                    val prev = existingByTitle[norm]
+                    if (prev == null || (prev.status != com.example.data.model.MediaStatus.WATCHED.name && item.status == com.example.data.model.MediaStatus.WATCHED.name)) {
+                        existingByTitle[norm] = item
+                    }
+                }
 
                 Log.d("AppDatabase", "Seeding initial Letterboxd watch list entries from CSV...")
                 val watchlistRows = parseCsv(context, "watchlist.csv")
                 val watchlistItems = watchlistRows
                     .filter { row ->
-                        val key = row.name.trim().lowercase()
-                        if (key.isNotEmpty() && !existingTitles.contains(key)) {
-                            existingTitles.add(key)
-                            true
-                        } else false
+                        val norm = row.name.trim().lowercase()
+                        val yr = row.year.trim().take(4)
+                        val tyKey = if (yr.length == 4) "$norm|$yr" else ""
+                        norm.isNotEmpty() &&
+                            (tyKey.isEmpty() || !existingByTitleYear.containsKey(tyKey)) &&
+                            !existingByTitle.containsKey(norm)
                     }
                     .map { row ->
-                        MediaItem(
+                        val item = MediaItem(
                             title = row.name,
                             sharedUrl = row.uri,
                             status = com.example.data.model.MediaStatus.WATCHLIST.name,
@@ -233,6 +247,11 @@ abstract class AppDatabase : RoomDatabase() {
                             releaseDate = row.year.takeIf { it.isNotBlank() },
                             overview = "Imported watchlist item \"${row.name}\" from Letterboxd account watchlist record."
                         )
+                        val norm = row.name.trim().lowercase()
+                        val yr = row.year.trim().take(4)
+                        if (yr.length == 4) existingByTitleYear["$norm|$yr"] = item
+                        existingByTitle[norm] = item
+                        item
                     }
                 if (watchlistItems.isNotEmpty()) {
                     dao.insertMediaItems(watchlistItems)
@@ -241,13 +260,58 @@ abstract class AppDatabase : RoomDatabase() {
 
                 Log.d("AppDatabase", "Seeding Letterboxd watched history entries and monthly watch sessions from CSV...")
                 val historyRows = parseCsv(context, "watched_history.csv")
-                val newHistoryRows = historyRows.filter { row ->
-                    val key = row.name.trim().lowercase()
-                    if (key.isNotEmpty() && !existingTitles.contains(key)) {
-                        existingTitles.add(key)
-                        true
-                    } else false
+                val newHistoryRows = mutableListOf<CsvRow>()
+                val itemsToUpdate = mutableListOf<MediaItem>()
+
+                for (row in historyRows) {
+                    val norm = row.name.trim().lowercase()
+                    if (norm.isBlank()) continue
+                    val yr = row.year.trim().take(4)
+                    val tyKey = if (yr.length == 4) "$norm|$yr" else ""
+                    val watchTimestamp = parseDateToTimestamp(row.date)
+
+                    val matched = if (tyKey.isNotEmpty()) {
+                        existingByTitleYear[tyKey] ?: existingByTitle[norm]?.takeIf { it.releaseYear == null }
+                    } else {
+                        existingByTitle[norm]
+                    }
+
+                    if (matched != null) {
+                        val needsStatusUpgrade = matched.status != com.example.data.model.MediaStatus.WATCHED.name
+                        val hasNewerWatch = watchTimestamp > (matched.watchedAt ?: 0L)
+                        if (needsStatusUpgrade || hasNewerWatch) {
+                            val updated = matched.copy(
+                                status = com.example.data.model.MediaStatus.WATCHED.name,
+                                watchedAt = maxOf(watchTimestamp, matched.watchedAt ?: 0L),
+                                releaseDate = matched.releaseDate ?: yr.takeIf { it.isNotBlank() },
+                                updatedAt = System.currentTimeMillis()
+                            )
+                            itemsToUpdate.add(updated)
+                            if (tyKey.isNotEmpty()) existingByTitleYear[tyKey] = updated
+                            existingByTitle[norm] = updated
+                        }
+                    } else {
+                        newHistoryRows.add(row)
+                        val placeholder = MediaItem(
+                            title = row.name,
+                            sharedUrl = row.uri,
+                            status = com.example.data.model.MediaStatus.WATCHED.name,
+                            addedAt = watchTimestamp,
+                            watchedAt = watchTimestamp,
+                            releaseDate = row.year.takeIf { it.isNotBlank() }
+                        )
+                        if (tyKey.isNotEmpty()) existingByTitleYear[tyKey] = placeholder
+                        existingByTitle[norm] = placeholder
+                    }
                 }
+
+                if (itemsToUpdate.isNotEmpty()) {
+                    itemsToUpdate.distinctBy { it.id }.chunked(500).forEach { chunk ->
+                        dao.updateMediaItems(chunk)
+                    }
+                    Log.d("AppDatabase", "Updated ${itemsToUpdate.size} watched movies with latest Letterboxd archive timestamps.")
+                }
+
                 val historyItems = newHistoryRows.map { row ->
                     val watchTimestamp = parseDateToTimestamp(row.date)
                     MediaItem(

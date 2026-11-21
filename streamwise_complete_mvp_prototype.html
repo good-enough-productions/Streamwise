@@ -1,972 +1,3050 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Streamwise MVP - Core System Prototype</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
-            mono: ['"JetBrains Mono"', 'monospace'],
-          },
-          colors: {
-            stream: {
-              bg: '#0c0e12',
-              surface: '#141820',
-              surfaceLight: '#1c222e',
-              card: '#181d26',
-              border: '#252c3b',
-              accent: '#f59e0b',
-              accentHover: '#d97706',
-              brandGreen: '#10b981',
-              brandBlue: '#38bdf8',
-            }
-          }
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamWise — Find Your Next Watch</title>
+  <style>
+    :root {
+      --bg: #0b0e17;
+      --bg-elev: #111827;
+      --card: rgba(17, 24, 39, 0.86);
+      --card-solid: #151d2e;
+      --border: rgba(148, 163, 184, 0.16);
+      --border-strong: rgba(148, 163, 184, 0.28);
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --muted-dim: #64748b;
+      --accent: #00e054;
+      --accent-dark: #00b243;
+      --accent-soft: rgba(0, 224, 84, 0.14);
+      --amber: #f59e0b;
+      --amber-soft: rgba(245, 158, 11, 0.15);
+      --cyan: #38bdf8;
+      --cyan-soft: rgba(56, 189, 248, 0.14);
+      --rose: #fb7185;
+      --rose-soft: rgba(251, 113, 133, 0.14);
+      --purple: #a78bfa;
+      --topbar-h: 58px;
+      --sidebar-w: 276px;
+      --sidebar-collapsed-w: 72px;
+      --radius: 14px;
+      --font: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      max-width: 100%;
+      overflow-x: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      min-height: 100vh;
+      background-image:
+        radial-gradient(circle at 12% 10%, rgba(0, 224, 84, 0.08) 0%, transparent 38%),
+        radial-gradient(circle at 88% 15%, rgba(56, 189, 248, 0.07) 0%, transparent 40%),
+        radial-gradient(circle at 75% 88%, rgba(245, 158, 11, 0.05) 0%, transparent 42%);
+    }
+
+    a { color: inherit; text-decoration: none; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; border: none; background: transparent; }
+
+    /* Topbar */
+    #streamwise-topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--topbar-h);
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 0 14px;
+      background: rgba(11, 14, 23, 0.92);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-left, .topbar-right, .topbar-links {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .brand-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      font-size: 15px;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+    }
+
+    .brand-badge {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid rgba(0, 224, 84, 0.35);
+    }
+
+    .topbar-link {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      padding: 6px 10px;
+      border-radius: 8px;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .topbar-link:hover { background: rgba(255, 255, 255, 0.06); color: #fff; }
+
+    .topbar-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 11px;
+      border-radius: 9px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .topbar-btn:hover { background: rgba(255, 255, 255, 0.09); border-color: var(--border-strong); }
+
+    .mobile-menu-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 16px;
+    }
+
+    @media (min-width: 1024px) {
+      .mobile-menu-btn { display: none; }
+    }
+    @media (max-width: 900px) {
+      .topbar-links { display: none; }
+      .topbar-btn .btn-label-hide-sm { display: none; }
+    }
+
+    /* Collapsible Left Navigation Sidebar */
+    #sw-sidebar-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.68);
+      z-index: 45;
+    }
+    #sw-sidebar-backdrop.open { display: block; }
+
+    #streamwise-sidebar {
+      position: fixed;
+      top: var(--topbar-h);
+      left: 0;
+      bottom: 0;
+      width: var(--sidebar-w);
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      background: rgba(13, 18, 30, 0.96);
+      border-right: 1px solid var(--border);
+      transition: width 0.2s ease, transform 0.22s ease;
+      padding: 12px 10px;
+      overflow-y: auto;
+      overflow-x: visible;
+    }
+
+    .sidebar-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 8px 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 10px;
+    }
+
+    .sw-brand-text {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #btn-collapse-sw-sidebar {
+      width: 30px;
+      height: 30px;
+      flex-shrink: 0;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+    #btn-collapse-sw-sidebar:hover { color: #fff; background: rgba(255, 255, 255, 0.09); }
+
+    .sw-nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      flex: 1;
+    }
+
+    .sw-nav-btn {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      width: 100%;
+      padding: 10px 11px;
+      border-radius: 11px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--muted);
+      text-align: left;
+      border: 1px solid transparent;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .sw-nav-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+    .sw-nav-btn.active {
+      background: var(--accent-soft);
+      color: #fff;
+      border-color: rgba(0, 224, 84, 0.38);
+    }
+
+    .sw-nav-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
+    .sw-nav-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sw-nav-badge {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+    }
+    .sw-nav-btn.active .sw-nav-badge {
+      background: rgba(0, 224, 84, 0.24);
+      color: var(--accent);
+    }
+
+    .sw-footer-meta {
+      margin-top: 12px;
+      padding: 10px 10px 4px;
+      border-top: 1px solid var(--border);
+      font-size: 11.5px;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .sw-portal-mini-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .sw-portal-mini-links a {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .sw-portal-mini-links a:hover { color: #fff; }
+
+    /* Desktop collapsed icon rail */
+    @media (min-width: 1024px) {
+      #streamwise-sidebar.collapsed {
+        width: var(--sidebar-collapsed-w);
+        padding: 12px 8px;
+      }
+      #streamwise-sidebar.collapsed .sw-brand-text,
+      #streamwise-sidebar.collapsed .sw-nav-label,
+      #streamwise-sidebar.collapsed .sw-nav-badge,
+      #streamwise-sidebar.collapsed .sw-footer-meta {
+        display: none;
+      }
+      #streamwise-sidebar.collapsed .sidebar-head { justify-content: center; padding: 6px 0 12px; }
+      #streamwise-sidebar.collapsed .sw-nav-btn { justify-content: center; padding: 11px 0; }
+      #streamwise-sidebar.collapsed .sw-nav-btn[data-tooltip]:hover::after {
+        content: attr(data-tooltip);
+        position: fixed;
+        left: 80px;
+        background: #0f172a;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border-strong);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        white-space: nowrap;
+        z-index: 90;
+        pointer-events: none;
       }
     }
-  </script>
-  <style>
-    .hide-scrollbar::-webkit-scrollbar { display: none; }
-    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    .poster-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
-    .poster-card:active { transform: scale(0.97); }
-    .nav-active { color: #f59e0b; }
-    .nav-inactive { color: #94a3b8; }
+
+    @media (max-width: 1023px) {
+      #streamwise-sidebar {
+        transform: translateX(-100%);
+      }
+      #streamwise-sidebar.mobile-open {
+        transform: translateX(0);
+      }
+      #btn-collapse-sw-sidebar { display: none; }
+    }
+
+    /* Main Content Container */
+    #streamwise-main {
+      margin-left: 0;
+      padding: calc(var(--topbar-h) + 18px) 16px 88px;
+      transition: margin-left 0.2s ease;
+      max-width: 100%;
+    }
+    @media (min-width: 1024px) {
+      #streamwise-main {
+        margin-left: var(--sidebar-w);
+        padding: calc(var(--topbar-h) + 22px) 28px 88px;
+      }
+      #streamwise-main.expanded {
+        margin-left: var(--sidebar-collapsed-w);
+      }
+    }
+
+    .main-inner {
+      max-width: 1240px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .view-panel { display: none; flex-direction: column; gap: 20px; }
+    .view-panel.active { display: flex; }
+
+    /* Cards & Surfaces */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      backdrop-filter: blur(12px);
+    }
+
+    .hero-card {
+      background: linear-gradient(135deg, rgba(16, 29, 44, 0.94), rgba(15, 23, 42, 0.92));
+      border: 1px solid rgba(0, 224, 84, 0.28);
+      border-radius: 18px;
+      padding: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      box-shadow: 0 18px 42px rgba(0, 0, 0, 0.35);
+    }
+
+    .hero-copy { max-width: 620px; display: flex; flex-direction: column; gap: 8px; }
+    .hero-kicker {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+    }
+    .hero-title {
+      font-size: clamp(24px, 3vw, 34px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+    }
+    .hero-sub { font-size: 14px; color: var(--muted); }
+
+    .cta-primary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), #10b981);
+      color: #03150a;
+      box-shadow: 0 10px 26px rgba(0, 224, 84, 0.26);
+      transition: transform 0.14s ease, filter 0.14s ease;
+      white-space: nowrap;
+    }
+    .cta-primary:hover { transform: translateY(-1px); filter: brightness(1.06); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 13px;
+      border-radius: 9px;
+      font-size: 12.5px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: rgba(255, 255, 255, 0.11); border-color: var(--border-strong); }
+    .btn-green {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(0, 224, 84, 0.38);
+    }
+    .btn-green:hover { background: rgba(0, 224, 84, 0.24); }
+    .btn-cyan {
+      background: var(--cyan-soft);
+      color: var(--cyan);
+      border-color: rgba(56, 189, 248, 0.36);
+    }
+    .btn-amber {
+      background: var(--amber-soft);
+      color: var(--amber);
+      border-color: rgba(245, 158, 11, 0.36);
+    }
+    .btn-rose {
+      background: var(--rose-soft);
+      color: var(--rose);
+      border-color: rgba(251, 113, 133, 0.35);
+    }
+    .btn-sm { padding: 5px 9px; font-size: 11.5px; border-radius: 7px; }
+
+    /* Pills & Chips */
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+    .chip:hover { color: #fff; border-color: var(--border-strong); }
+    .chip.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: rgba(0, 224, 84, 0.42);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .badge-watched { background: rgba(0, 224, 84, 0.16); color: var(--accent); border-color: rgba(0, 224, 84, 0.35); }
+    .badge-watchlist { background: rgba(56, 189, 248, 0.16); color: var(--cyan); border-color: rgba(56, 189, 248, 0.35); }
+    .badge-age { background: rgba(245, 158, 11, 0.16); color: var(--amber); border-color: rgba(245, 158, 11, 0.35); }
+
+    /* Forms */
+    .input, .select, .textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border-strong);
+      background: #0b111e;
+      color: var(--text);
+      font-size: 13.5px;
+      outline: none;
+    }
+    .input:focus, .select:focus, .textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(0, 224, 84, 0.18);
+    }
+
+    /* Section Header */
+    .section-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .section-title { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; }
+    .section-sub { font-size: 12.5px; color: var(--muted); }
+
+    /* Responsive Grids */
+    .grid-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 14px;
+    }
+    .grid-playlists {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 14px;
+    }
+    .grid-kpi {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+    }
+
+    .kpi-card {
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .kpi-val { font-size: 24px; font-weight: 800; margin-top: 4px; }
+
+    /* Movie Cards & Posters */
+    .movie-card {
+      display: flex;
+      flex-direction: column;
+      background: var(--card-solid);
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      overflow: hidden;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .movie-card:hover { transform: translateY(-2px); border-color: var(--border-strong); }
+
+    .movie-poster-wrap {
+      position: relative;
+      height: 180px;
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .movie-poster-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .poster-monogram {
+      padding: 16px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 16px;
+      color: #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    .poster-top-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      font-size: 10.5px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(2, 6, 23, 0.85);
+      border: 1px solid var(--border-strong);
+      color: #fff;
+    }
+    .movie-body {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+    .movie-title {
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.25;
+      cursor: pointer;
+    }
+    .movie-meta { font-size: 12px; color: var(--muted); }
+    .movie-actions {
+      margin-top: auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding-top: 6px;
+    }
+
+    /* Progress Bar */
+    .progress-track {
+      width: 100%;
+      height: 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      transition: width 0.25s ease;
+    }
+
+    /* Spin Showcase Card */
+    .spin-result-box {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .spin-poster {
+      width: 96px;
+      height: 142px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #1e293b;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .spin-poster img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Person Card / Filmography */
+    .person-pill-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--card-solid);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .person-pill-card:hover { border-color: var(--cyan); background: rgba(56, 189, 248, 0.07); }
+    .person-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #1e293b;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: var(--cyan);
+      border: 1px solid var(--border-strong);
+      overflow: hidden;
+    }
+    .person-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Compact Rows (Playlist items, Watched Vault, Watchlist list) */
+    .row-list { display: flex; flex-direction: column; gap: 8px; }
+    .list-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 13px;
+      border-radius: 11px;
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid var(--border);
+    }
+    .list-row-left { display: flex; align-items: center; gap: 11px; min-width: 0; flex: 1 1 240px; }
+    .row-thumb {
+      width: 40px;
+      height: 56px;
+      border-radius: 6px;
+      background: #1e293b;
+      overflow: hidden;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+    .row-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+    /* Modals */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 95;
+      background: rgba(2, 6, 23, 0.76);
+      backdrop-filter: blur(6px);
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      width: 100%;
+      max-width: 640px;
+      max-height: 90vh;
+      overflow-y: auto;
+      background: #0f172a;
+      border: 1px solid var(--border-strong);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Visuals iframe */
+    .diagram-frame {
+      width: 100%;
+      height: 500px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #090d16;
+    }
+
+    /* Single Feedback FAB (suppressed duplicate in review-overlay via data-consolidated-header + id) */
+    #feedback-fab-container {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 70;
+    }
+    #feedback-fab-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 10px 15px;
+      border-radius: 999px;
+      background: #1e293b;
+      color: #fff;
+      font-size: 12.5px;
+      font-weight: 700;
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+    }
+    #feedback-fab-btn:hover { background: #334155; }
+
+    /* Toast */
+    #sw-toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%) translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 120;
+      background: #064e3b;
+      color: #ecfdf5;
+      border: 1px solid rgba(52, 211, 153, 0.5);
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      transition: opacity 0.2s, transform 0.2s;
+      max-width: calc(100vw - 32px);
+      text-align: center;
+    }
+    #sw-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 640px) {
+      .hero-card { padding: 18px; }
+      .cta-primary { width: 100%; }
+      .grid-cards { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+      .diagram-frame { height: 360px; }
+    }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col items-center justify-start p-2 sm:p-6 font-sans select-none antialiased">
+<body data-consolidated-header="true">
 
-  <!-- Desktop Testing Utility Bar -->
-  <header class="w-full max-w-md mb-2 flex items-center justify-between px-2 text-xs text-slate-400">
-    <div class="flex items-center gap-2">
-      <span class="w-2.5 h-2.5 rounded-full bg-stream-brandGreen animate-pulse"></span>
-      <span class="font-bold text-slate-200">Streamwise MVP • Free Tier Core</span>
+  <!-- Top Bar -->
+  <header id="streamwise-topbar">
+    <div class="topbar-left">
+      <button type="button" class="mobile-menu-btn" onclick="toggleMobileSidebar()" aria-label="Toggle Menu">☰</button>
+      <a href="streamwise.html" class="brand-chip">
+        <span>🎬 StreamWise</span>
+        <span class="brand-badge">v1.7</span>
+      </a>
+      <nav class="topbar-links" aria-label="Portal Navigation">
+        <a href="index.html#digest" class="topbar-link">← Portal</a>
+        <a href="local-v5.html" class="topbar-link">🧪 Studio</a>
+        <a href="seecode-atlas.html" class="topbar-link">📐 Atlas</a>
+        <a href="digest.html" class="topbar-link">📜 Digest</a>
+      </nav>
     </div>
-    <div class="flex items-center gap-1.5">
-      <button onclick="toggleDeviceBezel()" class="bg-stream-surface border border-stream-border px-2 py-1 rounded-md hover:text-white transition text-[11px]">
-        Frame
+    <div class="topbar-right">
+      <button type="button" class="topbar-btn" onclick="window.__MH_REVIEW__?.startElementPicker()" title="Inspect or comment on any page element">
+        <span>🎯</span><span class="btn-label-hide-sm">Point & Review</span>
       </button>
-      <button onclick="showQuickToast('Letterboxd sync simulated!')" class="bg-stream-surface border border-stream-border px-2 py-1 rounded-md text-emerald-400 text-[11px]">
-        Force Sync
+      <button type="button" class="topbar-btn" onclick="openSettingsModal()" title="Settings & API Keys">
+        <span>⚙️</span><span class="btn-label-hide-sm">Settings</span>
       </button>
     </div>
   </header>
 
-  <!-- Mobile Viewport Container -->
-  <main id="appContainer" class="w-full max-w-md h-[884px] max-h-[94vh] bg-stream-bg border border-stream-border rounded-[42px] shadow-2xl shadow-black flex flex-col overflow-hidden relative">
+  <!-- Mobile Sidebar Backdrop -->
+  <div id="sw-sidebar-backdrop" onclick="closeMobileSidebar()"></div>
 
-    <!-- Phone Status Header -->
-    <div class="h-10 w-full flex items-center justify-between px-7 shrink-0 text-slate-400 text-xs font-semibold pt-1 z-20 border-b border-stream-border/20">
-      <span>11:22</span>
-      <div class="w-24 h-4 bg-black/60 rounded-full flex items-center justify-center border border-stream-border/40">
-        <span class="w-2 h-2 rounded-full bg-stream-brandGreen mr-1.5"></span>
-        <span class="text-[9px] text-slate-300 font-mono tracking-wide">SYNCED</span>
-      </div>
-      <div class="flex items-center gap-1">
-        <span class="text-[10px] font-mono">94%</span>
-      </div>
+  <!-- Collapsible Left-Hand Sidebar -->
+  <aside id="streamwise-sidebar" aria-label="StreamWise Navigation">
+    <div class="sidebar-head">
+      <span class="sw-brand-text">FIND YOUR NEXT WATCH</span>
+      <button type="button" id="btn-collapse-sw-sidebar" onclick="toggleSwSidebar()" title="Collapse / Expand Sidebar (Ctrl+B)" aria-label="Collapse Sidebar">◀</button>
     </div>
 
-    <!-- Dynamic App Top Header -->
-    <header id="screenHeader" class="px-4 py-2.5 flex items-center justify-between shrink-0 border-b border-stream-border/50 bg-stream-bg/95 backdrop-blur z-10">
-      <div>
-        <div class="flex items-center gap-2">
-          <h1 id="headerTitle" class="text-lg font-black tracking-tight text-white">Streamwise</h1>
-          <span id="headerBadge" class="text-[10px] bg-amber-500/15 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">Watchlist</span>
-        </div>
-        <p id="headerSubtitle" class="text-[11px] text-slate-400 truncate">1,152 Saved • 808 Ready to Stream</p>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <button onclick="openTvDeviceModal()" title="Couch Target" class="flex items-center gap-1 bg-stream-surface hover:bg-stream-surfaceLight border border-stream-border px-2 py-1 rounded-full text-[11px] text-slate-300">
-          <svg class="w-3.5 h-3.5 text-stream-brandGreen" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-          <span class="font-mono text-[10px]">Living Room TV</span>
-        </button>
-        <button onclick="switchScreen('search')" class="w-8 h-8 rounded-full bg-stream-surface border border-stream-border flex items-center justify-center text-slate-300 hover:text-white">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-        </button>
-      </div>
-    </header>
-    <!-- Contextual Letterboxd-Style Sub-Navigation Tabs -->
-    <nav id="subTabsBar" class="flex items-center px-4 border-b border-stream-border bg-stream-surface/80 backdrop-blur shrink-0 overflow-x-auto hide-scrollbar text-xs font-semibold text-slate-400 space-x-5">
-      <!-- Sub-tabs injected dynamically per active screen -->
+    <nav class="sw-nav-list">
+      <button type="button" class="sw-nav-btn active" data-view="next-watch" data-tooltip="Find Next Watch" onclick="switchView('next-watch')">
+        <span class="sw-nav-icon">🎯</span>
+        <span class="sw-nav-label">Find Next Watch</span>
+      </button>
+      <button type="button" class="sw-nav-btn" data-view="search" data-tooltip="Movie & Actor Search" onclick="switchView('search')">
+        <span class="sw-nav-icon">🔎</span>
+        <span class="sw-nav-label">Movie & Actor Search</span>
+      </button>
+      <button type="button" class="sw-nav-btn" data-view="playlists" data-tooltip="Playlists & Canons" onclick="switchView('playlists')">
+        <span class="sw-nav-icon">📜</span>
+        <span class="sw-nav-label">Playlists & Canons</span>
+        <span class="sw-nav-badge" id="nav-badge-playlists">14</span>
+      </button>
+      <button type="button" class="sw-nav-btn" data-view="watchlist" data-tooltip="Watchlist & Triage" onclick="switchView('watchlist')">
+        <span class="sw-nav-icon">📌</span>
+        <span class="sw-nav-label">Watchlist & Triage</span>
+        <span class="sw-nav-badge" id="nav-badge-watchlist">33</span>
+      </button>
+      <button type="button" class="sw-nav-btn" data-view="watched" data-tooltip="Watched Vault & Sync" onclick="switchView('watched')">
+        <span class="sw-nav-icon">✓</span>
+        <span class="sw-nav-label">Watched Vault</span>
+        <span class="sw-nav-badge" id="nav-badge-watched">1148</span>
+      </button>
+      <button type="button" class="sw-nav-btn" data-view="services" data-tooltip="Services & Visual Atlas" onclick="switchView('services')">
+        <span class="sw-nav-icon">💰</span>
+        <span class="sw-nav-label">Services & Visuals</span>
+      </button>
     </nav>
 
-    <!-- Main Screen Content Viewport -->
-    <div id="screenViewport" class="flex-1 overflow-y-auto hide-scrollbar px-3.5 py-3 space-y-3 relative">
-      <!-- Injected view content here -->
+    <div class="sw-footer-meta">
+      <div>Synced as <strong id="sidebar-username">@scriptedmind</strong></div>
+      <div id="sidebar-sync-line">Vault updated through 2026-11-18</div>
+      <div class="sw-portal-mini-links">
+        <a href="index.html#digest">Portal</a>
+        <a href="seecode-atlas.html">Atlas</a>
+        <a href="digest.html">Digest</a>
+      </div>
     </div>
+  </aside>
 
-    <!-- Letterboxd-Style Bottom Navigation Bar -->
-    <nav class="h-16 bg-stream-surface/95 backdrop-blur-md border-t border-stream-border px-2 flex items-center justify-around shrink-0 z-20">
-      
-      <!-- 1. Watchlist (Main) -->
-      <button onclick="switchScreen('watchlist')" id="btn-nav-watchlist" class="flex flex-col items-center justify-center w-16 py-1 nav-active transition">
-        <div class="relative">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-          <span class="absolute -top-1 -right-2 bg-amber-500 text-black text-[9px] font-black px-1 rounded-full">1.1k</span>
+  <!-- Main Workspace -->
+  <main id="streamwise-main">
+    <div class="main-inner">
+
+      <!-- VIEW 1: FIND NEXT WATCH -->
+      <section id="view-next-watch" class="view-panel active" data-review-section="next-watch">
+        <div class="hero-card">
+          <div class="hero-copy">
+            <span class="hero-kicker">Your Watch Concierge</span>
+            <h1 class="hero-title">Stop scrolling. Find your next great watch.</h1>
+            <p class="hero-sub" id="hero-status-line">
+              Loading your 1,148 watched films, 33 watchlist titles, and 14 curated playlists…
+            </p>
+          </div>
+          <button type="button" class="cta-primary" id="btn-spin-next" onclick="spinNextWatch()">
+            🎲 Spin My Next Watch
+          </button>
         </div>
-        <span class="text-[10px] font-semibold mt-1">Watchlist</span>
-      </button>
 
-      <!-- 2. Watched / History -->
-      <button onclick="switchScreen('watched')" id="btn-nav-watched" class="flex flex-col items-center justify-center w-16 py-1 nav-inactive hover:text-slate-200 transition">
-        <div class="relative">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          <span class="absolute -top-1 -right-2 bg-stream-surfaceLight text-slate-300 text-[9px] font-bold px-1 rounded-full border border-stream-border">1.1k</span>
-        </div>
-        <span class="text-[10px] font-semibold mt-1">Watched</span>
-      </button>
+        <div id="spin-result-container" style="display:none;"></div>
 
-      <!-- 3. Add / Quick Search (Letterboxd Green/Amber Center Button) -->
-      <button onclick="switchScreen('search')" id="btn-nav-search" class="flex flex-col items-center justify-center -mt-3.5 group">
-        <div class="w-11 h-11 rounded-full bg-gradient-to-tr from-amber-500 to-amber-300 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/20 group-active:scale-95 transition font-black text-lg">
-          +
-        </div>
-        <span class="text-[9px] font-bold text-amber-400 mt-1 uppercase tracking-wider">Add</span>
-      </button>
-
-      <!-- 4. My Services -->
-      <button onclick="switchScreen('services')" id="btn-nav-services" class="flex flex-col items-center justify-center w-16 py-1 nav-inactive hover:text-slate-200 transition">
-        <div class="relative">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/></svg>
-          <span class="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-stream-brandGreen"></span>
-        </div>
-        <span class="text-[10px] font-semibold mt-1">Services</span>
-      </button>
-
-      <!-- 5. Profile & Sync -->
-      <button onclick="switchScreen('sync')" id="btn-nav-sync" class="flex flex-col items-center justify-center w-16 py-1 nav-inactive hover:text-slate-200 transition">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-        <span class="text-[10px] font-semibold mt-1">Sync</span>
-      </button>
-    </nav>
-    <!-- Film Detail Slide-Over Sheet (Accessible from anywhere) -->
-    <div id="detailSheet" class="hidden absolute inset-0 z-40 bg-stream-bg flex flex-col overflow-y-auto hide-scrollbar transition-all duration-200">
-      <div class="relative w-full h-72 shrink-0">
-        <img id="detailBackdrop" src="" class="w-full h-full object-cover" alt="Backdrop">
-        <div class="absolute inset-0 bg-gradient-to-t from-stream-bg via-stream-bg/40 to-transparent"></div>
-        
-        <button onclick="closeMovieDetail()" class="absolute top-4 left-4 w-9 h-9 rounded-full bg-black/60 backdrop-blur border border-white/20 flex items-center justify-center text-white">
-          ✕
-        </button>
-
-        <div class="absolute bottom-4 left-4 right-4 flex gap-3.5 items-end">
-          <img id="detailPoster" src="" class="w-24 h-36 rounded-xl object-cover shadow-2xl border border-stream-border/80 shrink-0" alt="Poster">
-          <div class="flex-1 min-w-0 pb-1">
-            <div class="flex items-center gap-2">
-              <span id="detailRating" class="text-xs bg-yellow-400/20 text-yellow-400 px-2 py-0.5 rounded font-bold">★ 8.9</span>
-              <span id="detailYear" class="text-xs text-slate-300">2023</span>
-              <span id="detailRuntime" class="text-xs text-slate-400 font-mono">132m</span>
+        <div class="card">
+          <div class="section-head" style="margin-bottom:12px;">
+            <div>
+              <h2 class="section-title">Explore by Vibe & Queue</h2>
+              <p class="section-sub">Filter the spinner and tonight's unwatched picks by mood, canon, or watchlist.</p>
             </div>
-            <h2 id="detailTitle" class="text-xl font-extrabold text-white leading-tight mt-1 truncate">Film Title</h2>
-            <p id="detailGenres" class="text-xs text-slate-400 mt-0.5 truncate">Action, Sci-Fi</p>
+            <button type="button" class="btn btn-sm btn-cyan" onclick="switchView('search')">🔎 Search Movies & Actors</button>
+          </div>
+          <div class="chip-row" id="vibe-filter-chips"></div>
+          <div id="tonight-picks-grid" class="grid-cards" style="margin-top:14px;"></div>
+        </div>
+
+        <div class="card" data-review-section="history-recs">
+          <div class="section-head" style="margin-bottom:12px;">
+            <div>
+              <h2 class="section-title">Because You Watched…</h2>
+              <p class="section-sub">Recommendations seeded from your real Letterboxd watch history (watched titles automatically filtered out).</p>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+              <select id="rec-seed-select" class="select" style="width:auto; min-width:210px; max-width:300px;" onchange="selectHistorySeed(this.value)"></select>
+              <button type="button" class="btn btn-sm" onclick="shuffleHistorySeed()">🔀 Shuffle Seed</button>
+              <button type="button" class="btn btn-sm btn-green" onclick="loadHistoryRecommendations(true)">↻ Refresh Recs</button>
+            </div>
+          </div>
+          <div id="rec-seed-chips" class="chip-row" style="margin-bottom:14px;"></div>
+          <div id="history-recs-status" class="section-sub" style="margin-bottom:10px;"></div>
+          <div id="history-recs-grid" class="grid-cards"></div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: MOVIE & ACTOR SEARCH -->
+      <section id="view-search" class="view-panel" data-review-section="search">
+        <div class="card">
+          <div class="section-head" style="margin-bottom:12px;">
+            <div>
+              <h1 class="section-title">Movie, TV & Actor Search</h1>
+              <p class="section-sub">Search TMDB outright. Tap any actor or director to inspect their full filmography & Age at Release.</p>
+            </div>
+          </div>
+          <form onsubmit="event.preventDefault(); executeUniversalSearch();" style="display:flex; flex-wrap:wrap; gap:10px;">
+            <input id="universal-search-input" class="input" style="flex:1 1 260px;" type="text" placeholder="Search a movie, show, actor, or director (e.g. Sam Rockwell, Heat, Arrival)..." />
+            <button type="submit" class="btn btn-green">🔎 Search TMDB</button>
+          </form>
+          <div class="chip-row" style="margin-top:10px;" id="search-scope-row">
+            <button type="button" class="chip active" data-scope="all" onclick="setSearchScope('all', this)">All Results</button>
+            <button type="button" class="chip" data-scope="movie" onclick="setSearchScope('movie', this)">🎬 Movies & TV</button>
+            <button type="button" class="chip" data-scope="person" onclick="setSearchScope('person', this)">🎭 Actors & Directors</button>
+            <span style="color:var(--muted-dim); font-size:12px;">Quick try:</span>
+            <button type="button" class="btn btn-sm" onclick="quickSearch('Sam Rockwell')">Sam Rockwell</button>
+            <button type="button" class="btn btn-sm" onclick="quickSearch('Denis Villeneuve')">Denis Villeneuve</button>
+            <button type="button" class="btn btn-sm" onclick="quickSearch('Frances McDormand')">Frances McDormand</button>
+            <button type="button" class="btn btn-sm" onclick="quickSearch('BlackBerry')">BlackBerry</button>
           </div>
         </div>
-      </div>
 
-      <!-- Detail Body & CTAs -->
-      <div class="p-4 space-y-4">
-        
-        <!-- Primary Launch Action (Direct Deep Link / TV Launch) -->
-        <div class="bg-gradient-to-r from-amber-500/20 to-stream-card border border-amber-500/40 rounded-2xl p-3.5 flex items-center justify-between">
-          <div>
-            <span class="text-[10px] font-bold text-amber-400 uppercase tracking-wide block">Ready on Your Subscriptions</span>
-            <span id="detailProviderName" class="text-sm font-bold text-white">Amazon Prime Video</span>
-          </div>
-          <button id="detailLaunchBtn" onclick="launchCurrentMovie()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-amber-500/25 flex items-center gap-1.5 transition">
-            <span>▶ Watch Now</span>
-          </button>
-        </div>
+        <div id="person-filmography-panel" class="card" style="display:none;" data-review-section="person-filmography"></div>
 
-        <!-- Secondary Letterboxd Actions: Toggle Watchlist & Log Watched -->
-        <div class="grid grid-cols-2 gap-2 text-xs font-semibold">
-          <button id="detailWatchlistBtn" onclick="toggleCurrentWatchlist()" class="py-2.5 rounded-xl border border-stream-border bg-stream-surface hover:bg-stream-surfaceLight flex items-center justify-center gap-2 text-slate-200">
-            <span id="detailWatchlistIcon">✓</span>
-            <span id="detailWatchlistText">In Watchlist</span>
-          </button>
-          <button id="detailWatchedBtn" onclick="openLogModalFromDetail()" class="py-2.5 rounded-xl border border-stream-border bg-stream-surface hover:bg-stream-surfaceLight flex items-center justify-center gap-2 text-emerald-400">
-            <span>★</span>
-            <span>Log as Watched</span>
-          </button>
-        </div>
-
-        <!-- Synopsis -->
-        <div>
-          <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">Overview</h4>
-          <p id="detailSynopsis" class="text-xs text-slate-400 leading-relaxed">Movie synopsis text goes here...</p>
-        </div>
-
-        <!-- Availability Breakdown -->
-        <div class="bg-stream-surface rounded-2xl p-3.5 border border-stream-border space-y-2">
-          <span class="text-xs font-bold text-slate-300 block">Streaming Availability Breakdown</span>
-          <div id="detailServicesList" class="space-y-1.5 text-xs">
-            <!-- Dynamic provider breakdown -->
+        <div id="search-results-area" style="display:flex; flex-direction:column; gap:16px;">
+          <div class="card">
+            <p class="section-sub">Enter a movie, actor, or director above to search TMDB live and compare credits against your 1,148 watched films.</p>
           </div>
         </div>
+      </section>
 
-        <!-- Letterboxd Sync Note -->
-        <div class="p-3 bg-black/40 rounded-xl border border-stream-border text-[11px] text-slate-400 flex items-center justify-between font-mono">
-          <span>Letterboxd ID: #LB-82910</span>
-          <span class="text-stream-brandGreen">Auto-synced</span>
+      <!-- VIEW 3: PLAYLISTS & CANONS -->
+      <section id="view-playlists" class="view-panel" data-review-section="playlists">
+        <div class="card">
+          <div class="section-head" style="margin-bottom:12px;">
+            <div>
+              <h1 class="section-title">Playlists, Vibes & Canons</h1>
+              <p class="section-sub">14 curated canons & podcast lists plus your own custom dynamic playlists, scored live against what you've seen.</p>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <button type="button" class="btn btn-green" onclick="openCreatePlaylistModal()">➕ New Playlist</button>
+              <button type="button" class="btn btn-cyan" onclick="openPastePlaylistModal()">📋 Paste Movie List</button>
+              <button type="button" class="btn btn-sm" onclick="resetCustomPlaylists()">↺ Reset Custom</button>
+            </div>
+          </div>
+          <div class="chip-row" id="playlist-category-chips"></div>
         </div>
-      </div>
+
+        <div id="playlist-detail-panel" class="card" style="display:none;"></div>
+        <div id="playlists-grid" class="grid-playlists"></div>
+      </section>
+
+      <!-- VIEW 4: WATCHLIST & TRIAGE -->
+      <section id="view-watchlist" class="view-panel" data-review-section="watchlist">
+        <div class="card">
+          <div class="section-head" style="margin-bottom:12px;">
+            <div>
+              <h1 class="section-title">Watchlist & Triage Queue</h1>
+              <p class="section-sub" id="watchlist-summary-line">Your queued films across services, ready for 1-card triage.</p>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <button type="button" class="btn btn-sm" id="wl-mode-grid" onclick="setWatchlistMode('grid')">Grid</button>
+              <button type="button" class="btn btn-sm" id="wl-mode-list" onclick="setWatchlistMode('list')">List</button>
+              <button type="button" class="btn btn-sm btn-cyan" id="wl-mode-triage" onclick="setWatchlistMode('triage')">🃏 1-Card Triage</button>
+              <button type="button" class="btn btn-sm btn-green" onclick="enrichWatchlistPosters()">🖼️ Match Missing Posters</button>
+            </div>
+          </div>
+
+          <form onsubmit="event.preventDefault(); quickAddToWatchlist();" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <input id="wl-quick-title" class="input" style="flex:2 1 200px;" type="text" placeholder="Quick add movie title to Watchlist..." />
+            <input id="wl-quick-year" class="input" style="width:92px;" type="number" placeholder="Year" />
+            <select id="wl-quick-service" class="select" style="width:auto; min-width:130px;"></select>
+            <button type="submit" class="btn btn-green">➕ Add</button>
+          </form>
+
+          <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+            <input id="wl-search-input" class="input" style="flex:1 1 200px;" type="text" placeholder="Filter watchlist..." oninput="renderWatchlistView()" />
+            <div id="wl-service-filters" class="chip-row"></div>
+          </div>
+        </div>
+
+        <div id="watchlist-content-area"></div>
+      </section>
+
+      <!-- VIEW 5: WATCHED VAULT & SYNC -->
+      <section id="view-watched" class="view-panel" data-review-section="watched-vault">
+        <div class="grid-kpi" id="watched-kpi-strip"></div>
+
+        <div class="card">
+          <div class="section-head" style="margin-bottom:10px;">
+            <div>
+              <h1 class="section-title">Letterboxd Diary Sync & CSV Vault</h1>
+              <p class="section-sub">Fixes Issue #24: pre-seeded with June–Nov 2026 diary watches + 1-tap Webhook & CSV merge.</p>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <button type="button" class="btn btn-green" onclick="syncLetterboxdWebhook()">🔄 Sync Live Webhook</button>
+              <label class="btn btn-cyan" style="cursor:pointer;">
+                📥 Import CSV
+                <input type="file" accept=".csv" multiple style="display:none;" onchange="handleCsvFileUpload(event)" />
+              </label>
+              <button type="button" class="btn" onclick="exportWatchedCsv()">📤 Export CSV</button>
+            </div>
+          </div>
+          <div id="sync-status-banner" class="section-sub">Ready.</div>
+        </div>
+
+        <div class="card">
+          <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+            <input id="watched-search-input" class="input" style="flex:2 1 220px;" type="text" placeholder="Search 1,148 watched movies by title or year..." oninput="resetWatchedPageAndRender()" />
+            <select id="watched-decade-select" class="select" style="width:auto; min-width:140px;" onchange="resetWatchedPageAndRender()">
+              <option value="ALL">All Decades</option>
+              <option value="2020">2020s</option>
+              <option value="2010">2010s</option>
+              <option value="2000">2000s</option>
+              <option value="1990">1990s</option>
+              <option value="1980">1980s</option>
+              <option value="1970">1970s & Earlier</option>
+            </select>
+          </div>
+          <div id="watched-list-area" class="row-list"></div>
+          <div style="margin-top:12px; display:flex; justify-content:center;">
+            <button type="button" id="btn-load-more-watched" class="btn" onclick="loadMoreWatched()">Load More Films</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 6: SERVICES & VISUAL ATLAS -->
+      <section id="view-services" class="view-panel" data-review-section="services-visuals">
+        <div class="card">
+          <div class="section-head" style="margin-bottom:12px;">
+            <div>
+              <h1 class="section-title">Subscription Rotation & Spend Optimizer</h1>
+              <p class="section-sub">Track active streaming services, queued watchlist value per dollar, and add or remove services dynamically.</p>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:8px;">
+              <button type="button" class="btn btn-sm btn-green" onclick="addCustomService()">➕ Add Service</button>
+              <button type="button" class="btn btn-sm" onclick="resetServicesToDefault()">↺ Reset Services</button>
+            </div>
+          </div>
+          <div id="services-summary-strip" class="grid-kpi" style="margin-bottom:14px;"></div>
+          <div id="services-list-area" class="row-list"></div>
+        </div>
+
+        <div class="card" data-review-section="seecode-visuals">
+          <div class="section-head" style="margin-bottom:12px;">
+            <div>
+              <h2 class="section-title">SeeCode Interactive Architecture Visuals</h2>
+              <p class="section-sub" id="sw-diagram-title">System Architecture</p>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <a id="sw-diagram-open-html" href="diagrams/streamwise-architecture.html" target="_blank" class="btn btn-sm">↗ Fullscreen</a>
+              <a id="sw-diagram-open-svg" href="diagrams/streamwise-architecture.svg" target="_blank" class="btn btn-sm">🖼️ SVG</a>
+            </div>
+          </div>
+          <div class="chip-row" style="margin-bottom:12px;" id="sw-visual-tabs">
+            <button type="button" class="chip active" onclick="loadSwVisual('streamwise-architecture', 'System Architecture', this)">Architecture</button>
+            <button type="button" class="chip" onclick="loadSwVisual('streamwise-db-schema', 'Database Schema', this)">DB Schema</button>
+            <button type="button" class="chip" onclick="loadSwVisual('streamwise-rotation-loop', 'Rotation Advisor Loop', this)">Rotation Loop</button>
+            <button type="button" class="chip" onclick="loadSwVisual('streamwise-sync-sequence', 'Letterboxd Sync Sequence', this)">Sync Sequence</button>
+            <button type="button" class="chip" onclick="loadSwVisual('streamwise-service-volume', 'Service Volume & Queue', this)">Service Volume</button>
+          </div>
+          <iframe id="sw-diagram-frame" class="diagram-frame" title="StreamWise SeeCode Visual" src="diagrams/streamwise-architecture.html"></iframe>
+        </div>
+
+        <div class="card">
+          <h2 class="section-title" style="margin-bottom:8px;">v1.7.0 Release & Issue #24 Fix Summary</h2>
+          <p class="section-sub">
+            Restored Letterboxd username (`scriptedmind`) and Apps Script webhook defaults after Package ID migration, updated bundled watch vault through Nov 18, 2026 (1,148 unique watched films), added year-aware duplicate handling for remakes, and shipped universal Movie/Person Search with Age-at-Release and Custom Playlist Builder across both Android & Web.
+          </p>
+        </div>
+      </section>
+
     </div>
-    <!-- TV Launch Feedback Overlay -->
-    <div id="tvLaunchOverlay" class="hidden absolute inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6 text-center">
-      <div class="bg-stream-surface border border-amber-500/40 rounded-3xl p-6 w-full shadow-2xl">
-        <div class="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto mb-3">
-          <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        </div>
-        <span class="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full uppercase">Direct Launch Triggered</span>
-        <h3 id="overlayMovieTitle" class="text-base font-bold text-white mt-2">Miami Vice</h3>
-        <p id="overlayProviderText" class="text-xs text-slate-400 mt-1">Deep linking into Prime Video app & broadcasting to Living Room TV...</p>
-
-        <div class="mt-4 p-3 bg-black/50 border border-stream-border rounded-xl text-[11px] font-mono text-left space-y-1 text-slate-400">
-          <div class="flex justify-between"><span>Protocol:</span><span class="text-amber-400">Universal Link (Intent)</span></div>
-          <div class="flex justify-between"><span>Target Screen:</span><span class="text-slate-200">LG WebOS TV 65"</span></div>
-          <div class="flex justify-between"><span>Letterboxd:</span><span class="text-emerald-400">Mark as Playing</span></div>
-        </div>
-
-        <button onclick="closeTvLaunchOverlay()" class="mt-4 w-full py-2.5 rounded-xl bg-amber-500 text-slate-950 font-bold text-xs uppercase">
-          Back to Streamwise
-        </button>
-      </div>
-    </div>
-
-    <!-- Quick Rating Log Modal -->
-    <div id="quickLogModal" class="hidden absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end justify-center p-4">
-      <div class="bg-stream-surface border border-stream-border rounded-3xl p-5 w-full space-y-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <span class="text-[10px] font-bold text-emerald-400 uppercase font-mono">Sync to Letterboxd</span>
-            <h3 id="logModalTitle" class="text-base font-bold text-white">Log Film</h3>
-          </div>
-          <button onclick="closeQuickLogModal()" class="text-slate-400 hover:text-white text-sm">✕</button>
-        </div>
-
-        <div class="text-center py-2">
-          <span class="text-xs text-slate-400 block mb-2">Select Star Rating</span>
-          <div class="flex items-center justify-center gap-2 text-2xl text-yellow-400" id="starRatingContainer">
-            <button onclick="setLogRating(1)">★</button>
-            <button onclick="setLogRating(2)">★</button>
-            <button onclick="setLogRating(3)">★</button>
-            <button onclick="setLogRating(4)">★</button>
-            <button onclick="setLogRating(5)">★</button>
-          </div>
-          <span id="logRatingLabel" class="text-xs font-mono text-amber-400 font-bold mt-1 block">4.0 / 5.0 Stars</span>
-        </div>
-
-        <button onclick="confirmQuickLog()" class="w-full py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider">
-          Save & Sync to Letterboxd
-        </button>
-      </div>
-    </div>
-
-    <!-- Toast Notification -->
-    <div id="quickToast" class="hidden absolute top-12 inset-x-8 z-50 bg-amber-500 text-slate-950 px-3 py-2 rounded-xl text-xs font-bold shadow-xl flex items-center justify-center transition-all">
-      Toast notification
-    </div>
-
   </main>
+
+  <!-- Single Custom Feedback FAB (respects Settings toggle) -->
+  <div id="feedback-fab-container">
+    <button type="button" id="feedback-fab-btn" onclick="openFeedbackModal()">💬 Feedback</button>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal-backdrop" onclick="if(event.target===this) closeModal('settings-modal')">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 style="font-size:17px; font-weight:800;">⚙️ StreamWise Settings</h2>
+        <button type="button" class="btn btn-sm" onclick="closeModal('settings-modal')">✕ Close</button>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <label style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px; border:1px solid var(--border); border-radius:10px;">
+          <span>
+            <strong style="font-size:13.5px;">Enable Beta Feedback FAB</strong><br/>
+            <span style="font-size:12px; color:var(--muted);">Show quick feedback button across screens</span>
+          </span>
+          <input type="checkbox" id="set-beta-feedback" style="width:18px; height:18px;" />
+        </label>
+        <div>
+          <label style="font-size:12px; font-weight:700; color:var(--muted);">TMDB API v3 Key</label>
+          <input id="set-tmdb-key" class="input" type="text" style="margin-top:4px;" />
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:700; color:var(--muted);">Letterboxd Username</label>
+          <input id="set-lb-user" class="input" type="text" style="margin-top:4px;" />
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:700; color:var(--muted);">Google Apps Script Webhook URL</label>
+          <input id="set-webhook-url" class="input" type="url" style="margin-top:4px;" />
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; padding-top:4px;">
+          <button type="button" class="btn btn-green" onclick="saveSettingsForm()">Save Settings</button>
+          <button type="button" class="btn btn-rose" onclick="reloadBundledSeed()">↺ Reload Default Vault Seed</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback Modal -->
+  <div id="feedback-modal" class="modal-backdrop" onclick="if(event.target===this) closeModal('feedback-modal')">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 style="font-size:17px; font-weight:800;">💬 Send StreamWise Feedback</h2>
+        <button type="button" class="btn btn-sm" onclick="closeModal('feedback-modal')">✕ Close</button>
+      </div>
+      <form onsubmit="event.preventDefault(); submitFeedbackForm();" style="display:flex; flex-direction:column; gap:12px;">
+        <div>
+          <label style="font-size:12px; font-weight:700; color:var(--muted);">Type</label>
+          <select id="fb-type" class="select" style="margin-top:4px;">
+            <option value="Feature Idea">Feature Idea</option>
+            <option value="Bug Report">Bug Report</option>
+            <option value="Playlist / Data Request">Playlist / Data Request</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px; font-weight:700; color:var(--muted);">What happened or what would make finding your next watch faster?</label>
+          <textarea id="fb-message" class="textarea" rows="4" style="margin-top:4px;" required placeholder="Describe your idea or bug..."></textarea>
+        </div>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted);">
+          <input type="checkbox" id="fb-include-snapshot" checked />
+          Include diagnostic vault counts & active view snapshot
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted);">
+          <input type="checkbox" id="fb-assign-jules" />
+          Assign to Jules triage (opt-in)
+        </label>
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button type="button" class="btn" onclick="closeModal('feedback-modal')">Cancel</button>
+          <button type="submit" class="btn btn-green">Send Feedback</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Movie Details Modal -->
+  <div id="movie-detail-modal" class="modal-backdrop" onclick="if(event.target===this) closeModal('movie-detail-modal')">
+    <div class="modal-box" id="movie-detail-body"></div>
+  </div>
+
+  <!-- Create / Paste Playlist Modal -->
+  <div id="playlist-builder-modal" class="modal-backdrop" onclick="if(event.target===this) closeModal('playlist-builder-modal')">
+    <div class="modal-box" id="playlist-builder-body"></div>
+  </div>
+
+  <!-- Add-to-Playlist Picker Modal -->
+  <div id="add-to-playlist-modal" class="modal-backdrop" onclick="if(event.target===this) closeModal('add-to-playlist-modal')">
+    <div class="modal-box" id="add-to-playlist-body"></div>
+  </div>
+
+  <div id="sw-toast"></div>
+
   <script>
-    /* -------------------------------------------------------------
-       Streamwise MVP State & Seed Data (Matches user's screenshots)
-       ------------------------------------------------------------- */
-    const appData = {
-      user: {
-        letterboxdUsername: 'Sean',
-        lastSync: '2 minutes ago',
-        totalWatchlist: 1152,
-        totalWatched: 1130,
-        activeTv: 'LG OLED (Living Room)',
-      },
-      currentScreen: 'watchlist',
-      currentSubTab: 'ready',
-      activeFilter: 'all',
-      selectedMovie: null,
-      tempLogRating: 4,
-
-      /* User's streaming services config */
-      services: [
-        { id: 'prime', name: 'Prime Video', active: true, color: '#00a8e1', readyTitles: 381, plan: 'Active' },
-        { id: 'apple', name: 'Apple TV+', active: true, color: '#ffffff', readyTitles: 86, plan: 'Active' },
-        { id: 'netflix', name: 'Netflix', active: false, color: '#e50914', readyTitles: 140, plan: 'Inactive' },
-        { id: 'max', name: 'Max (HBO)', active: false, color: '#002be7', readyTitles: 95, plan: 'Inactive' },
-        { id: 'hulu', name: 'Hulu', active: false, color: '#1ce783', readyTitles: 60, plan: 'Inactive' },
-        { id: 'disney', name: 'Disney+', active: false, color: '#113ccf', readyTitles: 52, plan: 'Inactive' },
-        { id: 'tubi', name: 'Tubi (Free w/ Ads)', active: true, color: '#fa4823', readyTitles: 92, plan: 'Free' },
-      ],
-
-      /* Films database */
-      movies: [
-        {
-          id: 101,
-          title: 'Miami Vice',
-          year: 2006,
-          rating: 6.0,
-          runtime: 132,
-          genres: 'Action, Crime, Thriller',
-          poster: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=350&h=500&fit=crop',
-          backdrop: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=800&h=400&fit=crop',
-          services: ['Prime Video', 'Apple TV+'],
-          inWatchlist: true,
-          isWatched: false,
-          podcastMention: 'The Rewatchables',
-          synopsis: 'A case involving drug lords and murder in South Florida takes a personal turn for undercover detectives Sonny Crockett and Rico Tubbs.'
-        },
-        {
-          id: 102,
-          title: 'The Last Airbender',
-          year: 2010,
-          rating: 9.2,
-          runtime: 103,
-          genres: 'Fantasy, Adventure',
-          poster: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=350&h=500&fit=crop',
-          backdrop: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&h=400&fit=crop',
-          services: ['Prime Video'],
-          inWatchlist: true,
-          isWatched: false,
-          podcastMention: null,
-          synopsis: 'The world is divided into four nations: Water, Earth, Air, and Fire. The Fire Nation launches a brutal global assault.'
-        },
-        {
-          id: 103,
-          title: 'Aliens Expanded',
-          year: 2023,
-          rating: 8.9,
-          runtime: 240,
-          genres: 'Documentary, Sci-Fi',
-          poster: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=350&h=500&fit=crop',
-          backdrop: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&h=400&fit=crop',
-          services: ['Prime Video'],
-          inWatchlist: true,
-          isWatched: false,
-          podcastMention: null,
-          synopsis: 'The definitive retrospective exploring the making, cultural impact, and filmmaking craft behind James Cameron’s sci-fi benchmark.'
-        },
-        {
-          id: 104,
-          title: 'The Godfather Part II',
-          year: 1974,
-          rating: 9.0,
-          runtime: 202,
-          genres: 'Crime, Drama',
-          poster: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=350&h=500&fit=crop',
-          backdrop: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=800&h=400&fit=crop',
-          services: ['Prime Video'],
-          inWatchlist: true,
-          isWatched: true,
-          myRating: 5.0,
-          watchedDate: 'Yesterday',
-          podcastMention: 'The Big Picture',
-          synopsis: 'The dual story of young Vito Corleone growing up in Sicily and 1920s New York, and his son Michael consolidating power in the 1950s.'
-        },
-        {
-          id: 105,
-          title: 'Groundhog Day',
-          year: 1993,
-          rating: 8.1,
-          runtime: 101,
-          genres: 'Comedy, Romance',
-          poster: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=350&h=500&fit=crop',
-          backdrop: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&h=400&fit=crop',
-          services: ['Max (HBO)'],
-          inWatchlist: true,
-          isWatched: true,
-          myRating: 4.5,
-          watchedDate: '3 days ago',
-          podcastMention: 'The Rewatchables',
-          synopsis: 'A cynical TV weatherman finds himself reliving the same February 2nd day over and over again in Punxsutawney, Pennsylvania.'
-        },
-        {
-          id: 106,
-          title: 'Heat',
-          year: 1995,
-          rating: 8.3,
-          runtime: 170,
-          genres: 'Action, Crime, Drama',
-          poster: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=350&h=500&fit=crop',
-          backdrop: 'https://images.unsplash.com/photo-1514565131-fce0801e5785?w=800&h=400&fit=crop',
-          services: ['Prime Video'],
-          inWatchlist: true,
-          isWatched: true,
-          myRating: 5.0,
-          watchedDate: 'Last week',
-          podcastMention: 'The Rewatchables',
-          synopsis: 'Obsessive LAPD detective Vincent Hanna tracks master criminal Neil McCauley and his disciplined heist crew across neon-lit Los Angeles.'
-        },
-        {
-          id: 107,
-          title: 'Coyote vs. Acme',
-          year: 2026,
-          rating: 7.4,
-          runtime: 98,
-          genres: 'Comedy, Courtroom',
-          poster: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=350&h=500&fit=crop',
-          backdrop: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&h=400&fit=crop',
-          services: ['In Theaters'],
-          inWatchlist: true,
-          isWatched: false,
-          podcastMention: 'What Went Wrong',
-          synopsis: 'Wile E. Coyote takes Acme to civil court over consistently defective products with the aid of an underdog attorney.'
-        }
-      ]
+    // =========================================================================
+    // StreamWise Web App State, Defaults & Seed Hydration
+    // =========================================================================
+    const DEFAULT_CONFIG = {
+      tmdbKey: "24a3f0ee35ab64ef6a4e17d19b46c99c",
+      username: "scriptedmind",
+      webhookUrl: "https://script.google.com/macros/s/AKfycbzsbZfiDbXXGJunAmJX2xb9OtpnigwVl69M6qbBQ5bNBuyAdj6TtkW-LflbSxSFJJoI0w/exec",
+      betaFeedback: true
     };
-    /* Sub-tabs layout mapping per screen */
-    const subTabConfigs = {
+
+    const DEFAULT_SERVICES = [
+      { id: "netflix", name: "Netflix", monthlyPrice: 17.99, active: true, color: "#ef4444" },
+      { id: "max", name: "Max", monthlyPrice: 16.99, active: true, color: "#3b82f6" },
+      { id: "hulu", name: "Hulu", monthlyPrice: 9.99, active: true, color: "#22c55e" },
+      { id: "prime", name: "Prime Video", monthlyPrice: 8.99, active: true, color: "#06b6d4" },
+      { id: "apple", name: "Apple TV+", monthlyPrice: 9.99, active: false, color: "#cbd5e1" },
+      { id: "criterion", name: "Criterion Channel", monthlyPrice: 10.99, active: false, color: "#f59e0b" },
+      { id: "peacock", name: "Peacock", monthlyPrice: 7.99, active: false, color: "#eab308" },
+      { id: "disney", name: "Disney+", monthlyPrice: 13.99, active: false, color: "#6366f1" }
+    ];
+
+    const FALLBACK_STARTER_RECS = [
+      { tmdbId: 599975, title: "Three Billboards Outside Ebbing, Missouri", year: 2017, vote: 8.1, posterPath: "/vgvw6w1C3v6rP4gG10J7sB0J7cR.jpg", overview: "After months have passed without a culprit in her daughter's murder case, Mildred Hayes makes a bold move." },
+      { tmdbId: 496243, title: "Parasite", year: 2019, vote: 8.5, posterPath: "/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg", overview: "All unemployed, Ki-taek's family takes peculiar interest in the wealthy Parks until an unexpected incident changes everything." },
+      { tmdbId: 376867, title: "Moonlight", year: 2016, vote: 7.4, posterPath: "/qLNFEmHDOgwvBXgjnozsYlulFI0.jpg", overview: "The tender, heartbreaking story of a young man's struggle to find himself across three defining chapters." },
+      { tmdbId: 508439, title: "Onward", year: 2020, vote: 7.7, posterPath: "/f4aul3FyD3jv3v4bul1IrkWZvzq.jpg", overview: "In a suburban fantasy world, two teenage elf brothers embark on an extraordinary quest." }
+    ];
+
+    const FALLBACK_MINI_SEED = {
+      username: "scriptedmind",
       watchlist: [
-        { id: 'ready', label: 'Ready on My Subs (808)' },
-        { id: 'all', label: 'All Saved (1,152)' },
-        { id: 'short', label: 'Under 100m' },
-        { id: 'podcasts', label: 'Podcast Picks (42)' }
+        { id: "wl_1", title: "Sinners", year: 2025, addedDate: "2025-11-10", status: "WATCHLIST", services: ["Max"] },
+        { id: "wl_2", title: "Heat", year: 1995, addedDate: "2025-09-01", status: "WATCHLIST", services: ["Netflix"] },
+        { id: "wl_3", title: "Arrival", year: 2016, addedDate: "2025-08-14", status: "WATCHLIST", services: ["Prime Video"] }
       ],
       watched: [
-        { id: 'diary', label: 'Watched Diary' },
-        { id: 'ranked', label: 'Highest Rated' },
-        { id: 'genres', label: 'Genres' }
+        { id: "wd_1", title: "The Dead Don't Die", year: 2019, watchedDate: "2026-11-18", rating: 3.5, tmdbId: 535581, status: "WATCHED" },
+        { id: "wd_2", title: "Prospect", year: 2018, watchedDate: "2026-11-14", rating: 3.5, tmdbId: 506072, status: "WATCHED" },
+        { id: "wd_3", title: "The Banshees of Inisherin", year: 2022, watchedDate: "2026-10-18", rating: 4.5, tmdbId: 674324, status: "WATCHED" },
+        { id: "wd_4", title: "BlackBerry", year: 2023, watchedDate: "2026-09-25", rating: 4.0, tmdbId: 1016084, status: "WATCHED" },
+        { id: "wd_5", title: "The Ides of March", year: 2011, watchedDate: "2026-09-12", rating: 3.5, tmdbId: 60308, status: "WATCHED" },
+        { id: "wd_6", title: "Whiplash", year: 2014, watchedDate: "2026-06-01", rating: 4.5, tmdbId: 244786, status: "WATCHED" }
       ],
-      search: [
-        { id: 'all_search', label: 'Discover & Add' },
-        { id: 'trending', label: 'Trending on Letterboxd' }
-      ],
-      services: [
-        { id: 'my_subs', label: 'Active Services (3)' },
-        { id: 'all_platforms', label: 'All 14 Platforms' }
-      ],
-      sync: [
-        { id: 'letterboxd', label: 'Letterboxd Sync' },
-        { id: 'devices', label: 'TV Device Target' }
+      playlists: [
+        {
+          id: "nineties_thrillers_heists",
+          title: "90s Thrillers & Tight Heists",
+          subtitle: "Sweaty Neo-Noir, Con Games & Action Classics",
+          category: "VIBES",
+          iconEmoji: "🕶️",
+          sourceCredit: "StreamWise Curated",
+          description: "Zero-fluff pacing, double crosses, and tactile 1990s filmmaking.",
+          isCustom: false,
+          items: [
+            { title: "Heat", year: 1995, rank: 1, note: "Michael Mann masterpiece" },
+            { title: "Ronin", year: 1998, rank: 2, note: "Greatest practical car chases ever filmed" },
+            { title: "L.A. Confidential", year: 1997, rank: 3, note: "Tight 1950s noir puzzle" },
+            { title: "Out of Sight", year: 1998, rank: 4, note: "Soderbergh at peak cool" },
+            { title: "Se7en", year: 1995, rank: 5, note: "Relentless Fincher detective thriller" }
+          ]
+        }
       ]
     };
 
-    function switchScreen(screenKey) {
-      appData.currentScreen = screenKey;
-      appData.currentSubTab = subTabConfigs[screenKey][0].id;
+    const LS_KEYS = {
+      config: "sw_web_config_v2",
+      watchlist: "sw_web_watchlist_v2",
+      watched: "sw_web_watched_v2",
+      customPlaylists: "sw_web_custom_playlists_v2",
+      services: "sw_web_services_v2",
+      recCache: "sw_web_rec_cache_v2",
+      sidebarCollapsed: "sw_sidebar_collapsed",
+      triageIdx: "sw_web_triage_idx",
+      feedbackQueue: "sw_web_feedback_queue_v2"
+    };
 
-      // Update Nav highlighting
-      ['watchlist', 'watched', 'services', 'sync'].forEach(k => {
-        const btn = document.getElementById(`btn-nav-${k}`);
-        if (!btn) return;
-        if (k === screenKey) {
-          btn.className = 'flex flex-col items-center justify-center w-16 py-1 nav-active transition';
-        } else {
-          btn.className = 'flex flex-col items-center justify-center w-16 py-1 nav-inactive hover:text-slate-200 transition';
+    let appState = {
+      config: { ...DEFAULT_CONFIG },
+      watchlist: [],
+      watched: [],
+      builtInPlaylists: [],
+      customPlaylists: [],
+      services: [],
+      activeView: "next-watch",
+      activeVibeFilter: "ALL",
+      activePlaylistCategory: "ALL",
+      activePlaylistId: null,
+      activeWlMode: "grid",
+      activeWlService: "ALL",
+      triageIndex: 0,
+      searchScope: "all",
+      lastSearchData: null,
+      activePerson: null,
+      personFilter: "ALL",
+      personSort: "release_desc",
+      watchedLimit: 60,
+      selectedRecSeedKey: "",
+      currentSpinPick: null
+    };
+
+    let watchedTitleSet = new Set();
+    let watchedTitleYearSet = new Set();
+    let watchlistTitleYearSet = new Set();
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
+    function esc(s) {
+      return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function normTitle(t) {
+      return String(t || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    }
+
+    function makeKey(title, year) {
+      return `${normTitle(title)}|${year ? String(year).slice(0, 4) : ""}`;
+    }
+
+    function rebuildSets() {
+      watchedTitleSet = new Set();
+      watchedTitleYearSet = new Set();
+      for (const w of appState.watched) {
+        const nt = normTitle(w.title);
+        if (nt) watchedTitleSet.add(nt);
+        if (w.year) watchedTitleYearSet.add(`${nt}|${w.year}`);
+      }
+      watchlistTitleYearSet = new Set();
+      for (const w of appState.watchlist) {
+        const nt = normTitle(w.title);
+        watchlistTitleYearSet.add(w.year ? `${nt}|${w.year}` : nt);
+      }
+    }
+
+    function isMovieWatched(title, year) {
+      const nt = normTitle(title);
+      if (!nt) return false;
+      if (year && watchedTitleYearSet.has(`${nt}|${year}`)) return true;
+      return !year && watchedTitleSet.has(nt);
+    }
+
+    function isMovieOnWatchlist(title, year) {
+      const nt = normTitle(title);
+      if (!nt) return false;
+      if (year && watchlistTitleYearSet.has(`${nt}|${year}`)) return true;
+      return appState.watchlist.some(w => normTitle(w.title) === nt);
+    }
+
+    function tmdbImg(path, size = "w342") {
+      if (!path) return "";
+      if (String(path).startsWith("http")) return path;
+      return `https://image.tmdb.org/t/p/${size}${path}`;
+    }
+
+    function showToast(msg) {
+      const el = document.getElementById("sw-toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(window.__swToastTimer);
+      window.__swToastTimer = setTimeout(() => el.classList.remove("show"), 3000);
+    }
+
+    function readLS(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function writeLS(key, val) {
+      try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+    }
+
+    function allPlaylists() {
+      return [...appState.customPlaylists, ...appState.builtInPlaylists];
+    }
+
+    function updateNavBadges() {
+      document.getElementById("nav-badge-playlists").textContent = String(allPlaylists().length);
+      document.getElementById("nav-badge-watchlist").textContent = String(appState.watchlist.length);
+      document.getElementById("nav-badge-watched").textContent = String(appState.watched.length);
+      document.getElementById("sidebar-username").textContent = `@${appState.config.username || "scriptedmind"}`;
+      const newest = appState.watched[0];
+      document.getElementById("sidebar-sync-line").textContent = newest
+        ? `Latest: ${newest.watchedDate || "Recent"} (${newest.title})`
+        : "No watched films yet";
+      document.getElementById("hero-status-line").textContent =
+        `${appState.watched.length.toLocaleString()} watched films • ${appState.watchlist.length} queued on Watchlist • ${allPlaylists().length} playlists synced`;
+    }
+
+    function openModal(id) { document.getElementById(id).classList.add("open"); }
+    function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+
+    // =========================================================================
+    // Initialization & Seed Hydration
+    // =========================================================================
+    async function initApp() {
+      appState.config = { ...DEFAULT_CONFIG, ...(readLS(LS_KEYS.config, {}) || {}) };
+      appState.services = readLS(LS_KEYS.services, null) || JSON.parse(JSON.stringify(DEFAULT_SERVICES));
+      appState.customPlaylists = readLS(LS_KEYS.customPlaylists, []) || [];
+      appState.triageIndex = Number(readLS(LS_KEYS.triageIdx, 0) || 0);
+
+      // Apply sidebar collapse state
+      if (readLS(LS_KEYS.sidebarCollapsed, false)) {
+        document.getElementById("streamwise-sidebar").classList.add("collapsed");
+        document.getElementById("streamwise-main").classList.add("expanded");
+        document.getElementById("btn-collapse-sw-sidebar").textContent = "▶";
+      }
+
+      applyFeedbackVisibility();
+
+      // Immediate paint with saved local data or mini fallback
+      const storedWl = readLS(LS_KEYS.watchlist, null);
+      const storedWd = readLS(LS_KEYS.watched, null);
+      appState.watchlist = Array.isArray(storedWl) && storedWl.length ? storedWl : [...FALLBACK_MINI_SEED.watchlist];
+      appState.watched = Array.isArray(storedWd) && storedWd.length ? storedWd : [...FALLBACK_MINI_SEED.watched];
+      appState.builtInPlaylists = [...FALLBACK_MINI_SEED.playlists];
+      rebuildSets();
+      renderAll();
+
+      // Hydrate full real dataset (33 watchlist, 1,148 watched, 14 built-in playlists)
+      if (location.protocol.startsWith("http")) {
+        try {
+          const res = await fetch("./assets/streamwise_seed.json", { cache: "no-cache" });
+          if (res.ok) {
+            const seed = await res.json();
+            if (Array.isArray(seed.playlists) && seed.playlists.length) {
+              appState.builtInPlaylists = seed.playlists;
+            }
+            if (!storedWd || storedWd.length < seed.watched.length) {
+              appState.watched = mergeWatchedArrays(storedWd || [], seed.watched || []);
+              writeLS(LS_KEYS.watched, appState.watched);
+            }
+            if (!storedWl) {
+              appState.watchlist = seed.watchlist || [];
+              writeLS(LS_KEYS.watchlist, appState.watchlist);
+            }
+            rebuildSets();
+            renderAll();
+          }
+        } catch {
+          // Offline / file:// cleanly stays on local/fallback seed
         }
+      }
+    }
+
+    function mergeWatchedArrays(existing, incoming) {
+      const map = new Map();
+      for (const item of existing) {
+        map.set(makeKey(item.title, item.year), item);
+      }
+      for (const item of incoming) {
+        const k = makeKey(item.title, item.year);
+        const prev = map.get(k);
+        if (!prev) {
+          map.set(k, item);
+        } else {
+          map.set(k, {
+            ...prev,
+            ...item,
+            posterUrl: item.posterUrl || prev.posterUrl || "",
+            tmdbId: item.tmdbId || prev.tmdbId || null,
+            rating: item.rating ?? prev.rating ?? null,
+            watchedDate: (item.watchedDate || "") >= (prev.watchedDate || "") ? item.watchedDate : prev.watchedDate
+          });
+        }
+      }
+      return Array.from(map.values()).sort((a, b) => String(b.watchedDate || "").localeCompare(String(a.watchedDate || "")));
+    }
+
+    // =========================================================================
+    // Navigation & Collapsible Sidebar (Ctrl+B)
+    // =========================================================================
+    function switchView(viewId) {
+      appState.activeView = viewId;
+      document.querySelectorAll(".view-panel").forEach(p => p.classList.toggle("active", p.id === `view-${viewId}`));
+      document.querySelectorAll(".sw-nav-btn").forEach(b => b.classList.toggle("active", b.dataset.view === viewId));
+      closeMobileSidebar();
+      if (viewId === "playlists") renderPlaylistsView();
+      if (viewId === "watchlist") renderWatchlistView();
+      if (viewId === "watched") renderWatchedView();
+      if (viewId === "services") renderServicesView();
+    }
+
+    function toggleSwSidebar() {
+      const sb = document.getElementById("streamwise-sidebar");
+      const main = document.getElementById("streamwise-main");
+      const btn = document.getElementById("btn-collapse-sw-sidebar");
+      const collapsed = sb.classList.toggle("collapsed");
+      main.classList.toggle("expanded", collapsed);
+      btn.textContent = collapsed ? "▶" : "◀";
+      writeLS(LS_KEYS.sidebarCollapsed, collapsed);
+    }
+
+    function toggleMobileSidebar() {
+      const sb = document.getElementById("streamwise-sidebar");
+      const bd = document.getElementById("sw-sidebar-backdrop");
+      const open = sb.classList.toggle("mobile-open");
+      bd.classList.toggle("open", open);
+    }
+
+    function closeMobileSidebar() {
+      document.getElementById("streamwise-sidebar").classList.remove("mobile-open");
+      document.getElementById("sw-sidebar-backdrop").classList.remove("open");
+    }
+
+    document.addEventListener("keydown", e => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleSwSidebar();
+      }
+    });
+
+    // =========================================================================
+    // Shared Rendering (Render All)
+    // =========================================================================
+    function renderAll() {
+      updateNavBadges();
+      renderVibeFilters();
+      renderTonightPicks();
+      populateHistorySeedControls();
+      renderPlaylistsView();
+      renderWatchlistView();
+      renderWatchedView();
+      renderServicesView();
+    }
+
+    // =========================================================================
+    // VIEW 1: FIND NEXT WATCH & WATCH-HISTORY RECOMMENDER
+    // =========================================================================
+    const VIBE_OPTIONS = [
+      { id: "ALL", label: "All Unwatched" },
+      { id: "WATCHLIST", label: "📌 Watchlist Only" },
+      { id: "nineties_thrillers_heists", label: "🕶️ 90s Thrillers & Heists" },
+      { id: "mind_bending_scifi", label: "🌀 Mind-Bending Sci-Fi" },
+      { id: "midnight_cult_horror", label: "🕯️ Midnight Cult Horror" },
+      { id: "modern_auteur_essentials", label: "🎬 Modern Auteur" },
+      { id: "unspooled_hdtgm", label: "🎙️ Pod Picks" },
+      { id: "festival_heat_2025_2026", label: "🔥 Festival 2025–26" },
+      { id: "oscar_best_picture", label: "🏆 Oscar Winners" }
+    ];
+
+    function renderVibeFilters() {
+      const wrap = document.getElementById("vibe-filter-chips");
+      wrap.innerHTML = VIBE_OPTIONS.map(v => `
+        <button type="button" class="chip ${appState.activeVibeFilter === v.id ? "active" : ""}" onclick="setVibeFilter('${v.id}')">
+          ${esc(v.label)}
+        </button>
+      `).join("");
+    }
+
+    function setVibeFilter(vibeId) {
+      appState.activeVibeFilter = vibeId;
+      renderVibeFilters();
+      renderTonightPicks();
+    }
+
+    function collectCandidatePool(scope) {
+      const seen = new Set();
+      const pool = [];
+      const pushCandidate = (item, sourceLabel) => {
+        if (isMovieWatched(item.title, item.year)) return;
+        const k = makeKey(item.title, item.year);
+        if (seen.has(k)) return;
+        seen.add(k);
+        pool.push({
+          title: item.title,
+          year: item.year || null,
+          posterUrl: item.posterUrl || "",
+          tmdbId: item.tmdbId || null,
+          note: item.note || sourceLabel,
+          sourceLabel,
+          onWatchlist: isMovieOnWatchlist(item.title, item.year),
+          services: item.services || []
+        });
+      };
+
+      if (scope === "WATCHLIST") {
+        appState.watchlist.forEach(w => pushCandidate(w, "On Your Watchlist"));
+        return pool;
+      }
+
+      if (scope !== "ALL") {
+        const pl = allPlaylists().find(p => p.id === scope);
+        if (pl) {
+          pl.items.forEach(it => pushCandidate(it, `${pl.iconEmoji} ${pl.title}`));
+        }
+        return pool;
+      }
+
+      appState.watchlist.forEach(w => pushCandidate(w, "📌 On Your Watchlist"));
+      allPlaylists().forEach(pl => {
+        pl.items.forEach(it => pushCandidate(it, `${pl.iconEmoji} ${pl.title}`));
       });
-
-      updateHeader();
-      renderSubTabs();
-      renderCurrentScreen();
+      return pool;
     }
 
-    function updateHeader() {
-      const title = document.getElementById('headerTitle');
-      const badge = document.getElementById('headerBadge');
-      const subtitle = document.getElementById('headerSubtitle');
-
-      if (appData.currentScreen === 'watchlist') {
-        title.innerText = 'Streamwise';
-        badge.innerText = 'Watchlist';
-        subtitle.innerText = '1,152 Saved • 808 Ready to Stream';
-      } else if (appData.currentScreen === 'watched') {
-        title.innerText = 'Watched';
-        badge.innerText = 'Diary';
-        subtitle.innerText = '1,130 Logged • Synced with @Sean';
-      } else if (appData.currentScreen === 'search') {
-        title.innerText = 'Search & Add';
-        badge.innerText = 'Catalog';
-        subtitle.innerText = 'Find any film & view streaming availability';
-      } else if (appData.currentScreen === 'services') {
-        title.innerText = 'My Services';
-        badge.innerText = 'Setup';
-        subtitle.innerText = 'Control which subscriptions filter your feed';
-      } else if (appData.currentScreen === 'sync') {
-        title.innerText = 'Letterboxd Sync';
-        badge.innerText = 'Connected';
-        subtitle.innerText = 'Two-way sync active with user @Sean';
+    function renderTonightPicks() {
+      const pool = collectCandidatePool(appState.activeVibeFilter).slice(0, 8);
+      const grid = document.getElementById("tonight-picks-grid");
+      if (!pool.length) {
+        grid.innerHTML = `<div class="section-sub">All items in this vibe are already watched! Pick another vibe filter or search TMDB.</div>`;
+        return;
       }
+      grid.innerHTML = pool.map(m => renderMovieCardHtml(m)).join("");
     }
 
-    function renderSubTabs() {
-      const container = document.getElementById('subTabsBar');
-      const tabs = subTabConfigs[appData.currentScreen];
-
-      container.innerHTML = tabs.map(tab => {
-        const isActive = appData.currentSubTab === tab.id;
-        return `
-          <button 
-            onclick="setSubTab('${tab.id}')" 
-            class="py-2.5 whitespace-nowrap transition border-b-2 font-medium ${
-              isActive 
-                ? 'text-amber-400 border-amber-400' 
-                : 'text-slate-400 hover:text-slate-200 border-transparent'
-            }">
-            ${tab.label}
-          </button>
-        `;
-      }).join('');
-    }
-
-    function setSubTab(subTabId) {
-      appData.currentSubTab = subTabId;
-      renderSubTabs();
-      renderCurrentScreen();
-    }
-    function renderCurrentScreen() {
-      const viewport = document.getElementById('screenViewport');
-
-      switch (appData.currentScreen) {
-        case 'watchlist':
-          renderWatchlistScreen(viewport);
-          break;
-        case 'watched':
-          renderWatchedScreen(viewport);
-          break;
-        case 'search':
-          renderSearchScreen(viewport);
-          break;
-        case 'services':
-          renderServicesScreen(viewport);
-          break;
-        case 'sync':
-          renderSyncScreen(viewport);
-          break;
+    function spinNextWatch() {
+      const pool = collectCandidatePool(appState.activeVibeFilter);
+      if (!pool.length) {
+        showToast("No unwatched candidates in this filter — try All Unwatched!");
+        return;
       }
-    }
-
-    /* Screen 1: Watchlist (The Core Couch Browsing Screen) */
-    function renderWatchlistScreen(container) {
-      const activeServiceNames = appData.services.filter(s => s.active).map(s => s.name);
-
-      let items = appData.movies.filter(m => m.inWatchlist);
-
-      if (appData.currentSubTab === 'ready') {
-        items = items.filter(m => m.services.some(svc => activeServiceNames.includes(svc)));
-      } else if (appData.currentSubTab === 'short') {
-        items = items.filter(m => m.runtime <= 110);
-      } else if (appData.currentSubTab === 'podcasts') {
-        items = items.filter(m => m.podcastMention);
-      }
-
-      container.innerHTML = `
-        <!-- Active Services Pill Filter Bar -->
-        <div class="flex items-center gap-1.5 overflow-x-auto hide-scrollbar pt-0.5">
-          <span class="text-[10px] text-slate-400 uppercase font-mono mr-1">Active:</span>
-          ${appData.services.filter(s => s.active).map(s => `
-            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-stream-surface border border-stream-border text-slate-300 flex items-center gap-1 whitespace-nowrap">
-              <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${s.color}"></span>
-              ${s.name}
-            </span>
-          `).join('')}
-          <button onclick="switchScreen('services')" class="text-[10px] text-amber-400 font-bold px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 whitespace-nowrap">
-            Edit
-          </button>
-        </div>
-
-        <!-- Fast Couch Launch Banner -->
-        <div class="bg-gradient-to-r from-amber-500/15 via-stream-surface to-stream-surface border border-amber-500/30 rounded-2xl p-3 flex items-center justify-between shadow-md">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 font-black flex items-center justify-center text-sm">⚡</div>
-            <div>
-              <span class="text-xs font-bold text-white block">Skip the TV Menus</span>
-              <span class="text-[10px] text-slate-400">Miami Vice is ready on Prime Video</span>
+      const idx = Math.floor(Math.random() * Math.min(pool.length, 45));
+      const pick = pool[idx];
+      appState.currentSpinPick = pick;
+      const box = document.getElementById("spin-result-container");
+      box.style.display = "block";
+      const safeTitle = esc(pick.title);
+      const safeYear = pick.year || "";
+      const imgTag = pick.posterUrl
+        ? `<img src="${esc(pick.posterUrl)}" alt="${safeTitle}" onerror="this.style.display='none'">`
+        : `<div class="poster-monogram" style="font-size:12px;">🎬<br>${safeTitle}</div>`;
+      box.innerHTML = `
+        <div class="spin-result-box">
+          <div class="spin-poster">${imgTag}</div>
+          <div style="flex:1 1 240px; min-width:0; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+              <span class="badge badge-watchlist">🎲 Tonight's Pick</span>
+              <span class="badge">${esc(pick.sourceLabel)}</span>
+            </div>
+            <h2 style="font-size:21px; font-weight:800;">${safeTitle} ${safeYear ? `(${safeYear})` : ""}</h2>
+            <p class="section-sub">${esc(pick.note || "Unwatched match from your queue & curated playlists.")}</p>
+            <div class="chip-row" style="margin-top:6px;">
+              <button type="button" class="btn btn-green" onclick="openMovieModalByTitle('${esc(pick.title).replace(/'/g, "\\'")}', ${safeYear || "null"}, ${pick.tmdbId || "null"})">🎥 Details & Streaming</button>
+              <button type="button" class="btn" onclick="spinNextWatch()">🔀 Spin Again</button>
+              <button type="button" class="btn btn-cyan" onclick="addToWatchlist('${esc(pick.title).replace(/'/g, "\\'")}', ${safeYear || "null"}, ${pick.tmdbId || "null"}, '${esc(pick.posterUrl || "")}')">${pick.onWatchlist ? "📌 On Watchlist" : "+ Watchlist"}</button>
+              <button type="button" class="btn" onclick="markAsWatched('${esc(pick.title).replace(/'/g, "\\'")}', ${safeYear || "null"}, ${pick.tmdbId || "null"}, '${esc(pick.posterUrl || "")}')">✓ Mark Watched</button>
             </div>
           </div>
-          <button onclick="triggerDirectTvLaunch(101)" class="bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold px-3 py-1.5 rounded-xl shadow">
-            Launch
-          </button>
+        </div>
+      `;
+    }
+
+    function populateHistorySeedControls() {
+      const seeds = appState.watched.filter(w => w.tmdbId).slice(0, 18);
+      const fallbackSeeds = seeds.length ? seeds : appState.watched.slice(0, 12);
+      const sel = document.getElementById("rec-seed-select");
+      const chipsWrap = document.getElementById("rec-seed-chips");
+
+      if (!appState.selectedRecSeedKey && fallbackSeeds.length) {
+        const preferred = fallbackSeeds.find(s => /banshees|prospect|blackberry|dead don/i.test(s.title)) || fallbackSeeds[0];
+        appState.selectedRecSeedKey = makeKey(preferred.title, preferred.year);
+      }
+
+      sel.innerHTML = fallbackSeeds.map(s => {
+        const k = makeKey(s.title, s.year);
+        return `<option value="${esc(k)}" ${k === appState.selectedRecSeedKey ? "selected" : ""}>${esc(s.title)} ${s.year ? `(${s.year})` : ""} ${s.rating ? `★${s.rating}` : ""}</option>`;
+      }).join("");
+
+      chipsWrap.innerHTML = fallbackSeeds.slice(0, 6).map(s => {
+        const k = makeKey(s.title, s.year);
+        return `<button type="button" class="chip ${k === appState.selectedRecSeedKey ? "active" : ""}" onclick="selectHistorySeed('${esc(k).replace(/'/g, "\\'")}')">
+          Because you watched ${esc(s.title)}
+        </button>`;
+      }).join("");
+
+      loadHistoryRecommendations(false);
+    }
+
+    function selectHistorySeed(key) {
+      appState.selectedRecSeedKey = key;
+      populateHistorySeedControls();
+    }
+
+    function shuffleHistorySeed() {
+      const pool = appState.watched.filter(w => w.tmdbId || w.rating >= 3.5).slice(0, 40);
+      const source = pool.length ? pool : appState.watched.slice(0, 40);
+      if (!source.length) return;
+      const pick = source[Math.floor(Math.random() * source.length)];
+      appState.selectedRecSeedKey = makeKey(pick.title, pick.year);
+      populateHistorySeedControls();
+    }
+
+    async function loadHistoryRecommendations(forceLive) {
+      const statusEl = document.getElementById("history-recs-status");
+      const gridEl = document.getElementById("history-recs-grid");
+      const seed = appState.watched.find(w => makeKey(w.title, w.year) === appState.selectedRecSeedKey) || appState.watched[0];
+      if (!seed) {
+        gridEl.innerHTML = "";
+        return;
+      }
+
+      const recCache = readLS(LS_KEYS.recCache, {});
+      const cacheKey = `${seed.tmdbId || normTitle(seed.title)}`;
+
+      if (!forceLive && Array.isArray(recCache[cacheKey]) && recCache[cacheKey].length) {
+        renderHistoryRecCards(seed, recCache[cacheKey], "cached TMDB match");
+        return;
+      }
+
+      // Render starter recs immediately so first paint is never empty
+      renderHistoryRecCards(seed, FALLBACK_STARTER_RECS, "starter recommendations");
+
+      if (!forceLive && !navigator.onLine) return;
+
+      const apiKey = appState.config.tmdbKey || DEFAULT_CONFIG.tmdbKey;
+      try {
+        let tmdbId = seed.tmdbId;
+        if (!tmdbId) {
+          const sUrl = `https://api.themoviedb.org/3/search/movie?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(seed.title)}${seed.year ? `&year=${seed.year}` : ""}`;
+          const sResp = await fetch(sUrl);
+          if (sResp.ok) {
+            const sJson = await sResp.json();
+            tmdbId = sJson.results?.[0]?.id || null;
+          }
+        }
+        if (!tmdbId) return;
+
+        const rUrl = `https://api.themoviedb.org/3/movie/${tmdbId}/recommendations?api_key=${encodeURIComponent(apiKey)}&language=en-US&page=1`;
+        const rResp = await fetch(rUrl);
+        if (!rResp.ok) return;
+        const rJson = await rResp.json();
+        const mapped = (rJson.results || []).slice(0, 16).map(m => ({
+          tmdbId: m.id,
+          title: m.title || m.original_title,
+          year: m.release_date ? Number(m.release_date.slice(0, 4)) : null,
+          vote: m.vote_average ? Number(m.vote_average.toFixed(1)) : null,
+          posterPath: m.poster_path || "",
+          overview: m.overview || ""
+        }));
+        if (mapped.length) {
+          recCache[cacheKey] = mapped;
+          writeLS(LS_KEYS.recCache, recCache);
+          renderHistoryRecCards(seed, mapped, "live TMDB recommendations");
+        }
+      } catch {
+        // Keep starter recs without failing console
+      }
+    }
+
+    function renderHistoryRecCards(seed, items, label) {
+      const unwatched = items.filter(m => !isMovieWatched(m.title, m.year)).slice(0, 8);
+      document.getElementById("history-recs-status").textContent =
+        `Showing ${unwatched.length} unwatched picks similar to ${seed.title} (${label}).`;
+      const gridEl = document.getElementById("history-recs-grid");
+      gridEl.innerHTML = unwatched.map(m => renderMovieCardHtml({
+        tmdbId: m.tmdbId,
+        title: m.title,
+        year: m.year,
+        posterUrl: tmdbImg(m.posterPath, "w342"),
+        note: m.vote ? `TMDB ★${m.vote}` : "Recommended",
+        sourceLabel: `Similar to ${seed.title}`,
+        onWatchlist: isMovieOnWatchlist(m.title, m.year)
+      })).join("");
+    }
+
+    function renderMovieCardHtml(m) {
+      const watched = isMovieWatched(m.title, m.year);
+      const onWl = isMovieOnWatchlist(m.title, m.year);
+      const safeTitle = esc(m.title);
+      const jsTitle = safeTitle.replace(/'/g, "\\'");
+      const jsPoster = esc(m.posterUrl || "").replace(/'/g, "\\'");
+      const badgeText = watched ? "✓ Watched" : onWl ? "📌 Watchlist" : esc(m.note || "");
+      const imgHtml = m.posterUrl
+        ? `<img src="${esc(m.posterUrl)}" alt="${safeTitle}" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">`
+        : "";
+      return `
+        <article class="movie-card">
+          <div class="movie-poster-wrap" onclick="openMovieModalByTitle('${jsTitle}', ${m.year || "null"}, ${m.tmdbId || "null"})">
+            ${imgHtml}
+            <div class="poster-monogram" style="${m.posterUrl ? "display:none;" : "display:flex;"}">
+              <span style="font-size:22px;">🎬</span>
+              <span>${safeTitle}</span>
+            </div>
+            ${badgeText ? `<span class="poster-top-badge">${badgeText}</span>` : ""}
+          </div>
+          <div class="movie-body">
+            <div class="movie-title" onclick="openMovieModalByTitle('${jsTitle}', ${m.year || "null"}, ${m.tmdbId || "null"})">
+              ${safeTitle} ${m.year ? `<span style="color:var(--muted); font-weight:600;">(${m.year})</span>` : ""}
+            </div>
+            <div class="movie-meta">${esc(m.sourceLabel || m.note || "")}</div>
+            <div class="movie-actions">
+              ${watched ? `<span class="badge badge-watched">✓ Seen</span>` : `
+                <button type="button" class="btn btn-sm ${onWl ? "btn-cyan" : "btn-green"}" onclick="addToWatchlist('${jsTitle}', ${m.year || "null"}, ${m.tmdbId || "null"}, '${jsPoster}')">
+                  ${onWl ? "📌 Queued" : "+ Watchlist"}
+                </button>
+              `}
+              <button type="button" class="btn btn-sm" onclick="openAddToPlaylistModal('${jsTitle}', ${m.year || "null"}, ${m.tmdbId || "null"})">+ List</button>
+              ${watched ? "" : `<button type="button" class="btn btn-sm" onclick="markAsWatched('${jsTitle}', ${m.year || "null"}, ${m.tmdbId || "null"}, '${jsPoster}')">✓</button>`}
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    // =========================================================================
+    // VIEW 2: UNIVERSAL MOVIE & PERSON SEARCH + AGE-AT-RELEASE FILMOGRAPHY
+    // =========================================================================
+    function setSearchScope(scope, btn) {
+      appState.searchScope = scope;
+      document.querySelectorAll("#search-scope-row .chip").forEach(c => c.classList.remove("active"));
+      btn.classList.add("active");
+      if (appState.lastSearchData) renderSearchResults(appState.lastSearchData);
+    }
+
+    function quickSearch(query) {
+      switchView("search");
+      document.getElementById("universal-search-input").value = query;
+      executeUniversalSearch();
+    }
+
+    async function executeUniversalSearch() {
+      const q = document.getElementById("universal-search-input").value.trim();
+      if (!q) return;
+      document.getElementById("person-filmography-panel").style.display = "none";
+      const area = document.getElementById("search-results-area");
+      area.innerHTML = `<div class="card"><p class="section-sub">Searching TMDB for "${esc(q)}"…</p></div>`;
+
+      const apiKey = appState.config.tmdbKey || DEFAULT_CONFIG.tmdbKey;
+      try {
+        const [movieRes, tvRes, personRes] = await Promise.all([
+          fetch(`https://api.themoviedb.org/3/search/movie?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(q)}`),
+          fetch(`https://api.themoviedb.org/3/search/tv?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(q)}`),
+          fetch(`https://api.themoviedb.org/3/search/person?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(q)}`)
+        ]);
+        const movies = movieRes.ok ? ((await movieRes.json()).results || []) : [];
+        const tv = tvRes.ok ? ((await tvRes.json()).results || []) : [];
+        const people = personRes.ok ? ((await personRes.json()).results || []) : [];
+        appState.lastSearchData = { query: q, movies, tv, people };
+        renderSearchResults(appState.lastSearchData);
+      } catch {
+        area.innerHTML = `<div class="card"><p class="section-sub">Unable to reach TMDB right now. Check your network or API key in Settings.</p></div>`;
+      }
+    }
+
+    function renderSearchResults(data) {
+      const area = document.getElementById("search-results-area");
+      const showPeople = appState.searchScope === "all" || appState.searchScope === "person";
+      const showTitles = appState.searchScope === "all" || appState.searchScope === "movie";
+
+      let html = "";
+      if (showPeople && data.people.length) {
+        html += `
+          <div class="card">
+            <h2 class="section-title" style="margin-bottom:10px;">🎭 Actors & Directors (${data.people.length})</h2>
+            <div class="grid-playlists">
+              ${data.people.slice(0, 9).map(p => {
+                const kf = (p.known_for || []).slice(0, 3).map(k => k.title || k.name).filter(Boolean).join(", ");
+                const img = p.profile_path
+                  ? `<img src="${esc(tmdbImg(p.profile_path, "w185"))}" alt="${esc(p.name)}" onerror="this.style.display='none'">`
+                  : esc((p.name || "?").slice(0, 2));
+                return `
+                  <div class="person-pill-card" onclick="openPersonFilmography(${p.id})">
+                    <div class="person-avatar">${img}</div>
+                    <div style="min-width:0; flex:1;">
+                      <div style="font-weight:800; font-size:14px;">${esc(p.name)}</div>
+                      <div class="section-sub">${esc(p.known_for_department || "Talent")}${kf ? ` • ${esc(kf)}` : ""}</div>
+                    </div>
+                    <span class="badge">Credits →</span>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `;
+      }
+
+      if (showTitles) {
+        const combined = [
+          ...data.movies.slice(0, 12).map(m => ({
+            tmdbId: m.id,
+            title: m.title,
+            year: m.release_date ? Number(m.release_date.slice(0, 4)) : null,
+            posterUrl: tmdbImg(m.poster_path, "w342"),
+            note: m.vote_average ? `Movie ★${m.vote_average.toFixed(1)}` : "Movie",
+            sourceLabel: "TMDB Movie",
+            onWatchlist: isMovieOnWatchlist(m.title, m.release_date ? Number(m.release_date.slice(0, 4)) : null)
+          })),
+          ...data.tv.slice(0, 6).map(t => ({
+            tmdbId: t.id,
+            title: t.name,
+            year: t.first_air_date ? Number(t.first_air_date.slice(0, 4)) : null,
+            posterUrl: tmdbImg(t.poster_path, "w342"),
+            note: t.vote_average ? `TV ★${t.vote_average.toFixed(1)}` : "TV Series",
+            sourceLabel: "TMDB Series",
+            onWatchlist: isMovieOnWatchlist(t.name, t.first_air_date ? Number(t.first_air_date.slice(0, 4)) : null)
+          }))
+        ];
+        if (combined.length) {
+          html += `
+            <div class="card">
+              <h2 class="section-title" style="margin-bottom:10px;">🎬 Movies & TV (${combined.length})</h2>
+              <div class="grid-cards">${combined.map(m => renderMovieCardHtml(m)).join("")}</div>
+            </div>
+          `;
+        }
+      }
+
+      if (!html) {
+        html = `<div class="card"><p class="section-sub">No matching titles or people found for "${esc(data.query)}".</p></div>`;
+      }
+      area.innerHTML = html;
+    }
+
+    async function openPersonFilmography(personId) {
+      switchView("search");
+      const panel = document.getElementById("person-filmography-panel");
+      panel.style.display = "block";
+      panel.innerHTML = `<p class="section-sub">Loading full filmography & Age at Release…</p>`;
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      const apiKey = appState.config.tmdbKey || DEFAULT_CONFIG.tmdbKey;
+      try {
+        const [detailRes, creditsRes] = await Promise.all([
+          fetch(`https://api.themoviedb.org/3/person/${personId}?api_key=${encodeURIComponent(apiKey)}`),
+          fetch(`https://api.themoviedb.org/3/person/${personId}/movie_credits?api_key=${encodeURIComponent(apiKey)}`)
+        ]);
+        const person = await detailRes.json();
+        const creditsJson = await creditsRes.json();
+
+        const creditMap = new Map();
+        const birthYear = person.birthday && /^\d{4}/.test(person.birthday) ? Number(person.birthday.slice(0, 4)) : null;
+        const deathYear = person.deathday && /^\d{4}/.test(person.deathday) ? Number(person.deathday.slice(0, 4)) : null;
+
+        for (const c of (creditsJson.cast || [])) {
+          if (!c.title) continue;
+          const releaseYear = c.release_date && /^\d{4}/.test(c.release_date) ? Number(c.release_date.slice(0, 4)) : null;
+          creditMap.set(c.id, {
+            tmdbId: c.id,
+            title: c.title,
+            releaseDate: c.release_date || "",
+            year: releaseYear,
+            roles: c.character ? [`as ${c.character}`] : ["Actor"],
+            posterPath: c.poster_path || "",
+            vote: c.vote_average ? Number(c.vote_average.toFixed(1)) : 0,
+            popularity: c.popularity || 0
+          });
+        }
+        for (const c of (creditsJson.crew || [])) {
+          if (!c.title) continue;
+          const releaseYear = c.release_date && /^\d{4}/.test(c.release_date) ? Number(c.release_date.slice(0, 4)) : null;
+          const existing = creditMap.get(c.id);
+          const role = c.job || c.department || "Crew";
+          if (existing) {
+            if (!existing.roles.includes(role)) existing.roles.push(role);
+          } else {
+            creditMap.set(c.id, {
+              tmdbId: c.id,
+              title: c.title,
+              releaseDate: c.release_date || "",
+              year: releaseYear,
+              roles: [role],
+              posterPath: c.poster_path || "",
+              vote: c.vote_average ? Number(c.vote_average.toFixed(1)) : 0,
+              popularity: c.popularity || 0
+            });
+          }
+        }
+
+        const credits = Array.from(creditMap.values()).map(item => {
+          let ageLabel = "";
+          if (birthYear && item.year) {
+            if (deathYear && item.year > deathYear) {
+              ageLabel = "Posthumous release";
+            } else {
+              const age = item.year - birthYear;
+              if (age >= 0 && age <= 110) ageLabel = `Age ${age} at release`;
+            }
+          }
+          return { ...item, ageLabel };
+        });
+
+        appState.activePerson = {
+          id: person.id,
+          name: person.name,
+          birthday: person.birthday,
+          deathday: person.deathday,
+          department: person.known_for_department || "",
+          bio: person.biography || "",
+          profileUrl: tmdbImg(person.profile_path, "w185"),
+          credits
+        };
+        renderPersonFilmography();
+      } catch {
+        panel.innerHTML = `<p class="section-sub">Failed to load person filmography from TMDB.</p>`;
+      }
+    }
+
+    function setPersonFilter(f) { appState.personFilter = f; renderPersonFilmography(); }
+    function setPersonSort(s) { appState.personSort = s; renderPersonFilmography(); }
+
+    function renderPersonFilmography() {
+      const p = appState.activePerson;
+      if (!p) return;
+      const panel = document.getElementById("person-filmography-panel");
+      const total = p.credits.length;
+      const watchedCount = p.credits.filter(c => isMovieWatched(c.title, c.year)).length;
+      const pct = total ? Math.round((watchedCount / total) * 100) : 0;
+
+      let filtered = [...p.credits];
+      if (appState.personFilter === "UNWATCHED") filtered = filtered.filter(c => !isMovieWatched(c.title, c.year));
+      if (appState.personFilter === "WATCHED") filtered = filtered.filter(c => isMovieWatched(c.title, c.year));
+
+      filtered.sort((a, b) => {
+        if (appState.personSort === "release_asc") return String(a.releaseDate || "9999").localeCompare(String(b.releaseDate || "9999"));
+        if (appState.personSort === "popularity") return (b.popularity || 0) - (a.popularity || 0);
+        if (appState.personSort === "rating") return (b.vote || 0) - (a.vote || 0);
+        return String(b.releaseDate || "0000").localeCompare(String(a.releaseDate || "0000"));
+      });
+
+      panel.innerHTML = `
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; margin-bottom:14px;">
+          <div style="display:flex; gap:14px; align-items:center;">
+            <div class="person-avatar" style="width:68px; height:68px;">
+              ${p.profileUrl ? `<img src="${esc(p.profileUrl)}" alt="${esc(p.name)}">` : esc(p.name.slice(0, 2))}
+            </div>
+            <div>
+              <h2 class="section-title">${esc(p.name)}</h2>
+              <p class="section-sub">${esc(p.department)} ${p.birthday ? `• Born ${esc(p.birthday)}` : ""}</p>
+              <div style="margin-top:6px; display:flex; align-items:center; gap:10px;">
+                <strong style="font-size:12.5px; color:var(--accent);">Watched ${watchedCount} / ${total} (${pct}%)</strong>
+              </div>
+              <div class="progress-track" style="margin-top:4px; max-width:260px;"><div class="progress-fill" style="width:${pct}%;"></div></div>
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm" onclick="document.getElementById('person-filmography-panel').style.display='none'">✕ Hide Filmography</button>
         </div>
 
-        <!-- Poster Grid (3-column Letterboxd-style density) -->
-        <div class="grid grid-cols-3 gap-2.5 pt-1 pb-6">
-          ${items.map(movie => {
-            const primaryService = movie.services[0] || 'Unlisted';
+        ${p.bio ? `<p class="section-sub" style="margin-bottom:12px;">${esc(p.bio.slice(0, 280))}${p.bio.length > 280 ? "…" : ""}</p>` : ""}
+
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:10px; margin-bottom:12px;">
+          <div class="chip-row">
+            <button type="button" class="chip ${appState.personFilter === "ALL" ? "active" : ""}" onclick="setPersonFilter('ALL')">All (${total})</button>
+            <button type="button" class="chip ${appState.personFilter === "UNWATCHED" ? "active" : ""}" onclick="setPersonFilter('UNWATCHED')">Unwatched (${total - watchedCount})</button>
+            <button type="button" class="chip ${appState.personFilter === "WATCHED" ? "active" : ""}" onclick="setPersonFilter('WATCHED')">Already Seen (${watchedCount})</button>
+          </div>
+          <select class="select" style="width:auto;" onchange="setPersonSort(this.value)">
+            <option value="release_desc" ${appState.personSort === "release_desc" ? "selected" : ""}>Sort: Release ↓</option>
+            <option value="release_asc" ${appState.personSort === "release_asc" ? "selected" : ""}>Sort: Release ↑</option>
+            <option value="popularity" ${appState.personSort === "popularity" ? "selected" : ""}>Sort: Popularity</option>
+            <option value="rating" ${appState.personSort === "rating" ? "selected" : ""}>Sort: TMDB Rating</option>
+          </select>
+        </div>
+
+        <div class="row-list" style="max-height:540px; overflow-y:auto;">
+          ${filtered.slice(0, 120).map(c => {
+            const watched = isMovieWatched(c.title, c.year);
+            const onWl = isMovieOnWatchlist(c.title, c.year);
+            const safeT = esc(c.title);
+            const jsT = safeT.replace(/'/g, "\\'");
+            const poster = tmdbImg(c.posterPath, "w154");
+            const jsPoster = esc(poster).replace(/'/g, "\\'");
             return `
-              <div onclick="openMovieDetail(${movie.id})" class="poster-card group relative rounded-xl overflow-hidden bg-stream-surface border border-stream-border cursor-pointer shadow-md">
-                <div class="aspect-[2/3] w-full relative">
-                  <img src="${movie.poster}" class="w-full h-full object-cover group-hover:scale-105 transition duration-200" alt="${movie.title}">
-                  
-                  <!-- Top left rating -->
-                  <div class="absolute top-1.5 left-1.5 bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[9px] font-bold text-yellow-400">
-                    ★ ${movie.rating}
+              <div class="list-row">
+                <div class="list-row-left">
+                  <div class="row-thumb">
+                    ${poster ? `<img src="${esc(poster)}" alt="${safeT}" loading="lazy" onerror="this.style.display='none'">` : "🎬"}
                   </div>
-
-                  <!-- Quick launch button on poster -->
-                  <button onclick="event.stopPropagation(); triggerDirectTvLaunch(${movie.id})" class="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow opacity-90 hover:opacity-100">
-                    <span class="text-[10px] ml-0.5">▶</span>
-                  </button>
-
-                  <!-- Bottom service pill -->
-                  <div class="absolute bottom-1.5 inset-x-1.5">
-                    <span class="block text-center text-[9px] font-bold py-0.5 rounded bg-black/80 text-amber-300 backdrop-blur-md truncate border border-white/10">
-                      ${primaryService}
-                    </span>
+                  <div style="min-width:0;">
+                    <div style="font-weight:800; font-size:13.5px; cursor:pointer;" onclick="openMovieModalByTitle('${jsT}', ${c.year || "null"}, ${c.tmdbId})">
+                      ${safeT} ${c.year ? `<span style="color:var(--muted);">(${c.year})</span>` : ""}
+                    </div>
+                    <div class="chip-row" style="margin-top:4px; gap:5px;">
+                      ${c.ageLabel ? `<span class="badge badge-age">🎂 ${esc(c.ageLabel)}</span>` : ""}
+                      <span class="badge">${esc(c.roles.slice(0, 2).join(" • "))}</span>
+                      ${c.vote ? `<span class="badge">★${c.vote}</span>` : ""}
+                      ${watched ? `<span class="badge badge-watched">✓ Watched</span>` : ""}
+                    </div>
                   </div>
                 </div>
-
-                <div class="p-1.5 bg-stream-surface">
-                  <h4 class="text-xs font-semibold text-slate-200 truncate">${movie.title}</h4>
-                  <div class="flex items-center justify-between text-[10px] text-slate-400 mt-0.5">
-                    <span>${movie.year}</span>
-                    <span class="font-mono">${movie.runtime}m</span>
-                  </div>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                  ${watched ? "" : `<button type="button" class="btn btn-sm ${onWl ? "btn-cyan" : "btn-green"}" onclick="addToWatchlist('${jsT}', ${c.year || "null"}, ${c.tmdbId}, '${jsPoster}')">${onWl ? "📌 Queued" : "+ Watchlist"}</button>`}
+                  <button type="button" class="btn btn-sm" onclick="openAddToPlaylistModal('${jsT}', ${c.year || "null"}, ${c.tmdbId})">+ List</button>
+                  ${watched ? "" : `<button type="button" class="btn btn-sm" onclick="markAsWatched('${jsT}', ${c.year || "null"}, ${c.tmdbId}, '${jsPoster}')">✓</button>`}
                 </div>
               </div>
             `;
-          }).join('')}
+          }).join("")}
         </div>
       `;
     }
 
-    /* Screen 2: Watched & Diary */
-    function renderWatchedScreen(container) {
-      const watched = appData.movies.filter(m => m.isWatched);
+    // =========================================================================
+    // VIEW 3: PLAYLISTS & DYNAMIC CUSTOM BUILDER
+    // =========================================================================
+    const PLAYLIST_CATS = [
+      { id: "ALL", label: "All Playlists" },
+      { id: "VIBES", label: "🕶️ Vibes & Genres" },
+      { id: "CANON", label: "🎬 Canons" },
+      { id: "PODCASTS", label: "🎙️ Podcasts" },
+      { id: "AWARDS", label: "🏆 Awards" },
+      { id: "RECENT", label: "🔥 2025–26" },
+      { id: "CUSTOM", label: "✨ My Custom Lists" }
+    ];
 
-      container.innerHTML = `
-        <div class="p-3 bg-stream-brandGreen/10 border border-stream-brandGreen/30 rounded-2xl flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-stream-brandGreen animate-pulse"></span>
+    function renderPlaylistsView() {
+      const catWrap = document.getElementById("playlist-category-chips");
+      catWrap.innerHTML = PLAYLIST_CATS.map(c => `
+        <button type="button" class="chip ${appState.activePlaylistCategory === c.id ? "active" : ""}" onclick="setPlaylistCategory('${c.id}')">
+          ${esc(c.label)}
+        </button>
+      `).join("");
+
+      const list = allPlaylists().filter(p => appState.activePlaylistCategory === "ALL" || p.category === appState.activePlaylistCategory || (appState.activePlaylistCategory === "CUSTOM" && p.isCustom));
+      const grid = document.getElementById("playlists-grid");
+      grid.innerHTML = list.map(pl => {
+        const total = pl.items.length;
+        const watched = pl.items.filter(it => isMovieWatched(it.title, it.year)).length;
+        const onWl = pl.items.filter(it => !isMovieWatched(it.title, it.year) && isMovieOnWatchlist(it.title, it.year)).length;
+        const pct = total ? Math.round((watched / total) * 100) : 0;
+        return `
+          <article class="card" style="display:flex; flex-direction:column; gap:10px; cursor:pointer;" onclick="openPlaylistDetail('${esc(pl.id)}')">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+              <span style="font-size:24px;">${esc(pl.iconEmoji || "🎬")}</span>
+              <span class="badge">${pl.isCustom ? "✨ Custom" : esc(pl.category)}</span>
+            </div>
             <div>
-              <span class="text-xs font-bold text-emerald-300 block">Letterboxd History Active</span>
-              <span class="text-[10px] text-slate-400">1,130 total logged films synced</span>
+              <h3 style="font-size:15.5px; font-weight:800;">${esc(pl.title)}</h3>
+              <p class="section-sub">${esc(pl.subtitle || pl.sourceCredit || "")}</p>
+            </div>
+            <div>
+              <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                <span style="color:var(--accent); font-weight:700;">${watched} / ${total} seen (${pct}%)</span>
+                <span style="color:var(--cyan);">${onWl ? `${onWl} queued` : `${total - watched} left`}</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>
+            </div>
+          </article>
+        `;
+      }).join("") || `<div class="card"><p class="section-sub">No playlists in this category yet. Click "➕ New Playlist" to create one!</p></div>`;
+
+      if (appState.activePlaylistId) openPlaylistDetail(appState.activePlaylistId, true);
+    }
+
+    function setPlaylistCategory(cat) {
+      appState.activePlaylistCategory = cat;
+      renderPlaylistsView();
+    }
+
+    function openPlaylistDetail(plId, silent) {
+      const pl = allPlaylists().find(p => p.id === plId);
+      const panel = document.getElementById("playlist-detail-panel");
+      if (!pl) { panel.style.display = "none"; return; }
+      appState.activePlaylistId = plId;
+      panel.style.display = "block";
+
+      const total = pl.items.length;
+      const watchedCount = pl.items.filter(it => isMovieWatched(it.title, it.year)).length;
+
+      panel.innerHTML = `
+        <div class="section-head" style="margin-bottom:10px;">
+          <div>
+            <h2 class="section-title">${esc(pl.iconEmoji)} ${esc(pl.title)}</h2>
+            <p class="section-sub">${esc(pl.description || pl.subtitle || "")} • ${watchedCount}/${total} watched</p>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">
+            <button type="button" class="btn btn-sm btn-green" onclick="spinFromPlaylist('${esc(pl.id)}')">🎲 Spin Unwatched Here</button>
+            ${pl.isCustom
+              ? `<button type="button" class="btn btn-sm btn-cyan" onclick="promptAddMovieToPlaylist('${esc(pl.id)}')">➕ Add Movie</button>
+                 <button type="button" class="btn btn-sm btn-rose" onclick="deleteCustomPlaylist('${esc(pl.id)}')">🗑️ Delete</button>`
+              : `<button type="button" class="btn btn-sm" onclick="cloneToCustomPlaylist('${esc(pl.id)}')">📋 Clone as Custom</button>`
+            }
+            <button type="button" class="btn btn-sm" onclick="appState.activePlaylistId=null; document.getElementById('playlist-detail-panel').style.display='none'">✕ Close</button>
+          </div>
+        </div>
+        <div class="row-list" style="max-height:480px; overflow-y:auto;">
+          ${pl.items.map((it, idx) => {
+            const watched = isMovieWatched(it.title, it.year);
+            const onWl = isMovieOnWatchlist(it.title, it.year);
+            const jsT = esc(it.title).replace(/'/g, "\\'");
+            return `
+              <div class="list-row">
+                <div class="list-row-left">
+                  <span class="badge">#${it.rank || idx + 1}</span>
+                  <div style="min-width:0;">
+                    <div style="font-weight:700; font-size:13.5px; cursor:pointer;" onclick="openMovieModalByTitle('${jsT}', ${it.year || "null"}, null)">
+                      ${esc(it.title)} ${it.year ? `<span style="color:var(--muted);">(${it.year})</span>` : ""}
+                    </div>
+                    ${it.note ? `<div class="section-sub">${esc(it.note)}</div>` : ""}
+                  </div>
+                </div>
+                <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                  ${watched
+                    ? `<span class="badge badge-watched">✓ Watched</span>`
+                    : `<button type="button" class="btn btn-sm ${onWl ? "btn-cyan" : "btn-green"}" onclick="addToWatchlist('${jsT}', ${it.year || "null"}, null, '')">${onWl ? "📌 Queued" : "+ Watchlist"}</button>
+                       <button type="button" class="btn btn-sm" onclick="markAsWatched('${jsT}', ${it.year || "null"}, null, '')">✓ Seen</button>`
+                  }
+                  ${pl.isCustom ? `<button type="button" class="btn btn-sm btn-rose" onclick="removeItemFromCustomPlaylist('${esc(pl.id)}', ${idx})">✕</button>` : ""}
+                </div>
+              </div>
+            `;
+          }).join("") || `<p class="section-sub">This playlist has no items yet. Click "➕ Add Movie".</p>`}
+        </div>
+      `;
+      if (!silent) panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function spinFromPlaylist(plId) {
+      appState.activeVibeFilter = plId;
+      switchView("next-watch");
+      spinNextWatch();
+    }
+
+    function openCreatePlaylistModal() {
+      document.getElementById("playlist-builder-body").innerHTML = `
+        <div class="modal-head">
+          <h2 style="font-size:17px; font-weight:800;">➕ Create Custom Playlist</h2>
+          <button type="button" class="btn btn-sm" onclick="closeModal('playlist-builder-modal')">✕</button>
+        </div>
+        <form onsubmit="event.preventDefault(); saveNewPlaylist();" style="display:flex; flex-direction:column; gap:12px;">
+          <div>
+            <label style="font-size:12px; font-weight:700; color:var(--muted);">Playlist Name</label>
+            <input id="new-pl-title" class="input" required placeholder="e.g. Rainy Sunday Cozy Mysteries" style="margin-top:4px;" />
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:var(--muted);">Subtitle / Vibe Description</label>
+            <input id="new-pl-sub" class="input" placeholder="Short tagline..." style="margin-top:4px;" />
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:700; color:var(--muted);">Movies (one per line, optionally "Title (Year)")</label>
+            <textarea id="new-pl-lines" class="textarea" rows="5" placeholder="Knives Out (2019)\nClue (1985)\nThe Kid Detective (2020)" style="margin-top:4px;"></textarea>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:8px;">
+            <button type="button" class="btn" onclick="closeModal('playlist-builder-modal')">Cancel</button>
+            <button type="submit" class="btn btn-green">Create Playlist</button>
+          </div>
+        </form>
+      `;
+      openModal("playlist-builder-modal");
+    }
+
+    function openPastePlaylistModal() { openCreatePlaylistModal(); }
+
+    function parseLineToPlaylistItem(line, rank) {
+      const m = line.trim().match(/^(.+?)\s*\((\d{4})\)\s*$/);
+      if (m) return { title: m[1].trim(), year: Number(m[2]), rank, note: null };
+      return { title: line.trim(), year: null, rank, note: null };
+    }
+
+    function saveNewPlaylist() {
+      const title = document.getElementById("new-pl-title").value.trim();
+      const subtitle = document.getElementById("new-pl-sub").value.trim() || "Custom playlist";
+      const lines = document.getElementById("new-pl-lines").value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      if (!title) return;
+      const pl = {
+        id: `custom_${Date.now()}`,
+        title,
+        subtitle,
+        category: "CUSTOM",
+        iconEmoji: "✨",
+        sourceCredit: "Custom Built",
+        description: subtitle,
+        isCustom: true,
+        items: lines.map((l, idx) => parseLineToPlaylistItem(l, idx + 1))
+      };
+      appState.customPlaylists.unshift(pl);
+      writeLS(LS_KEYS.customPlaylists, appState.customPlaylists);
+      appState.activePlaylistId = pl.id;
+      closeModal("playlist-builder-modal");
+      updateNavBadges();
+      renderPlaylistsView();
+      showToast(`Created playlist "${title}" (${pl.items.length} films)`);
+    }
+
+    function cloneToCustomPlaylist(plId) {
+      const src = allPlaylists().find(p => p.id === plId);
+      if (!src) return;
+      const copy = {
+        ...JSON.parse(JSON.stringify(src)),
+        id: `custom_${Date.now()}`,
+        title: `${src.title} (My Remix)`,
+        category: "CUSTOM",
+        isCustom: true
+      };
+      appState.customPlaylists.unshift(copy);
+      writeLS(LS_KEYS.customPlaylists, appState.customPlaylists);
+      appState.activePlaylistId = copy.id;
+      updateNavBadges();
+      renderPlaylistsView();
+      showToast(`Cloned "${src.title}" to My Custom Lists`);
+    }
+
+    function promptAddMovieToPlaylist(plId) {
+      const title = prompt("Movie title (optionally 'Title (Year)'):");
+      if (!title || !title.trim()) return;
+      const pl = appState.customPlaylists.find(p => p.id === plId);
+      if (!pl) return;
+      pl.items.push(parseLineToPlaylistItem(title, pl.items.length + 1));
+      writeLS(LS_KEYS.customPlaylists, appState.customPlaylists);
+      renderPlaylistsView();
+    }
+
+    function removeItemFromCustomPlaylist(plId, idx) {
+      const pl = appState.customPlaylists.find(p => p.id === plId);
+      if (!pl) return;
+      pl.items.splice(idx, 1);
+      pl.items.forEach((it, i) => { it.rank = i + 1; });
+      writeLS(LS_KEYS.customPlaylists, appState.customPlaylists);
+      renderPlaylistsView();
+    }
+
+    function deleteCustomPlaylist(plId) {
+      appState.customPlaylists = appState.customPlaylists.filter(p => p.id !== plId);
+      if (appState.activePlaylistId === plId) appState.activePlaylistId = null;
+      writeLS(LS_KEYS.customPlaylists, appState.customPlaylists);
+      updateNavBadges();
+      renderPlaylistsView();
+      showToast("Deleted custom playlist");
+    }
+
+    function resetCustomPlaylists() {
+      appState.customPlaylists = [];
+      appState.activePlaylistId = null;
+      writeLS(LS_KEYS.customPlaylists, []);
+      updateNavBadges();
+      renderPlaylistsView();
+      showToast("Custom playlists cleared (14 built-in canons intact)");
+    }
+
+    function openAddToPlaylistModal(title, year, tmdbId) {
+      const custom = appState.customPlaylists;
+      const body = document.getElementById("add-to-playlist-body");
+      body.innerHTML = `
+        <div class="modal-head">
+          <h2 style="font-size:16px; font-weight:800;">Add "${esc(title)}" to Playlist</h2>
+          <button type="button" class="btn btn-sm" onclick="closeModal('add-to-playlist-modal')">✕</button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${custom.map(pl => `
+            <button type="button" class="btn" style="justify-content:space-between;" onclick="addMovieToCustomPlaylist('${esc(pl.id)}', '${esc(title).replace(/'/g, "\\'")}', ${year || "null"})">
+              <span>${esc(pl.iconEmoji)} ${esc(pl.title)}</span>
+              <span class="badge">${pl.items.length} films</span>
+            </button>
+          `).join("") || `<p class="section-sub">No custom playlists yet — create a quick one below!</p>`}
+          <form onsubmit="event.preventDefault(); createQuickPlaylistWithMovie('${esc(title).replace(/'/g, "\\'")}', ${year || "null"});" style="display:flex; gap:8px; margin-top:6px;">
+            <input id="quick-new-pl-name" class="input" placeholder="New playlist name..." required />
+            <button type="submit" class="btn btn-green">➕ Create & Add</button>
+          </form>
+        </div>
+      `;
+      openModal("add-to-playlist-modal");
+    }
+
+    function addMovieToCustomPlaylist(plId, title, year) {
+      const pl = appState.customPlaylists.find(p => p.id === plId);
+      if (!pl) return;
+      if (!pl.items.some(it => makeKey(it.title, it.year) === makeKey(title, year))) {
+        pl.items.push({ title, year, rank: pl.items.length + 1, note: null });
+        writeLS(LS_KEYS.customPlaylists, appState.customPlaylists);
+      }
+      closeModal("add-to-playlist-modal");
+      renderPlaylistsView();
+      showToast(`Added "${title}" to "${pl.title}"`);
+    }
+
+    function createQuickPlaylistWithMovie(title, year) {
+      const name = document.getElementById("quick-new-pl-name").value.trim();
+      if (!name) return;
+      const pl = {
+        id: `custom_${Date.now()}`,
+        title: name,
+        subtitle: "Custom Watch Queue",
+        category: "CUSTOM",
+        iconEmoji: "✨",
+        sourceCredit: "Custom Built",
+        description: "Created from discovery",
+        isCustom: true,
+        items: [{ title, year, rank: 1, note: null }]
+      };
+      appState.customPlaylists.unshift(pl);
+      writeLS(LS_KEYS.customPlaylists, appState.customPlaylists);
+      closeModal("add-to-playlist-modal");
+      updateNavBadges();
+      renderPlaylistsView();
+      showToast(`Created "${name}" with "${title}"`);
+    }
+
+    // =========================================================================
+    // VIEW 4: WATCHLIST & TRIAGE
+    // =========================================================================
+    function addToWatchlist(title, year, tmdbId, posterUrl) {
+      if (isMovieOnWatchlist(title, year)) {
+        showToast(`"${title}" is already on your Watchlist`);
+        return;
+      }
+      appState.watchlist.unshift({
+        id: `wl_${Date.now()}`,
+        title,
+        year: year || null,
+        tmdbId: tmdbId || null,
+        posterUrl: posterUrl || "",
+        addedDate: new Date().toISOString().slice(0, 10),
+        status: "WATCHLIST",
+        services: []
+      });
+      writeLS(LS_KEYS.watchlist, appState.watchlist);
+      rebuildSets();
+      renderAll();
+      showToast(`📌 Added "${title}" to Watchlist`);
+    }
+
+    function markAsWatched(title, year, tmdbId, posterUrl) {
+      const today = new Date().toISOString().slice(0, 10);
+      appState.watchlist = appState.watchlist.filter(w => makeKey(w.title, w.year) !== makeKey(title, year) && normTitle(w.title) !== normTitle(title));
+      writeLS(LS_KEYS.watchlist, appState.watchlist);
+
+      appState.watched = mergeWatchedArrays(appState.watched, [{
+        id: `wd_${Date.now()}`,
+        title,
+        year: year || null,
+        tmdbId: tmdbId || null,
+        posterUrl: posterUrl || "",
+        watchedDate: today,
+        status: "WATCHED"
+      }]);
+      writeLS(LS_KEYS.watched, appState.watched);
+      rebuildSets();
+      renderAll();
+      showToast(`✓ Marked "${title}" watched!`);
+    }
+
+    function removeFromWatchlist(idx) {
+      const removed = appState.watchlist.splice(idx, 1)[0];
+      writeLS(LS_KEYS.watchlist, appState.watchlist);
+      rebuildSets();
+      renderAll();
+      if (removed) showToast(`Removed "${removed.title}" from Watchlist`);
+    }
+
+    function setWatchlistMode(mode) {
+      appState.activeWlMode = mode;
+      renderWatchlistView();
+    }
+
+    function setWlServiceFilter(svc) {
+      appState.activeWlService = svc;
+      renderWatchlistView();
+    }
+
+    function quickAddToWatchlist() {
+      const t = document.getElementById("wl-quick-title").value.trim();
+      const yRaw = document.getElementById("wl-quick-year").value.trim();
+      const svc = document.getElementById("wl-quick-service").value;
+      if (!t) return;
+      appState.watchlist.unshift({
+        id: `wl_${Date.now()}`,
+        title: t,
+        year: yRaw ? Number(yRaw) : null,
+        addedDate: new Date().toISOString().slice(0, 10),
+        status: "WATCHLIST",
+        services: svc ? [svc] : []
+      });
+      document.getElementById("wl-quick-title").value = "";
+      document.getElementById("wl-quick-year").value = "";
+      writeLS(LS_KEYS.watchlist, appState.watchlist);
+      rebuildSets();
+      renderAll();
+      showToast(`📌 Added "${t}" to Watchlist`);
+    }
+
+    function renderWatchlistView() {
+      const svcSelect = document.getElementById("wl-quick-service");
+      svcSelect.innerHTML = `<option value="">No service tag</option>` + appState.services.map(s => `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join("");
+
+      const filterWrap = document.getElementById("wl-service-filters");
+      const chips = ["ALL", "UNASSIGNED", ...appState.services.filter(s => s.active).map(s => s.name)];
+      filterWrap.innerHTML = chips.map(c => `
+        <button type="button" class="chip ${appState.activeWlService === c ? "active" : ""}" onclick="setWlServiceFilter('${esc(c).replace(/'/g, "\\'")}')">
+          ${c === "ALL" ? "All" : c === "UNASSIGNED" ? "Unassigned" : esc(c)}
+        </button>
+      `).join("");
+
+      const q = (document.getElementById("wl-search-input")?.value || "").trim().toLowerCase();
+      const items = appState.watchlist.filter(w => {
+        if (q && !`${w.title} ${w.year || ""}`.toLowerCase().includes(q)) return false;
+        if (appState.activeWlService === "UNASSIGNED") return !w.services || !w.services.length;
+        if (appState.activeWlService !== "ALL") return (w.services || []).includes(appState.activeWlService);
+        return true;
+      });
+
+      document.getElementById("watchlist-summary-line").textContent =
+        `${appState.watchlist.length} films on Watchlist (${items.length} shown)`;
+
+      const area = document.getElementById("watchlist-content-area");
+      if (!items.length) {
+        area.innerHTML = `<div class="card"><p class="section-sub">No matching watchlist items. Search TMDB or quick-add above!</p></div>`;
+        return;
+      }
+
+      if (appState.activeWlMode === "triage") {
+        const idx = appState.triageIndex % items.length;
+        const cur = items[idx];
+        const origIdx = appState.watchlist.indexOf(cur);
+        const jsT = esc(cur.title).replace(/'/g, "\\'");
+        const jsP = esc(cur.posterUrl || "").replace(/'/g, "\\'");
+        area.innerHTML = `
+          <div class="card" style="max-width:560px; margin:0 auto; text-align:center; display:flex; flex-direction:column; gap:14px;">
+            <span class="badge" style="align-self:center;">Triage ${idx + 1} of ${items.length}</span>
+            ${cur.posterUrl ? `<img src="${esc(cur.posterUrl)}" alt="${esc(cur.title)}" style="width:160px; height:240px; object-fit:cover; border-radius:12px; margin:0 auto;" onerror="this.style.display='none'">` : ""}
+            <h2 style="font-size:22px; font-weight:800;">${esc(cur.title)} ${cur.year ? `(${cur.year})` : ""}</h2>
+            <p class="section-sub">Added ${esc(cur.addedDate || "recently")} • ${cur.services?.length ? esc(cur.services.join(", ")) : "No streaming tag yet"}</p>
+            <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:8px;">
+              <button type="button" class="btn btn-green" onclick="markAsWatched('${jsT}', ${cur.year || "null"}, ${cur.tmdbId || "null"}, '${jsP}')">✓ Watched</button>
+              <button type="button" class="btn btn-cyan" onclick="appState.triageIndex++; writeLS(LS_KEYS.triageIdx, appState.triageIndex); renderWatchlistView();">⏩ Keep & Next</button>
+              <button type="button" class="btn" onclick="openAddToPlaylistModal('${jsT}', ${cur.year || "null"}, ${cur.tmdbId || "null"})">+ Playlist</button>
+              <button type="button" class="btn btn-rose" onclick="removeFromWatchlist(${origIdx})">🗑️ Remove</button>
             </div>
           </div>
-          <button onclick="showQuickToast('Letterboxd sync refreshed!')" class="text-[10px] bg-emerald-500 text-black font-bold px-2.5 py-1 rounded-lg">
-            Sync Now
-          </button>
-        </div>
+        `;
+        return;
+      }
 
-        <div class="space-y-2.5 pt-1 pb-6">
-          ${watched.map(movie => `
-            <div onclick="openMovieDetail(${movie.id})" class="bg-stream-card border border-stream-border rounded-2xl p-2.5 flex gap-3 cursor-pointer hover:border-slate-600 transition">
-              <img src="${movie.poster}" class="w-14 h-20 object-cover rounded-xl shrink-0" alt="${movie.title}">
-              <div class="flex-1 flex flex-col justify-between min-w-0">
-                <div>
-                  <div class="flex items-center justify-between">
-                    <h4 class="font-bold text-sm text-white truncate">${movie.title}</h4>
-                    <span class="text-xs text-yellow-400 font-bold">${'★'.repeat(Math.floor(movie.myRating || 5))}</span>
+      if (appState.activeWlMode === "list") {
+        area.innerHTML = `<div class="row-list">${items.map(w => {
+          const origIdx = appState.watchlist.indexOf(w);
+          const jsT = esc(w.title).replace(/'/g, "\\'");
+          const jsP = esc(w.posterUrl || "").replace(/'/g, "\\'");
+          return `
+            <div class="list-row">
+              <div class="list-row-left">
+                <div style="min-width:0;">
+                  <div style="font-weight:800; font-size:14px; cursor:pointer;" onclick="openMovieModalByTitle('${jsT}', ${w.year || "null"}, ${w.tmdbId || "null"})">
+                    ${esc(w.title)} ${w.year ? `(${w.year})` : ""}
                   </div>
-                  <p class="text-[11px] text-slate-400">${movie.year} • Watched ${movie.watchedDate || 'Recently'}</p>
+                  <div class="section-sub">Added ${esc(w.addedDate || "")} ${w.services?.length ? `• ${esc(w.services.join(", "))}` : ""}</div>
                 </div>
+              </div>
+              <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                <button type="button" class="btn btn-sm btn-green" onclick="markAsWatched('${jsT}', ${w.year || "null"}, ${w.tmdbId || "null"}, '${jsP}')">✓ Watched</button>
+                <button type="button" class="btn btn-sm" onclick="openAddToPlaylistModal('${jsT}', ${w.year || "null"}, ${w.tmdbId || "null"})">+ List</button>
+                <button type="button" class="btn btn-sm btn-rose" onclick="removeFromWatchlist(${origIdx})">✕</button>
+              </div>
+            </div>
+          `;
+        }).join("")}</div>`;
+        return;
+      }
 
-                <div class="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-stream-border/50">
-                  <span class="text-slate-300 truncate">${movie.genres}</span>
-                  <span class="text-emerald-400 font-mono">Logged to LB</span>
+      area.innerHTML = `<div class="grid-cards">${items.map(m => renderMovieCardHtml({
+        ...m,
+        sourceLabel: m.services?.length ? m.services.join(", ") : `Added ${m.addedDate || ""}`,
+        onWatchlist: true
+      })).join("")}</div>`;
+    }
+
+    async function enrichWatchlistPosters() {
+      const apiKey = appState.config.tmdbKey || DEFAULT_CONFIG.tmdbKey;
+      const missing = appState.watchlist.filter(w => !w.posterUrl).slice(0, 12);
+      if (!missing.length) { showToast("All visible watchlist items already have posters!"); return; }
+      let updated = 0;
+      for (const item of missing) {
+        try {
+          const url = `https://api.themoviedb.org/3/search/movie?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(item.title)}${item.year ? `&year=${item.year}` : ""}`;
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const json = await res.json();
+          const hit = json.results?.[0];
+          if (hit) {
+            item.tmdbId = hit.id;
+            item.posterUrl = tmdbImg(hit.poster_path, "w342");
+            updated++;
+          }
+        } catch {}
+      }
+      writeLS(LS_KEYS.watchlist, appState.watchlist);
+      renderWatchlistView();
+      showToast(`Matched ${updated} watchlist posters from TMDB`);
+    }
+
+    // =========================================================================
+    // VIEW 5: WATCHED VAULT & LETTERBOXD SYNC (FIX FOR ISSUE #24)
+    // =========================================================================
+    function resetWatchedPageAndRender() {
+      appState.watchedLimit = 60;
+      renderWatchedView();
+    }
+
+    function loadMoreWatched() {
+      appState.watchedLimit += 80;
+      renderWatchedView();
+    }
+
+    function renderWatchedView() {
+      const total = appState.watched.length;
+      const y2026 = appState.watched.filter(w => String(w.watchedDate || "").startsWith("2026")).length;
+      const latest = appState.watched[0];
+      const decadeCounts = {};
+      appState.watched.forEach(w => {
+        if (!w.year) return;
+        const d = w.year >= 1980 ? `${Math.floor(w.year / 10) * 10}s` : "1970s & Earlier";
+        decadeCounts[d] = (decadeCounts[d] || 0) + 1;
+      });
+      const topDecade = Object.entries(decadeCounts).sort((a, b) => b[1] - a[1])[0] || ["2020s", 0];
+
+      document.getElementById("watched-kpi-strip").innerHTML = `
+        <div class="kpi-card"><div class="kpi-label">Watched Vault</div><div class="kpi-val" style="color:var(--accent);">${total.toLocaleString()}</div></div>
+        <div class="kpi-card"><div class="kpi-label">2026 Diary</div><div class="kpi-val" style="color:var(--cyan);">${y2026}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Top Decade</div><div class="kpi-val">${esc(topDecade[0])}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Most Recent</div><div class="kpi-val" style="font-size:15px; line-height:1.3;">${latest ? `${esc(latest.title)}<br><span style="color:var(--muted); font-size:12px;">${esc(latest.watchedDate || "")}</span>` : "None"}</div></div>
+      `;
+
+      const q = (document.getElementById("watched-search-input")?.value || "").trim().toLowerCase();
+      const dec = document.getElementById("watched-decade-select")?.value || "ALL";
+      const filtered = appState.watched.filter(w => {
+        if (q && !`${w.title} ${w.year || ""} ${w.watchedDate || ""}`.toLowerCase().includes(q)) return false;
+        if (dec !== "ALL" && w.year) {
+          const decNum = Number(dec);
+          if (decNum === 1970) return w.year < 1980;
+          return w.year >= decNum && w.year < decNum + 10;
+        }
+        return dec === "ALL";
+      });
+
+      const slice = filtered.slice(0, appState.watchedLimit);
+      document.getElementById("watched-list-area").innerHTML = slice.map(w => {
+        const jsT = esc(w.title).replace(/'/g, "\\'");
+        const key = esc(makeKey(w.title, w.year)).replace(/'/g, "\\'");
+        return `
+          <div class="list-row">
+            <div class="list-row-left">
+              <div class="row-thumb">
+                ${w.posterUrl ? `<img src="${esc(w.posterUrl)}" alt="${esc(w.title)}" loading="lazy" onerror="this.style.display='none'">` : (w.year || "🎬")}
+              </div>
+              <div style="min-width:0;">
+                <div style="font-weight:800; font-size:14px; cursor:pointer;" onclick="openMovieModalByTitle('${jsT}', ${w.year || "null"}, ${w.tmdbId || "null"})">
+                  ${esc(w.title)} ${w.year ? `<span style="color:var(--muted);">(${w.year})</span>` : ""}
+                </div>
+                <div class="section-sub">
+                  Watched ${esc(w.watchedDate || "Archived")}
+                  ${w.rating ? ` • ★${w.rating}` : ""}
+                  ${w.rewatch ? " • ↻ Rewatch" : ""}
                 </div>
               </div>
             </div>
-          `).join('')}
-        </div>
-      `;
-    }
-    /* Screen 3: Search & Add (The Capture Flow) */
-    function renderSearchScreen(container) {
-      container.innerHTML = `
-        <div class="pt-1 space-y-3">
-          <div class="relative">
-            <input 
-              type="text" 
-              id="titleSearchInput" 
-              placeholder="Search films by title, director..." 
-              oninput="handleLiveSearch(this.value)"
-              class="w-full bg-stream-surface border border-stream-border rounded-2xl px-4 py-3 pl-10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
-            >
-            <svg class="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-          </div>
-
-          <div class="flex items-center justify-between text-[11px] text-slate-400 px-1">
-            <span>Quick add to Letterboxd & check streaming</span>
-            <span class="text-amber-400 font-mono">MVP Ready</span>
-          </div>
-
-          <!-- Live Search Results Container -->
-          <div id="searchResultsList" class="space-y-2 pb-6">
-            ${renderSearchResults(appData.movies)}
-          </div>
-        </div>
-      `;
-    }
-
-    function renderSearchResults(moviesList) {
-      return moviesList.map(movie => `
-        <div class="bg-stream-card border border-stream-border rounded-2xl p-2.5 flex items-center justify-between gap-3">
-          <div onclick="openMovieDetail(${movie.id})" class="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer">
-            <img src="${movie.poster}" class="w-12 h-16 object-cover rounded-lg shrink-0" alt="${movie.title}">
-            <div class="min-w-0">
-              <h4 class="text-xs font-bold text-white truncate">${movie.title}</h4>
-              <p class="text-[10px] text-slate-400">${movie.year} • ${movie.runtime}m • ★ ${movie.rating}</p>
-              <span class="text-[10px] text-amber-300 font-mono font-medium">${movie.services[0]}</span>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+              <button type="button" class="btn btn-sm btn-cyan" onclick="selectHistorySeed('${key}'); switchView('next-watch');">🎯 Find Similar</button>
+              ${w.letterboxdUri ? `<a href="${esc(w.letterboxdUri)}" target="_blank" class="btn btn-sm">↗ Letterboxd</a>` : ""}
             </div>
           </div>
+        `;
+      }).join("") || `<p class="section-sub">No matching watched films found.</p>`;
 
-          <div class="flex items-center gap-1.5 shrink-0">
-            <button onclick="toggleWatchlistById(${movie.id})" class="p-2 rounded-xl border border-stream-border bg-stream-surface text-slate-300 hover:text-white" title="Toggle Watchlist">
-              ${movie.inWatchlist ? '✓' : '+'}
-            </button>
-            <button onclick="openLogModal(${movie.id})" class="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500 hover:text-black font-bold text-xs">
-              ★ Log
-            </button>
-          </div>
-        </div>
-      `).join('');
+      const moreBtn = document.getElementById("btn-load-more-watched");
+      moreBtn.style.display = filtered.length > slice.length ? "inline-flex" : "none";
+      moreBtn.textContent = `Load More (${filtered.length - slice.length} remaining)`;
     }
 
-    function handleLiveSearch(query) {
-      const filtered = appData.movies.filter(m => m.title.toLowerCase().includes(query.toLowerCase()));
-      const container = document.getElementById('searchResultsList');
-      if (container) {
-        container.innerHTML = renderSearchResults(filtered);
+    async function syncLetterboxdWebhook() {
+      const status = document.getElementById("sync-status-banner");
+      const base = (appState.config.webhookUrl || DEFAULT_CONFIG.webhookUrl).trim();
+      if (!base) { status.textContent = "Configure your Apps Script Webhook URL in Settings first."; return; }
+      const url = `${base}${base.includes("?") ? "&" : "?"}action=json&username=${encodeURIComponent(appState.config.username || "scriptedmind")}`;
+      status.textContent = "Syncing with Google Apps Script Letterboxd bridge…";
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        const rows = Array.isArray(json) ? json : (json.watched || json.items || json.diary || []);
+        const mapped = rows.filter(r => r.title || r.Name).map(r => ({
+          id: `wd_sync_${Date.now()}_${Math.random()}`,
+          title: r.title || r.Name,
+          year: r.year || (r.Year ? Number(r.Year) : null),
+          watchedDate: r.watchedDate || r.Date || "",
+          rating: r.rating ?? (r.Rating ? Number(r.Rating) : null),
+          tmdbId: r.tmdbId || null,
+          posterUrl: r.posterUrl || "",
+          letterboxdUri: r.letterboxdUri || r["Letterboxd URI"] || "",
+          status: "WATCHED"
+        }));
+        const before = appState.watched.length;
+        appState.watched = mergeWatchedArrays(appState.watched, mapped);
+        writeLS(LS_KEYS.watched, appState.watched);
+        rebuildSets();
+        renderAll();
+        const added = Math.max(0, appState.watched.length - before);
+        status.textContent = `Synced ${mapped.length} remote diary entries (+${added} net new). Total vault: ${appState.watched.length}.`;
+        showToast(`Synced +${added} new watches!`);
+      } catch (err) {
+        status.textContent = `Webhook sync note: ${err.message}. You can also drop a Letterboxd CSV directly via Import CSV.`;
       }
     }
 
-    /* Screen 4: Services Manager (The Core Free Filter Engine) */
-    function renderServicesScreen(container) {
-      container.innerHTML = `
-        <div class="space-y-3 pt-1 pb-6">
-          <div class="bg-stream-surface border border-stream-border rounded-2xl p-3.5 space-y-1">
-            <span class="text-xs font-bold text-white block">Select Your Active Streaming Subscriptions</span>
-            <p class="text-[11px] text-slate-400">Streamwise instantly filters your 1,152 Letterboxd watchlist titles to only show what you can watch right now for free.</p>
-          </div>
-
-          <div class="space-y-2">
-            ${appData.services.map(service => `
-              <div class="bg-stream-card border border-stream-border rounded-2xl p-3 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <div class="w-3.5 h-3.5 rounded-full" style="background-color: ${service.color}"></div>
-                  <div>
-                    <h4 class="text-xs font-bold text-white">${service.name}</h4>
-                    <span class="text-[10px] text-slate-400 font-mono">${service.readyTitles} titles on your watchlist</span>
-                  </div>
-                </div>
-
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" ${service.active ? 'checked' : ''} onchange="toggleServiceActive('${service.id}')" class="sr-only peer">
-                  <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                </label>
-              </div>
-            `).join('')}
-          </div>
-
-          <!-- Free vs Pro Teaser Card -->
-          <div class="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
-            <div>
-              <span class="text-xs font-bold text-amber-300 block">Upcoming Streamwise Pro</span>
-              <p class="text-[10px] text-slate-400">Cost-per-hour tracking & churn recommendation alerts.</p>
-            </div>
-            <span class="text-[10px] font-mono text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded font-bold uppercase">Phase 2</span>
-          </div>
-        </div>
-      `;
-    }
-
-    function toggleServiceActive(serviceId) {
-      const svc = appData.services.find(s => s.id === serviceId);
-      if (svc) {
-        svc.active = !svc.active;
-        showQuickToast(`${svc.name} set to ${svc.active ? 'Active' : 'Disabled'}`);
-        renderCurrentScreen();
+    function parseCsvText(text) {
+      const rows = [];
+      let row = [];
+      let field = "";
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuotes) {
+          if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+          else if (c === '"') inQuotes = false;
+          else field += c;
+        } else if (c === '"') {
+          inQuotes = true;
+        } else if (c === ",") {
+          row.push(field.trim());
+          field = "";
+        } else if (c === "\n" || c === "\r") {
+          if (c === "\r" && text[i + 1] === "\n") i++;
+          row.push(field.trim());
+          if (row.some(Boolean)) rows.push(row);
+          row = [];
+          field = "";
+        } else {
+          field += c;
+        }
       }
+      if (field || row.length) {
+        row.push(field.trim());
+        if (row.some(Boolean)) rows.push(row);
+      }
+      return rows;
     }
-    /* Screen 5: Letterboxd Account & Device Sync */
-    function renderSyncScreen(container) {
-      container.innerHTML = `
-        <div class="space-y-3 pt-1 pb-6">
-          <div class="bg-stream-surface border border-stream-border rounded-2xl p-4 space-y-3">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-stream-brandGreen animate-pulse"></span>
-                <h4 class="text-xs font-bold text-white">Letterboxd Connection</h4>
-              </div>
-              <span class="text-[10px] bg-emerald-500/20 text-emerald-300 font-mono font-bold px-2 py-0.5 rounded">CONNECTED</span>
-            </div>
 
-            <div class="bg-stream-card border border-stream-border rounded-xl p-3 flex items-center justify-between">
+    async function handleCsvFileUpload(ev) {
+      const files = Array.from(ev.target.files || []);
+      if (!files.length) return;
+      let totalImported = 0;
+      for (const file of files) {
+        const text = await file.text();
+        const rows = parseCsvText(text);
+        if (rows.length < 2) continue;
+        const header = rows[0].map(h => h.toLowerCase());
+        const iTitle = header.findIndex(h => h === "name" || h === "title");
+        const iYear = header.findIndex(h => h === "year");
+        const iDate = header.findIndex(h => h.includes("watched date") || h === "date");
+        const iRating = header.findIndex(h => h.includes("rating"));
+        const iUri = header.findIndex(h => h.includes("uri"));
+        if (iTitle === -1) continue;
+
+        const isWatchlistFile = file.name.toLowerCase().includes("watchlist");
+        const parsed = rows.slice(1).map(r => ({
+          id: `csv_${Date.now()}_${Math.random()}`,
+          title: r[iTitle] || "",
+          year: iYear >= 0 && /^\d{4}/.test(r[iYear] || "") ? Number(r[iYear]) : null,
+          watchedDate: iDate >= 0 ? (r[iDate] || "") : "",
+          addedDate: iDate >= 0 ? (r[iDate] || "") : "",
+          rating: iRating >= 0 && r[iRating] ? Number(r[iRating]) : null,
+          letterboxdUri: iUri >= 0 ? (r[iUri] || "") : "",
+          status: isWatchlistFile ? "WATCHLIST" : "WATCHED"
+        })).filter(x => x.title);
+
+        totalImported += parsed.length;
+        if (isWatchlistFile) {
+          for (const it of parsed) {
+            if (!isMovieWatched(it.title, it.year) && !isMovieOnWatchlist(it.title, it.year)) {
+              appState.watchlist.unshift({ ...it, services: [] });
+            }
+          }
+          writeLS(LS_KEYS.watchlist, appState.watchlist);
+        } else {
+          appState.watched = mergeWatchedArrays(appState.watched, parsed);
+          writeLS(LS_KEYS.watched, appState.watched);
+        }
+      }
+      rebuildSets();
+      renderAll();
+      document.getElementById("sync-status-banner").textContent = `Imported ${totalImported} CSV rows cleanly.`;
+      showToast(`Imported ${totalImported} CSV entries`);
+      ev.target.value = "";
+    }
+
+    function exportWatchedCsv() {
+      const escCsv = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const lines = ["Date,Name,Year,Letterboxd URI,Rating"];
+      appState.watched.forEach(w => {
+        lines.push([w.watchedDate || "", w.title || "", w.year || "", w.letterboxdUri || "", w.rating ?? ""].map(escCsv).join(","));
+      });
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `streamwise_watched_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+    }
+
+    // =========================================================================
+    // VIEW 6: SERVICES & SEECODE VISUAL ATLAS
+    // =========================================================================
+    function renderServicesView() {
+      const active = appState.services.filter(s => s.active);
+      const monthly = active.reduce((sum, s) => sum + Number(s.monthlyPrice || 0), 0);
+      document.getElementById("services-summary-strip").innerHTML = `
+        <div class="kpi-card"><div class="kpi-label">Active Services</div><div class="kpi-val">${active.length}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Monthly Spend</div><div class="kpi-val" style="color:var(--accent);">$${monthly.toFixed(2)}</div></div>
+        <div class="kpi-card"><div class="kpi-label">Annual Run-Rate</div><div class="kpi-val">$${(monthly * 12).toFixed(0)}</div></div>
+      `;
+
+      document.getElementById("services-list-area").innerHTML = appState.services.map((s, idx) => {
+        const queuedCount = appState.watchlist.filter(w => (w.services || []).includes(s.name)).length;
+        const costPerWatch = queuedCount ? `$${(s.monthlyPrice / queuedCount).toFixed(2)} / queued pick` : "0 queued picks";
+        return `
+          <div class="list-row">
+            <div class="list-row-left">
+              <input type="checkbox" ${s.active ? "checked" : ""} style="width:18px; height:18px;" onchange="toggleService(${idx})" />
               <div>
-                <span class="text-xs font-bold text-slate-200">@${appData.user.letterboxdUsername}</span>
-                <p class="text-[10px] text-slate-400">Last synchronized: ${appData.user.lastSync}</p>
+                <div style="font-weight:800; font-size:14px;">${esc(s.name)}</div>
+                <div class="section-sub">$${Number(s.monthlyPrice || 0).toFixed(2)}/mo • ${queuedCount} on Watchlist (${costPerWatch})</div>
               </div>
-              <button onclick="showQuickToast('Watchlist re-indexed!')" class="text-xs bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded-lg">
-                Sync Now
-              </button>
             </div>
-
-            <div class="grid grid-cols-2 gap-2 text-center text-xs">
-              <div class="p-2 bg-stream-surfaceLight rounded-xl">
-                <span class="text-slate-400 block text-[10px]">Watchlist Imported</span>
-                <strong class="text-sm font-bold text-white font-mono">${appData.user.totalWatchlist}</strong>
-              </div>
-              <div class="p-2 bg-stream-surfaceLight rounded-xl">
-                <span class="text-slate-400 block text-[10px]">Watched Diary</span>
-                <strong class="text-sm font-bold text-white font-mono">${appData.user.totalWatched}</strong>
-              </div>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn btn-sm" onclick="editServicePrice(${idx})">✎ Price</button>
+              <button type="button" class="btn btn-sm btn-rose" onclick="deleteService(${idx})">✕</button>
             </div>
           </div>
+        `;
+      }).join("");
+    }
 
-          <!-- Living Room TV Hardware Pairing -->
-          <div class="bg-stream-surface border border-stream-border rounded-2xl p-4 space-y-2">
-            <h4 class="text-xs font-bold text-white">Target TV Display (Couch Handoff)</h4>
-            <p class="text-[11px] text-slate-400">When you press "Watch Now", Streamwise broadcasts directly to this display.</p>
+    function toggleService(idx) {
+      appState.services[idx].active = !appState.services[idx].active;
+      writeLS(LS_KEYS.services, appState.services);
+      renderServicesView();
+      renderWatchlistView();
+    }
 
-            <div class="bg-stream-card border border-stream-border rounded-xl p-3 flex items-center justify-between">
-              <div class="flex items-center gap-2.5">
-                <svg class="w-5 h-5 text-stream-brandGreen" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                <div>
-                  <span class="text-xs font-bold text-white">${appData.user.activeTv}</span>
-                  <p class="text-[10px] text-slate-400 font-mono">IP: 192.168.1.144 • WebOS Ready</p>
-                </div>
-              </div>
-              <button onclick="showQuickToast('Test signal broadcasted to TV!')" class="text-xs border border-stream-border px-2.5 py-1 rounded-lg text-slate-300 hover:text-white">
-                Ping
-              </button>
-            </div>
-          </div>
+    function editServicePrice(idx) {
+      const next = prompt(`Monthly price for ${appState.services[idx].name}:`, String(appState.services[idx].monthlyPrice));
+      const num = Number(next);
+      if (!Number.isNaN(num) && num >= 0) {
+        appState.services[idx].monthlyPrice = num;
+        writeLS(LS_KEYS.services, appState.services);
+        renderServicesView();
+      }
+    }
+
+    function addCustomService() {
+      const name = prompt("Streaming service name (e.g. Shudder, MUBI):");
+      if (!name || !name.trim()) return;
+      const price = Number(prompt("Monthly price ($):", "6.99") || "0");
+      appState.services.push({
+        id: `svc_${Date.now()}`,
+        name: name.trim(),
+        monthlyPrice: Number.isNaN(price) ? 0 : price,
+        active: true,
+        color: "#38bdf8"
+      });
+      writeLS(LS_KEYS.services, appState.services);
+      renderServicesView();
+      renderWatchlistView();
+    }
+
+    function deleteService(idx) {
+      appState.services.splice(idx, 1);
+      writeLS(LS_KEYS.services, appState.services);
+      renderServicesView();
+      renderWatchlistView();
+    }
+
+    function resetServicesToDefault() {
+      appState.services = JSON.parse(JSON.stringify(DEFAULT_SERVICES));
+      writeLS(LS_KEYS.services, appState.services);
+      renderServicesView();
+      renderWatchlistView();
+      showToast("Reset streaming services to defaults");
+    }
+
+    function loadSwVisual(slug, title, btnEl) {
+      document.getElementById("sw-diagram-title").textContent = title;
+      document.getElementById("sw-diagram-frame").src = `diagrams/${slug}.html`;
+      document.getElementById("sw-diagram-open-html").href = `diagrams/${slug}.html`;
+      document.getElementById("sw-diagram-open-svg").href = `diagrams/${slug}.svg`;
+      document.querySelectorAll("#sw-visual-tabs .chip").forEach(c => c.classList.remove("active"));
+      if (btnEl) btnEl.classList.add("active");
+    }
+
+    // =========================================================================
+    // Movie Detail Modal + Streaming Providers + Clickable Cast
+    // =========================================================================
+    async function openMovieModalByTitle(title, year, tmdbId) {
+      const body = document.getElementById("movie-detail-body");
+      body.innerHTML = `
+        <div class="modal-head">
+          <h2 style="font-size:18px; font-weight:800;">${esc(title)} ${year ? `(${year})` : ""}</h2>
+          <button type="button" class="btn btn-sm" onclick="closeModal('movie-detail-modal')">✕ Close</button>
         </div>
+        <p class="section-sub">Fetching TMDB overview, runtime, streaming providers & cast…</p>
       `;
-    }
+      openModal("movie-detail-modal");
 
-    /* Detail Modal Handlers */
-    function openMovieDetail(movieId) {
-      const movie = appData.movies.find(m => m.id === movieId);
-      if (!movie) return;
-      appData.selectedMovie = movie;
+      const apiKey = appState.config.tmdbKey || DEFAULT_CONFIG.tmdbKey;
+      try {
+        let resolvedId = tmdbId;
+        if (!resolvedId) {
+          const sRes = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${encodeURIComponent(apiKey)}&query=${encodeURIComponent(title)}${year ? `&year=${year}` : ""}`);
+          if (sRes.ok) {
+            const sJson = await sRes.json();
+            resolvedId = sJson.results?.[0]?.id || null;
+          }
+        }
+        if (!resolvedId) {
+          body.innerHTML += `<p class="section-sub">No TMDB detail match found yet. You can still add to Watchlist, Playlist, or mark Watched.</p>`;
+          return;
+        }
+        const res = await fetch(`https://api.themoviedb.org/3/movie/${resolvedId}?api_key=${encodeURIComponent(apiKey)}&append_to_response=credits,watch/providers`);
+        const m = await res.json();
+        const rYear = m.release_date ? Number(m.release_date.slice(0, 4)) : year;
+        const poster = tmdbImg(m.poster_path, "w342");
+        const usFlatrate = m["watch/providers"]?.results?.US?.flatrate || [];
+        const directors = (m.credits?.crew || []).filter(c => c.job === "Director").slice(0, 3);
+        const cast = (m.credits?.cast || []).slice(0, 10);
+        const watched = isMovieWatched(m.title, rYear);
+        const onWl = isMovieOnWatchlist(m.title, rYear);
+        const jsT = esc(m.title).replace(/'/g, "\\'");
+        const jsP = esc(poster).replace(/'/g, "\\'");
 
-      document.getElementById('detailBackdrop').src = movie.backdrop;
-      document.getElementById('detailPoster').src = movie.poster;
-      document.getElementById('detailRating').innerText = `★ ${movie.rating}`;
-      document.getElementById('detailYear').innerText = movie.year;
-      document.getElementById('detailRuntime').innerText = `${movie.runtime}m`;
-      document.getElementById('detailTitle').innerText = movie.title;
-      document.getElementById('detailGenres').innerText = movie.genres;
-      document.getElementById('detailSynopsis').innerText = movie.synopsis;
-      document.getElementById('detailProviderName').innerText = movie.services[0] || 'Check Availability';
-      
-      const watchlistIcon = document.getElementById('detailWatchlistIcon');
-      const watchlistText = document.getElementById('detailWatchlistText');
-      if (movie.inWatchlist) {
-        watchlistIcon.innerText = '✓';
-        watchlistText.innerText = 'In Watchlist';
-      } else {
-        watchlistIcon.innerText = '+';
-        watchlistText.innerText = 'Add to Watchlist';
+        body.innerHTML = `
+          <div class="modal-head">
+            <h2 style="font-size:18px; font-weight:800;">${esc(m.title)} ${rYear ? `(${rYear})` : ""}</h2>
+            <button type="button" class="btn btn-sm" onclick="closeModal('movie-detail-modal')">✕ Close</button>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:16px;">
+            ${poster ? `<img src="${esc(poster)}" alt="${esc(m.title)}" style="width:128px; height:190px; object-fit:cover; border-radius:10px;" onerror="this.style.display='none'">` : ""}
+            <div style="flex:1 1 240px; display:flex; flex-direction:column; gap:8px;">
+              <div class="chip-row">
+                ${m.runtime ? `<span class="badge">${m.runtime} min</span>` : ""}
+                ${m.vote_average ? `<span class="badge">★ ${m.vote_average.toFixed(1)} TMDB</span>` : ""}
+                ${watched ? `<span class="badge badge-watched">✓ Watched</span>` : ""}
+                ${onWl ? `<span class="badge badge-watchlist">📌 Watchlist</span>` : ""}
+              </div>
+              <p style="font-size:13.5px; color:#cbd5e1;">${esc(m.overview || "No synopsis available.")}</p>
+              ${usFlatrate.length ? `<div class="chip-row"><span class="section-sub">US Streaming:</span>${usFlatrate.map(p => `<span class="badge badge-watchlist">${esc(p.provider_name)}</span>`).join("")}</div>` : `<div class="section-sub">Check JustWatch / VOD for US streaming availability</div>`}
+              <div class="chip-row" style="margin-top:4px;">
+                ${watched ? "" : `<button type="button" class="btn btn-sm btn-green" onclick="addToWatchlist('${jsT}', ${rYear || "null"}, ${m.id}, '${jsP}')">+ Watchlist</button>`}
+                <button type="button" class="btn btn-sm" onclick="openAddToPlaylistModal('${jsT}', ${rYear || "null"}, ${m.id})">+ Playlist</button>
+                ${watched ? "" : `<button type="button" class="btn btn-sm btn-cyan" onclick="markAsWatched('${jsT}', ${rYear || "null"}, ${m.id}, '${jsP}'); closeModal('movie-detail-modal')">✓ Mark Watched</button>`}
+              </div>
+            </div>
+          </div>
+          ${directors.length ? `<div><strong style="font-size:12.5px;">Directed by (tap for filmography):</strong><div class="chip-row" style="margin-top:6px;">${directors.map(d => `<button type="button" class="btn btn-sm btn-cyan" onclick="closeModal('movie-detail-modal'); openPersonFilmography(${d.id})">🎬 ${esc(d.name)}</button>`).join("")}</div></div>` : ""}
+          ${cast.length ? `<div><strong style="font-size:12.5px;">Cast (tap any actor for Age-at-Release filmography):</strong><div class="chip-row" style="margin-top:6px;">${cast.map(c => `<button type="button" class="btn btn-sm" onclick="closeModal('movie-detail-modal'); openPersonFilmography(${c.id})">🎭 ${esc(c.name)}</button>`).join("")}</div></div>` : ""}
+        `;
+      } catch {
+        body.innerHTML += `<p class="section-sub">Could not fetch full TMDB details right now.</p>`;
       }
-
-      const servicesList = document.getElementById('detailServicesList');
-      servicesList.innerHTML = movie.services.map(s => `
-        <div class="flex items-center justify-between py-1 border-b border-stream-border/40">
-          <span class="text-slate-300 font-medium">Included with subscription</span>
-          <span class="text-amber-400 font-bold">${s}</span>
-        </div>
-      `).join('');
-
-      document.getElementById('detailSheet').classList.remove('hidden');
     }
 
-    function closeMovieDetail() {
-      document.getElementById('detailSheet').classList.add('hidden');
+    // =========================================================================
+    // Settings & Beta Feedback Modals
+    // =========================================================================
+    function applyFeedbackVisibility() {
+      const el = document.getElementById("feedback-fab-container");
+      el.style.display = appState.config.betaFeedback === false ? "none" : "block";
     }
 
-    function toggleCurrentWatchlist() {
-      if (!appData.selectedMovie) return;
-      appData.selectedMovie.inWatchlist = !appData.selectedMovie.inWatchlist;
-      openMovieDetail(appData.selectedMovie.id);
-      showQuickToast(appData.selectedMovie.inWatchlist ? 'Added to Letterboxd Watchlist' : 'Removed from Watchlist');
-      renderCurrentScreen();
+    function openSettingsModal() {
+      document.getElementById("set-beta-feedback").checked = appState.config.betaFeedback !== false;
+      document.getElementById("set-tmdb-key").value = appState.config.tmdbKey || "";
+      document.getElementById("set-lb-user").value = appState.config.username || "";
+      document.getElementById("set-webhook-url").value = appState.config.webhookUrl || "";
+      openModal("settings-modal");
     }
 
-    function toggleWatchlistById(id) {
-      const movie = appData.movies.find(m => m.id === id);
-      if (movie) {
-        movie.inWatchlist = !movie.inWatchlist;
-        showQuickToast(movie.inWatchlist ? 'Saved to Watchlist' : 'Removed from Watchlist');
-        renderCurrentScreen();
-      }
+    function saveSettingsForm() {
+      appState.config.betaFeedback = document.getElementById("set-beta-feedback").checked;
+      appState.config.tmdbKey = document.getElementById("set-tmdb-key").value.trim() || DEFAULT_CONFIG.tmdbKey;
+      appState.config.username = document.getElementById("set-lb-user").value.trim() || DEFAULT_CONFIG.username;
+      appState.config.webhookUrl = document.getElementById("set-webhook-url").value.trim() || DEFAULT_CONFIG.webhookUrl;
+      writeLS(LS_KEYS.config, appState.config);
+      applyFeedbackVisibility();
+      updateNavBadges();
+      closeModal("settings-modal");
+      showToast("Settings saved");
     }
 
-    /* TV Direct Launch Handlers */
-    function launchCurrentMovie() {
-      if (!appData.selectedMovie) return;
-      triggerDirectTvLaunch(appData.selectedMovie.id);
+    async function reloadBundledSeed() {
+      localStorage.removeItem(LS_KEYS.watched);
+      localStorage.removeItem(LS_KEYS.watchlist);
+      closeModal("settings-modal");
+      await initApp();
+      showToast("Reloaded default CSV seed vault");
     }
 
-    function triggerDirectTvLaunch(movieId) {
-      const movie = appData.movies.find(m => m.id === movieId);
-      if (!movie) return;
+    function openFeedbackModal() { openModal("feedback-modal"); }
 
-      document.getElementById('overlayMovieTitle').innerText = movie.title;
-      document.getElementById('overlayProviderText').innerText = `Waking Living Room TV and launching ${movie.services[0]}...`;
-      document.getElementById('tvLaunchOverlay').classList.remove('hidden');
+    async function submitFeedbackForm() {
+      const type = document.getElementById("fb-type").value;
+      const msg = document.getElementById("fb-message").value.trim();
+      const includeSnap = document.getElementById("fb-include-snapshot").checked;
+      const assignJules = document.getElementById("fb-assign-jules").checked;
+      if (!msg) return;
+
+      const payload = {
+        app: "streamwise",
+        type,
+        message: msg,
+        assignToJules: assignJules,
+        createdAt: new Date().toISOString(),
+        snapshot: includeSnap ? {
+          activeView: appState.activeView,
+          watchedCount: appState.watched.length,
+          watchlistCount: appState.watchlist.length,
+          playlistCount: allPlaylists().length
+        } : null
+      };
+
+      const queue = readLS(LS_KEYS.feedbackQueue, []);
+      queue.push(payload);
+      writeLS(LS_KEYS.feedbackQueue, queue);
+
+      try {
+        await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } catch {}
+
+      document.getElementById("fb-message").value = "";
+      closeModal("feedback-modal");
+      showToast("Feedback logged — thank you!");
     }
 
-    function closeTvLaunchOverlay() {
-      document.getElementById('tvLaunchOverlay').classList.add('hidden');
-    }
+    // Live Guided Review Walkthrough Sections
+    window.__MH_WALK_ITEMS__ = [
+      { id: "next-watch", selector: "[data-review-section='next-watch']", title: "🎯 Find Next Watch Hero & Spinner", summary: "Single above-the-fold CTA that spins an unwatched pick scoped by mood pills, Watchlist, or playlists." },
+      { id: "history-recs", selector: "[data-review-section='history-recs']", title: "🎬 Because You Watched Recommender", summary: "Live TMDB recommendations seeded from Danny's June–Nov 2026 watches with already-seen films stripped out." },
+      { id: "search", selector: "[data-review-section='search']", title: "🔎 Movie, TV & Actor Search", summary: "Direct search across movies and talent with clickable filmographies and Age at Release on every credit." },
+      { id: "playlists", selector: "[data-review-section='playlists']", title: "📜 14+ Playlists & Custom Builder", summary: "14 canons, vibes, & podcast playlists plus persistent localStorage custom playlists scored against watched history." },
+      { id: "watchlist", selector: "[data-review-section='watchlist']", title: "📌 Watchlist & 1-Card Triage", summary: "Real 33-item watchlist with quick-add, service filters, poster matching, and swipe/card triage." },
+      { id: "watched", selector: "[data-review-section='watched-vault']", title: "✓ Watched Vault & Sync (Issue #24)", summary: "Full 1,148-film vault updated through Nov 18, 2026 plus 1-tap Apps Script Webhook sync and CSV import/export." },
+      { id: "services", selector: "[data-review-section='services-visuals']", title: "💰 Services & SeeCode Visuals", summary: "Dynamic streaming budget optimizer alongside all 5 interactive SeeCode architecture diagrams." }
+    ];
 
-    /* Quick Log Modal */
-    function openLogModal(movieId) {
-      const movie = appData.movies.find(m => m.id === movieId);
-      if (!movie) return;
-      appData.selectedMovie = movie;
-      document.getElementById('logModalTitle').innerText = movie.title;
-      document.getElementById('quickLogModal').classList.remove('hidden');
-    }
-
-    function openLogModalFromDetail() {
-      if (!appData.selectedMovie) return;
-      document.getElementById('logModalTitle').innerText = appData.selectedMovie.title;
-      document.getElementById('quickLogModal').classList.remove('hidden');
-    }
-
-    function closeQuickLogModal() {
-      document.getElementById('quickLogModal').classList.add('hidden');
-    }
-
-    function setLogRating(rating) {
-      appData.tempLogRating = rating;
-      document.getElementById('logRatingLabel').innerText = `${rating}.0 / 5.0 Stars`;
-    }
-
-    function confirmQuickLog() {
-      if (appData.selectedMovie) {
-        appData.selectedMovie.isWatched = true;
-        appData.selectedMovie.myRating = appData.tempLogRating;
-        appData.selectedMovie.watchedDate = 'Today';
-      }
-      closeQuickLogModal();
-      showQuickToast('Saved to Diary and pushed to Letterboxd!');
-      renderCurrentScreen();
-    }
-
-    function openTvDeviceModal() {
-      switchScreen('sync');
-    }
-
-    function toggleDeviceBezel() {
-      const container = document.getElementById('appContainer');
-      container.classList.toggle('max-w-md');
-      container.classList.toggle('rounded-[42px]');
-    }
-
-    function showQuickToast(msg) {
-      const toast = document.getElementById('quickToast');
-      toast.innerText = msg;
-      toast.classList.remove('hidden');
-      setTimeout(() => toast.classList.add('hidden'), 2200);
-    }
-
-    window.onload = function() {
-      renderSubTabs();
-      renderCurrentScreen();
-    };
+    window.addEventListener("DOMContentLoaded", initApp);
   </script>
+  <script src="templates/review-overlay.js"></script>
 </body>
 </html>

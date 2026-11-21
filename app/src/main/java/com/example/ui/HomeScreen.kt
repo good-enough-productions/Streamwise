@@ -55,10 +55,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.webkit.WebViewClient
 import com.example.data.local.ProviderUsageStats
+import com.example.data.model.CuratedList
+import com.example.data.model.CuratedListItem
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
+import com.example.data.model.NextWatchRecommendation
+import com.example.data.model.PersonFilmographyResult
+import com.example.data.model.PersonSearchCandidate
 import com.example.data.model.PodcastEpisodeCatalog
 import com.example.data.model.StreamingProvider
+import com.example.data.model.UniversalMovieResult
 import com.example.data.remote.LetterboxdSyncResult
 import com.example.data.remote.LetterboxdFileImportResult
 import com.example.data.remote.UpdateStatus
@@ -102,7 +108,7 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(0) } // 0: Watchlist, 1: Watched, 2: ROI Stats, 3: Explore
-    var exploreSubTab by remember { mutableStateOf(0) } // 0: AI & Taste, 1: Curated Lists, 2: AI Companion, 3: Podcasts, 4: Film News
+    var exploreSubTab by remember { mutableStateOf(0) } // 0: Next Watch, 1: Search, 2: Playlists, 3: AI Companion, 4: Podcasts & News
     var filterOnlyMyServices by remember { mutableStateOf(true) }
     var showAddDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
@@ -159,6 +165,12 @@ fun HomeScreen(
         statusMessage?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearStatusMessage()
+        }
+    }
+
+    LaunchedEffect(selectedTab, watchedItems.size) {
+        if (selectedTab == 3 && viewModel.historyRecommendations.value.isEmpty() && watchedItems.isNotEmpty()) {
+            viewModel.loadRecommendationsForSeed()
         }
     }
 
@@ -310,7 +322,7 @@ fun HomeScreen(
         },
         floatingActionButton = {
             // Suppress global feedback FAB when actively chatting with AI to prevent overlapping input controls
-            val isChattingWithAi = selectedTab == 3 && exploreSubTab == 2
+            val isChattingWithAi = selectedTab == 3 && exploreSubTab == 3
             Column(
                 horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -373,9 +385,17 @@ fun HomeScreen(
                         },
                         onStartOnboardingClick = { showOnboardingDialog = true },
                         onOpenTriage = { showTriageSheet = true },
-                        onOpenCuratedLists = {
+                        onOpenNextWatch = {
+                            selectedTab = 3
+                            exploreSubTab = 0
+                        },
+                        onOpenSearch = {
                             selectedTab = 3
                             exploreSubTab = 1
+                        },
+                        onOpenCuratedLists = {
+                            selectedTab = 3
+                            exploreSubTab = 2
                         }
                     )
                     1 -> {
@@ -428,6 +448,21 @@ fun HomeScreen(
                         val geminiAnalysis by viewModel.geminiAnalysis.collectAsState()
                         val isGeminiAnalyzing by viewModel.isAnalyzingWithGemini.collectAsState()
                         val watchedItems by viewModel.watchedItems.collectAsState()
+                        val customPlaylists by viewModel.customPlaylists.collectAsState()
+                        val selectedHistorySeed by viewModel.selectedHistorySeed.collectAsState()
+                        val historySeedOptions by viewModel.historySeedOptions.collectAsState()
+                        val historyRecommendations by viewModel.historyRecommendations.collectAsState()
+                        val isLoadingHistoryRecs by viewModel.isLoadingHistoryRecs.collectAsState()
+                        val tonightQueueMatches by viewModel.tonightQueueMatches.collectAsState()
+                        val spunNextWatch by viewModel.spunNextWatch.collectAsState()
+                        val universalSearchQuery by viewModel.universalSearchQuery.collectAsState()
+                        val universalSearchMode by viewModel.universalSearchMode.collectAsState()
+                        val movieSearchResults by viewModel.movieSearchResults.collectAsState()
+                        val personSearchResults by viewModel.personSearchResults.collectAsState()
+                        val selectedPersonFilmography by viewModel.selectedPersonFilmography.collectAsState()
+                        val isSearchingUniversal by viewModel.isSearchingUniversal.collectAsState()
+                        val isLoadingPersonFilmography by viewModel.isLoadingPersonFilmography.collectAsState()
+
                         ExploreTabContent(
                             selectedSubTab = exploreSubTab,
                             onSubTabChange = { exploreSubTab = it },
@@ -449,7 +484,61 @@ fun HomeScreen(
                             onToggleStarred = { viewModel.toggleStarred(it) },
                             onMarkWatched = { curated, media -> viewModel.markCuratedItemWatched(curated, media) },
                             onWatchClick = { viewModel.launchAndIntendToWatch(context, it) },
-                            onMovieClick = { detailMovieItem = it }
+                            onMovieClick = { detailMovieItem = it },
+                            customPlaylists = customPlaylists,
+                            onCreateCustomPlaylist = { t, e, d, raw -> viewModel.createCustomPlaylist(t, "", e, d, raw) },
+                            onDeleteCustomPlaylist = { viewModel.deleteCustomPlaylist(it) },
+                            onAddItemToCustomPlaylist = { pid, cItem -> viewModel.addItemToCustomPlaylist(pid, cItem) },
+                            onRemoveItemFromCustomPlaylist = { pid, title -> viewModel.removeItemFromCustomPlaylist(pid, title) },
+                            onResetCustomPlaylists = { viewModel.resetCustomPlaylistsToDefaults() },
+                            selectedHistorySeed = selectedHistorySeed,
+                            historySeedOptions = historySeedOptions,
+                            historyRecommendations = historyRecommendations,
+                            isLoadingHistoryRecs = isLoadingHistoryRecs,
+                            tonightQueueMatches = tonightQueueMatches,
+                            spunNextWatch = spunNextWatch,
+                            onSpinNextWatch = { onlySubs -> viewModel.spinNextWatch(onlySubs) },
+                            onSelectHistorySeed = { viewModel.loadRecommendationsForSeed(it) },
+                            onShuffleHistorySeed = { viewModel.shuffleNextWatchSeed() },
+                            onAddNextWatchToWatchlist = { rec, star ->
+                                viewModel.addUniversalMovieToWatchlist(
+                                    title = rec.title,
+                                    tmdbId = rec.tmdbId,
+                                    posterUrl = rec.posterUrl,
+                                    releaseDate = rec.year?.toString(),
+                                    rating = rec.rating,
+                                    overview = rec.overview,
+                                    sourceTag = rec.reason,
+                                    starPriority = star
+                                )
+                            },
+                            onMarkNextWatchWatched = { rec ->
+                                viewModel.markUniversalMovieWatched(
+                                    title = rec.title,
+                                    tmdbId = rec.tmdbId,
+                                    posterUrl = rec.posterUrl,
+                                    releaseDate = rec.year?.toString(),
+                                    rating = rec.rating,
+                                    overview = rec.overview
+                                )
+                            },
+                            universalSearchQuery = universalSearchQuery,
+                            universalSearchMode = universalSearchMode,
+                            movieSearchResults = movieSearchResults,
+                            personSearchResults = personSearchResults,
+                            selectedPersonFilmography = selectedPersonFilmography,
+                            isSearchingUniversal = isSearchingUniversal,
+                            isLoadingPersonFilmography = isLoadingPersonFilmography,
+                            onPerformUniversalSearch = { q, m -> viewModel.performUniversalSearch(q, m) },
+                            onUniversalSearchModeChange = { viewModel.setUniversalSearchMode(it) },
+                            onSelectPersonCandidate = { viewModel.loadPersonFilmography(it.id, it.name) },
+                            onClearPersonFilmography = { viewModel.clearSelectedPersonFilmography() },
+                            onAddUniversalMovieToWatchlist = { t, tid, p, rDate, rat, ov, star ->
+                                viewModel.addUniversalMovieToWatchlist(t, tid, p, rDate, rat, ov, "Streamwise Search", star)
+                            },
+                            onMarkUniversalMovieWatched = { t, tid, p, rDate, rat, ov ->
+                                viewModel.markUniversalMovieWatched(t, tid, p, rDate, rat, ov)
+                            }
                         )
                     }
                 }
@@ -874,9 +963,16 @@ fun HomeScreen(
                 },
                 onDiscussInExplore = { prompt ->
                     detailMovieItem = null
-                    exploreSubTab = 2
+                    exploreSubTab = 3
                     selectedTab = 3
                     viewModel.sendChatMessage(prompt)
+                },
+                onActorClick = { actor ->
+                    detailMovieItem = null
+                    selectedTab = 3
+                    exploreSubTab = 1
+                    viewModel.setUniversalSearchMode("actors")
+                    viewModel.loadPersonFilmography(actor.id, actor.name)
                 },
                 onSetServiceUsed = { providerId ->
                     val current = detailMovieItem
@@ -1276,6 +1372,8 @@ fun WatchlistTabContent(
     onStartOnboardingClick: () -> Unit = {},
     onToggleStarred: (MediaItem) -> Unit = {},
     onOpenTriage: () -> Unit = {},
+    onOpenNextWatch: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
     onOpenCuratedLists: () -> Unit = {}
 ) {
     val activeProviderIds = remember(allProviders) {
@@ -1830,41 +1928,60 @@ fun WatchlistTabContent(
                             }
                         }
 
-                        // 3rd-Party Curated Lists Banner
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                        // Quick Discovery Pills: Next Watch • Search Movies & Actors • Playlists
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable(onClick = onOpenCuratedLists)
                                 .padding(vertical = 4.dp)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                modifier = Modifier.clickable(onClick = onOpenNextWatch)
                             ) {
                                 Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
-                                    Text("📜", fontSize = 14.sp)
-                                    Text(
-                                        "Explore 3rd-Party Lists (Oscars • AFI • Podcasts)",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
+                                    Text("🎯", fontSize = 13.sp)
+                                    Text("Find Next Watch", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                                 }
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.35f)),
+                                modifier = Modifier.clickable(onClick = onOpenSearch)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text("🔎", fontSize = 13.sp)
+                                    Text("Search Movies & Actors", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)),
+                                modifier = Modifier.clickable(onClick = onOpenCuratedLists)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Text("📜", fontSize = 13.sp)
+                                    Text("Playlists & Canons (14+)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                                }
                             }
                         }
 
@@ -6500,9 +6617,9 @@ fun WhatsNewDialog(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("1. 📐 Interactive SeeCode Visual Architecture Atlas", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("1. 🎯 Find Your Next Watch & History Recs", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Text(
-                            "Explore 5 visual diagrams of how Streamwise works right inside Settings → Guides & Docs (End-to-End Data Flow, Room v14 Database ERD, 30-Day Rotation Loop, Cloud Sync Sequence, and Service Volume).",
+                            "New Explore → Next Watch hub with live \"Because You Watched...\" TMDB recommendations, Tonight's Queue Matches, and a 1-tap Spin Next Watch picker.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -6513,9 +6630,9 @@ fun WhatsNewDialog(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("2. 🎯 Accurate Watched Vault & Version Telemetry", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("2. 🔎 Search Movies & Actors + 14 Playlists", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Text(
-                            "Beta Feedback now reports your exact Watched Vault count and live BuildConfig version instead of static placeholders.",
+                            "Search any movie, TV show, actor, or director (with Watched % & age at release), plus 6 new playlists and a Custom Playlist Builder.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -6526,9 +6643,9 @@ fun WhatsNewDialog(
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("3. 🚀 Post-Update What's New Summary", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("3. 🔄 Watched Sync Fixed (Issue #24)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Text(
-                            "Shows once per version upgrade so you always know what changed in plain English—and stays accessible anytime in Settings → Guides & Docs.",
+                            "Synced all June–November 2026 Letterboxd watches and fixed live RSS syncing with TMDB IDs, posters, and entity unescaping.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
@@ -7938,6 +8055,7 @@ fun MovieDetailsBottomSheet(
     onMoveToWatchlistClick: (() -> Unit)? = null,
     onEditWatchDateClick: (() -> Unit)? = null,
     onDiscussInExplore: ((String) -> Unit)? = null,
+    onActorClick: ((CastMemberWithAge) -> Unit)? = null,
     onSetServiceUsed: ((String) -> Unit)? = null,
     onSelectProvider: ((StreamingProvider) -> Unit)? = null
 ) {
@@ -8366,7 +8484,13 @@ fun MovieDetailsBottomSheet(
                             shape = RoundedCornerShape(12.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
-                            modifier = Modifier.width(160.dp)
+                            modifier = Modifier
+                                .width(160.dp)
+                                .then(
+                                    if (actor.id > 0 && onActorClick != null) {
+                                        Modifier.clickable { onActorClick(actor) }
+                                    } else Modifier
+                                )
                         ) {
                             Column(
                                 modifier = Modifier.padding(10.dp),
@@ -8630,15 +8754,47 @@ fun ExploreTabContent(
     onToggleStarred: (MediaItem) -> Unit = {},
     onMarkWatched: (com.example.data.model.CuratedListItem, MediaItem?) -> Unit = { _, _ -> },
     onWatchClick: (MediaItem) -> Unit = {},
-    onMovieClick: (MediaItem) -> Unit = {}
+    onMovieClick: (MediaItem) -> Unit = {},
+    customPlaylists: List<CuratedList> = emptyList(),
+    onCreateCustomPlaylist: (title: String, emoji: String, description: String, rawTitlesText: String) -> CuratedList? = { _, _, _, _ -> null },
+    onDeleteCustomPlaylist: (String) -> Unit = {},
+    onAddItemToCustomPlaylist: (String, CuratedListItem) -> Unit = { _, _ -> },
+    onRemoveItemFromCustomPlaylist: (String, String) -> Unit = { _, _ -> },
+    onResetCustomPlaylists: () -> Unit = {},
+    selectedHistorySeed: MediaItem? = null,
+    historySeedOptions: List<MediaItem> = emptyList(),
+    historyRecommendations: List<NextWatchRecommendation> = emptyList(),
+    isLoadingHistoryRecs: Boolean = false,
+    tonightQueueMatches: List<NextWatchRecommendation> = emptyList(),
+    spunNextWatch: NextWatchRecommendation? = null,
+    onSpinNextWatch: (Boolean) -> Unit = {},
+    onSelectHistorySeed: (MediaItem) -> Unit = {},
+    onShuffleHistorySeed: () -> Unit = {},
+    onAddNextWatchToWatchlist: (NextWatchRecommendation, Boolean) -> Unit = { _, _ -> },
+    onMarkNextWatchWatched: (NextWatchRecommendation) -> Unit = {},
+    universalSearchQuery: String = "",
+    universalSearchMode: String = "movies",
+    movieSearchResults: List<UniversalMovieResult> = emptyList(),
+    personSearchResults: List<PersonSearchCandidate> = emptyList(),
+    selectedPersonFilmography: PersonFilmographyResult? = null,
+    isSearchingUniversal: Boolean = false,
+    isLoadingPersonFilmography: Boolean = false,
+    onPerformUniversalSearch: (String, String) -> Unit = { _, _ -> },
+    onUniversalSearchModeChange: (String) -> Unit = {},
+    onSelectPersonCandidate: (PersonSearchCandidate) -> Unit = {},
+    onClearPersonFilmography: () -> Unit = {},
+    onAddUniversalMovieToWatchlist: (String, String?, String?, String?, Double?, String?, Boolean) -> Unit = { _, _, _, _, _, _, _ -> },
+    onMarkUniversalMovieWatched: (String, String?, String?, String?, Double?, String?) -> Unit = { _, _, _, _, _, _ -> }
 ) {
+    var playlistPickerItem by remember { mutableStateOf<CuratedListItem?>(null) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .testTag("explore_tab_content")
     ) {
-        // Sub-Navigation Selector: 4 Modular Tabs
-        // 0: ✨ AI & Taste, 1: 💬 AI Companion, 2: 🎙️ Podcasts, 3: 📰 Film News
+        // Sub-Navigation Selector: 5 Discovery & Culture Tabs
+        // 0: 🎯 Next Watch, 1: 🔎 Search, 2: 📜 Playlists, 3: 💬 AI Companion, 4: 🎙️ Podcasts & News
         Surface(
             color = MaterialTheme.colorScheme.surfaceColorAtElevation(1.dp),
             modifier = Modifier.fillMaxWidth()
@@ -8651,11 +8807,11 @@ fun ExploreTabContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Tab 0: AI & Taste
+                // Tab 0: Next Watch
                 FilterChip(
                     selected = selectedSubTab == 0,
                     onClick = { onSubTabChange(0) },
-                    label = { Text("✨ AI & Taste", fontWeight = FontWeight.Bold) },
+                    label = { Text("🎯 Next Watch", fontWeight = FontWeight.Bold) },
                     leadingIcon = {
                         Icon(
                             Icons.Default.AutoAwesome,
@@ -8670,11 +8826,30 @@ fun ExploreTabContent(
                     )
                 )
 
-                // Tab 1: Curated Lists
+                // Tab 1: Search Movies & Actors
                 FilterChip(
                     selected = selectedSubTab == 1,
                     onClick = { onSubTabChange(1) },
-                    label = { Text("📜 Curated Lists", fontWeight = FontWeight.Bold) },
+                    label = { Text("🔎 Search", fontWeight = FontWeight.Bold) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.testTag("subtab_search"),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+
+                // Tab 2: Playlists & Canons
+                FilterChip(
+                    selected = selectedSubTab == 2,
+                    onClick = { onSubTabChange(2) },
+                    label = { Text("📜 Playlists", fontWeight = FontWeight.Bold) },
                     leadingIcon = {
                         Icon(
                             Icons.Default.FormatListNumbered,
@@ -8689,10 +8864,10 @@ fun ExploreTabContent(
                     )
                 )
 
-                // Tab 2: Chat with AI Companion
+                // Tab 3: Chat with AI Companion
                 FilterChip(
-                    selected = selectedSubTab == 2,
-                    onClick = { onSubTabChange(2) },
+                    selected = selectedSubTab == 3,
+                    onClick = { onSubTabChange(3) },
                     label = {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("💬 AI Companion", fontWeight = FontWeight.Bold)
@@ -8729,32 +8904,11 @@ fun ExploreTabContent(
                     )
                 )
 
-                // Tab 3: Podcasts
+                // Tab 4: Podcasts & Film News
                 FilterChip(
-                    selected = selectedSubTab == 3,
-                    onClick = { onSubTabChange(3) },
-                    label = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("🎙️ Podcasts", fontWeight = FontWeight.Bold)
-                            if (podcastEpisodes.isNotEmpty()) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.secondaryContainer,
-                                    modifier = Modifier.size(18.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            "${podcastEpisodes.size}",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    },
+                    selected = selectedSubTab == 4,
+                    onClick = { onSubTabChange(4) },
+                    label = { Text("🎙️ Podcasts & News", fontWeight = FontWeight.Bold) },
                     leadingIcon = {
                         Icon(
                             Icons.Default.Headphones,
@@ -8768,52 +8922,12 @@ fun ExploreTabContent(
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 )
-
-                // Tab 4: Film News
-                FilterChip(
-                    selected = selectedSubTab == 4,
-                    onClick = { onSubTabChange(4) },
-                    label = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("📰 Film News", fontWeight = FontWeight.Bold)
-                            if (movieNews.isNotEmpty()) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Surface(
-                                    shape = CircleShape,
-                                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                                    modifier = Modifier.size(18.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            "${movieNews.size}",
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.Article,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    modifier = Modifier.testTag("subtab_news"),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                )
             }
         }
 
         when (selectedSubTab) {
             0 -> {
-                // SubTab 0: ✨ AI & Taste (Compact, fast to read, zero unnecessary scrolling)
+                // SubTab 0: 🎯 Next Watch (Watch-History Recs + Spin + Taste Matrix + Gemini Synthesis)
                 val scrollState = rememberScrollState()
                 Column(
                     modifier = Modifier
@@ -8822,6 +8936,27 @@ fun ExploreTabContent(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                    NextWatchSpinAndHistorySection(
+                        selectedSeed = selectedHistorySeed,
+                        seedOptions = historySeedOptions,
+                        historyRecommendations = historyRecommendations,
+                        isLoadingHistoryRecs = isLoadingHistoryRecs,
+                        tonightQueueMatches = tonightQueueMatches,
+                        spunNextWatch = spunNextWatch,
+                        allProviders = allProviders,
+                        customPlaylists = customPlaylists,
+                        onSpinNextWatch = onSpinNextWatch,
+                        onSelectSeed = onSelectHistorySeed,
+                        onShuffleSeed = onShuffleHistorySeed,
+                        onAddToWatchlist = onAddNextWatchToWatchlist,
+                        onMarkWatched = onMarkNextWatchWatched,
+                        onWatchClick = onWatchClick,
+                        onMovieClick = onMovieClick,
+                        onAddToPlaylist = { playlistPickerItem = it },
+                        onJumpToSearch = { onSubTabChange(1) },
+                        onJumpToPlaylists = { onSubTabChange(2) }
+                    )
+
                     // 0. CINEPHILE TASTE MATRIX (Dynamic visuals calculated from Watched Vault)
                     if (watchedItems.isNotEmpty()) {
                         val genreCounts = remember(watchedItems) {
@@ -9172,7 +9307,7 @@ fun ExploreTabContent(
                                 // Action button: Chat about this analysis
                                 OutlinedButton(
                                     onClick = {
-                                        onSubTabChange(2)
+                                        onSubTabChange(3)
                                         onSendMessage("Tell me more about the cinema analysis of my vault: ${geminiAnalysis.headline}")
                                     },
                                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -9221,7 +9356,7 @@ fun ExploreTabContent(
                             prompts.forEach { p ->
                                 SuggestionChip(
                                     onClick = {
-                                        onSubTabChange(2)
+                                        onSubTabChange(3)
                                         onSendMessage(p)
                                     },
                                     label = { Text(p, fontSize = 11.sp) },
@@ -9236,7 +9371,28 @@ fun ExploreTabContent(
             }
 
             1 -> {
-                // SubTab 1: 📜 Curated & 3rd-Party Lists Hub
+                // SubTab 1: 🔎 Outright Movie & Actor/Director Search
+                UniversalSearchExploreView(
+                    query = universalSearchQuery,
+                    mode = universalSearchMode,
+                    movieResults = movieSearchResults,
+                    personResults = personSearchResults,
+                    selectedPersonFilmography = selectedPersonFilmography,
+                    isSearching = isSearchingUniversal,
+                    isLoadingFilmography = isLoadingPersonFilmography,
+                    onQueryAndSearch = onPerformUniversalSearch,
+                    onModeChange = onUniversalSearchModeChange,
+                    onSelectPerson = onSelectPersonCandidate,
+                    onClearPersonFilmography = onClearPersonFilmography,
+                    onAddMovieToWatchlist = onAddUniversalMovieToWatchlist,
+                    onMarkMovieWatched = onMarkUniversalMovieWatched,
+                    onAddToPlaylist = { playlistPickerItem = it },
+                    onMovieClick = onMovieClick
+                )
+            }
+
+            2 -> {
+                // SubTab 2: 📜 Curated & Custom Playlists Hub
                 CuratedListsScreen(
                     allItems = allItems,
                     allProviders = allProviders,
@@ -9244,12 +9400,17 @@ fun ExploreTabContent(
                     onToggleStarred = onToggleStarred,
                     onMarkWatched = onMarkWatched,
                     onWatchClick = onWatchClick,
-                    onMovieClick = onMovieClick
+                    onMovieClick = onMovieClick,
+                    customPlaylists = customPlaylists,
+                    onCreateCustomPlaylist = onCreateCustomPlaylist,
+                    onDeleteCustomPlaylist = onDeleteCustomPlaylist,
+                    onRemoveItemFromCustomPlaylist = onRemoveItemFromCustomPlaylist,
+                    onResetCustomPlaylists = onResetCustomPlaylists
                 )
             }
 
-            2 -> {
-                // SubTab 2: Chat with AI Companion
+            3 -> {
+                // SubTab 3: Chat with AI Companion
                 AgentChatTabContent(
                     chatMessages = chatMessages,
                     isLoading = isLoading,
@@ -9257,30 +9418,67 @@ fun ExploreTabContent(
                 )
             }
 
-            3 -> {
-                // SubTab 3: 🎙️ Podcasts Hub
-                PodcastsExploreView(
-                    podcastEpisodes = podcastEpisodes,
-                    isSyncingPodcasts = isSyncingPodcasts,
-                    onSyncPodcastRecs = onSyncPodcastRecs,
-                    onAskAi = { prompt ->
-                        onSubTabChange(2)
-                        onSendMessage(prompt)
-                    }
-                )
-            }
-
             4 -> {
-                // SubTab 4: 📰 Film News Hub
-                NewsExploreView(
-                    movieNews = movieNews,
-                    onDiscussWithAi = { prompt ->
-                        onSubTabChange(2)
-                        onSendMessage(prompt)
+                // SubTab 4: 🎙️ Podcasts & Film News Hub
+                var mediaSubMode by remember { mutableStateOf(0) } // 0: Podcasts, 1: News
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = mediaSubMode == 0,
+                            onClick = { mediaSubMode = 0 },
+                            label = { Text("🎙️ Podcasts (${podcastEpisodes.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        )
+                        FilterChip(
+                            selected = mediaSubMode == 1,
+                            onClick = { mediaSubMode = 1 },
+                            label = { Text("📰 Film News (${movieNews.size})", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                        )
                     }
-                )
+                    if (mediaSubMode == 0) {
+                        PodcastsExploreView(
+                            podcastEpisodes = podcastEpisodes,
+                            isSyncingPodcasts = isSyncingPodcasts,
+                            onSyncPodcastRecs = onSyncPodcastRecs,
+                            onAskAi = { prompt ->
+                                onSubTabChange(3)
+                                onSendMessage(prompt)
+                            }
+                        )
+                    } else {
+                        NewsExploreView(
+                            movieNews = movieNews,
+                            onDiscussWithAi = { prompt ->
+                                onSubTabChange(3)
+                                onSendMessage(prompt)
+                            }
+                        )
+                    }
+                }
             }
         }
+    }
+
+    if (playlistPickerItem != null) {
+        val targetItem = playlistPickerItem!!
+        AddToPlaylistPickerDialog(
+            item = targetItem,
+            customPlaylists = customPlaylists,
+            onSelectPlaylist = { pid ->
+                onAddItemToCustomPlaylist(pid, targetItem)
+                playlistPickerItem = null
+            },
+            onCreateNewPlaylistWithItem = { newTitle ->
+                val formatted = if (targetItem.year != null) "${targetItem.title} (${targetItem.year})" else targetItem.title
+                onCreateCustomPlaylist(newTitle, "🎞️", "Custom watch playlist", formatted)
+                playlistPickerItem = null
+            },
+            onDismiss = { playlistPickerItem = null }
+        )
     }
 }
 

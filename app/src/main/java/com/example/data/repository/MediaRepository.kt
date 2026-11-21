@@ -32,7 +32,7 @@ class MediaRepository(val mediaDao: MediaDao) {
                 .thenByDescending { !it.tmdbId.isNullOrBlank() }
                 .thenByDescending { !it.providerIds.isNullOrBlank() }
                 .thenBy { it.id }
-        ).distinctBy { it.title.trim().lowercase() to it.status }
+        ).distinctBy { Triple(it.title.trim().lowercase(), it.releaseDate?.take(4) ?: "", it.status) }
     }
 
     suspend fun deduplicateMediaItems(): Int {

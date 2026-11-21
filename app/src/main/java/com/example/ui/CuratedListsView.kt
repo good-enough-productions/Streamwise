@@ -57,14 +57,24 @@ fun CuratedListsScreen(
     onWatchClick: (MediaItem) -> Unit,
     onMovieClick: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
-    initialListId: String? = null
+    initialListId: String? = null,
+    customPlaylists: List<CuratedList> = emptyList(),
+    onCreateCustomPlaylist: (title: String, emoji: String, description: String, rawTitlesText: String) -> CuratedList? = { _, _, _, _ -> null },
+    onDeleteCustomPlaylist: (String) -> Unit = {},
+    onRemoveItemFromCustomPlaylist: (playlistId: String, title: String) -> Unit = { _, _ -> },
+    onResetCustomPlaylists: () -> Unit = {}
 ) {
-    val allLists = remember { CuratedListCatalog.getAllLists() }
-    var selectedList by remember { mutableStateOf<CuratedList?>(allLists.firstOrNull { it.id == initialListId }) }
+    val allLists = remember(customPlaylists) {
+        customPlaylists + CuratedListCatalog.getAllLists()
+    }
+    var selectedListId by remember { mutableStateOf<String?>(initialListId) }
     var customAdHocList by remember { mutableStateOf<CuratedList?>(null) }
     var showAdHocDialog by remember { mutableStateOf(false) }
+    var showCreatePlaylistDialog by remember { mutableStateOf(false) }
 
-    // If viewing a list, render detail view; otherwise directory
+    val selectedList = remember(selectedListId, allLists) {
+        selectedListId?.let { id -> allLists.firstOrNull { it.id == id } }
+    }
     val activeList = selectedList ?: customAdHocList
 
     if (activeList != null) {
@@ -73,7 +83,7 @@ fun CuratedListsScreen(
             allItems = allItems,
             allProviders = allProviders,
             onBack = {
-                selectedList = null
+                selectedListId = null
                 customAdHocList = null
             },
             onAddOrToggleWatchlist = onAddOrToggleWatchlist,
@@ -81,24 +91,63 @@ fun CuratedListsScreen(
             onMarkWatched = onMarkWatched,
             onWatchClick = onWatchClick,
             onMovieClick = onMovieClick,
+            onDeletePlaylist = if (activeList.isCustom) {
+                {
+                    onDeleteCustomPlaylist(activeList.id)
+                    selectedListId = null
+                }
+            } else null,
+            onRemoveFromPlaylist = if (activeList.isCustom) {
+                { title -> onRemoveItemFromCustomPlaylist(activeList.id, title) }
+            } else null,
             modifier = modifier
         )
     } else {
         CuratedListsDirectoryView(
             curatedLists = allLists,
+            customCount = customPlaylists.size,
             allItems = allItems,
             allProviders = allProviders,
-            onSelectList = { selectedList = it },
+            onSelectList = { selectedListId = it.id },
+            onOpenCreatePlaylistDialog = { showCreatePlaylistDialog = true },
             onOpenAdHocDialog = { showAdHocDialog = true },
+            onResetCustomPlaylists = onResetCustomPlaylists,
             modifier = modifier
+        )
+    }
+
+    if (showCreatePlaylistDialog) {
+        CreateCustomPlaylistDialog(
+            onDismiss = { showCreatePlaylistDialog = false },
+            onCreate = { title, emoji, desc, rawTitles ->
+                val created = onCreateCustomPlaylist(title, emoji, desc, rawTitles)
+                if (created != null) {
+                    selectedListId = created.id
+                }
+                showCreatePlaylistDialog = false
+            }
         )
     }
 
     if (showAdHocDialog) {
         AdHocListImportDialog(
             onDismiss = { showAdHocDialog = false },
-            onLoadList = { parsedList ->
-                customAdHocList = parsedList
+            onLoadList = { parsedList, savePermanently ->
+                if (savePermanently) {
+                    val created = onCreateCustomPlaylist(
+                        parsedList.title,
+                        parsedList.emoji,
+                        parsedList.description,
+                        parsedList.items.joinToString("\n") {
+                            if (it.year != null) "${it.title} (${it.year})" else it.title
+                        }
+                    )
+                    if (created != null) {
+                        selectedListId = created.id
+                    }
+                } else {
+                    customAdHocList = parsedList
+                }
                 showAdHocDialog = false
             }
         )
@@ -111,10 +160,13 @@ fun CuratedListsScreen(
 @Composable
 fun CuratedListsDirectoryView(
     curatedLists: List<CuratedList>,
+    customCount: Int = 0,
     allItems: List<MediaItem>,
     allProviders: List<StreamingProvider>,
     onSelectList: (CuratedList) -> Unit,
+    onOpenCreatePlaylistDialog: () -> Unit = {},
     onOpenAdHocDialog: () -> Unit,
+    onResetCustomPlaylists: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedCategory by remember { mutableStateOf(CuratedListCategory.ALL) }
@@ -133,17 +185,28 @@ fun CuratedListsDirectoryView(
     ) {
         // Section Header
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    "Curated & 3rd-Party Lists",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Explore cinema canons and podcasts without bloating your personal queue. See what's already on your watchlist, watched, or streaming tonight.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Explore Playlists & Canons",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Browse 14 curated cinema playlists or build your own. See what's watched, queued, or streaming tonight.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (customCount > 0) {
+                    TextButton(onClick = onResetCustomPlaylists) {
+                        Text("Reset Custom", fontSize = 11.sp)
+                    }
+                }
             }
         }
 
@@ -169,58 +232,36 @@ fun CuratedListsDirectoryView(
             }
         }
 
-        // Action Card: Ad-Hoc / Custom Letterboxd List Viewer
+        // Action Row: + Create Custom Playlist & View Ad-Hoc List
         item {
-            Card(
-                onClick = onOpenAdHocDialog,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("card_load_adhoc_list"),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
-                ),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.4f)),
-                shape = RoundedCornerShape(16.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
+                Button(
+                    onClick = onOpenCreatePlaylistDialog,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                        .weight(1f)
+                        .testTag("btn_create_custom_playlist"),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.AddLink,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSecondary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            "View Ad-Hoc or Letterboxd List",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            "Paste movie titles or a Letterboxd list to cross-reference streaming & watched status instantly.",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        Icons.Default.ChevronRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary
-                    )
+                    Icon(Icons.Default.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("New Playlist", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
+                }
+
+                OutlinedButton(
+                    onClick = onOpenAdHocDialog,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("card_load_adhoc_list"),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)
+                ) {
+                    Icon(Icons.Default.AddLink, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Paste List", fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1)
                 }
             }
         }
@@ -408,6 +449,8 @@ fun CuratedListDetailView(
     onMarkWatched: (CuratedListItem, MediaItem?) -> Unit,
     onWatchClick: (MediaItem) -> Unit,
     onMovieClick: (MediaItem) -> Unit,
+    onDeletePlaylist: (() -> Unit)? = null,
+    onRemoveFromPlaylist: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -420,6 +463,18 @@ fun CuratedListDetailView(
 
     val stats = remember(enrichedItems) {
         CuratedListCatalog.computeStats(enrichedItems)
+    }
+
+    val openPreviewOrMedia: (EnrichedCuratedItem) -> Unit = { enriched ->
+        val media = enriched.matchingMediaItem ?: MediaItem(
+            title = enriched.item.title,
+            releaseDate = enriched.item.year?.toString(),
+            overview = enriched.item.note ?: enriched.item.director?.let { "Directed by $it" },
+            importSource = curatedList.title,
+            tmdbId = enriched.item.tmdbId,
+            status = MediaStatus.WATCHLIST.name
+        )
+        onMovieClick(media)
     }
 
     val filteredItems = remember(enrichedItems, searchQuery, activeFilter) {
@@ -482,6 +537,20 @@ fun CuratedListDetailView(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+
+                    // Delete custom playlist
+                    if (onDeletePlaylist != null) {
+                        IconButton(
+                            onClick = onDeletePlaylist,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.DeleteOutline,
+                                contentDescription = "Delete Custom Playlist",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
 
                     // Grid / List Toggle
@@ -597,12 +666,12 @@ fun CuratedListDetailView(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(filteredItems, key = { it.item.title + (it.item.year ?: 0) }) { enriched ->
+                items(filteredItems, key = { it.item.title + "_" + (it.item.year ?: 0) + "_" + (it.item.badge ?: "") }) { enriched ->
                     CuratedGridItemCard(
                         enriched = enriched,
                         onAddOrToggleWatchlist = { onAddOrToggleWatchlist(enriched.item, enriched.matchingMediaItem) },
                         onToggleStarred = { enriched.matchingMediaItem?.let { onToggleStarred(it) } },
-                        onMovieClick = { enriched.matchingMediaItem?.let { onMovieClick(it) } }
+                        onMovieClick = { openPreviewOrMedia(enriched) }
                     )
                 }
             }
@@ -613,14 +682,15 @@ fun CuratedListDetailView(
                 contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(filteredItems, key = { it.item.title + (it.item.year ?: 0) }) { enriched ->
+                items(filteredItems, key = { it.item.title + "_" + (it.item.year ?: 0) + "_" + (it.item.badge ?: "") }) { enriched ->
                     CuratedListItemRow(
                         enriched = enriched,
                         onAddOrToggleWatchlist = { onAddOrToggleWatchlist(enriched.item, enriched.matchingMediaItem) },
                         onToggleStarred = { enriched.matchingMediaItem?.let { onToggleStarred(it) } },
                         onMarkWatched = { onMarkWatched(enriched.item, enriched.matchingMediaItem) },
                         onWatchClick = { enriched.matchingMediaItem?.let { onWatchClick(it) } },
-                        onMovieClick = { enriched.matchingMediaItem?.let { onMovieClick(it) } }
+                        onMovieClick = { openPreviewOrMedia(enriched) },
+                        onRemoveFromPlaylist = onRemoveFromPlaylist?.let { fn -> { fn(enriched.item.title) } }
                     )
                 }
             }
@@ -639,7 +709,8 @@ fun CuratedListItemRow(
     onToggleStarred: () -> Unit,
     onMarkWatched: () -> Unit,
     onWatchClick: () -> Unit,
-    onMovieClick: () -> Unit
+    onMovieClick: () -> Unit,
+    onRemoveFromPlaylist: (() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier
@@ -871,6 +942,20 @@ fun CuratedListItemRow(
                         )
                     }
                 }
+
+                if (onRemoveFromPlaylist != null) {
+                    IconButton(
+                        onClick = onRemoveFromPlaylist,
+                        modifier = Modifier.size(26.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = "Remove from playlist",
+                            tint = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -1004,23 +1089,108 @@ fun CuratedGridItemCard(
 }
 
 /**
+ * Dialog to create a new persistent custom playlist.
+ */
+@Composable
+fun CreateCustomPlaylistDialog(
+    onDismiss: () -> Unit,
+    onCreate: (title: String, emoji: String, description: String, rawTitlesText: String) -> Unit
+) {
+    var titleInput by remember { mutableStateOf("") }
+    var selectedEmoji by remember { mutableStateOf("🎞️") }
+    var descriptionInput by remember { mutableStateOf("") }
+    var rawTitlesInput by remember { mutableStateOf("") }
+    val emojiOptions = listOf("🎞️", "🍿", "🔥", "🕯️", "🌀", "💼", "⭐", "🚀", "🎙️", "🏆")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create Custom Playlist", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = titleInput,
+                    onValueChange = { titleInput = it },
+                    label = { Text("Playlist Name *") },
+                    placeholder = { Text("e.g. Rainy Sunday Noir") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    emojiOptions.forEach { emoji ->
+                        FilterChip(
+                            selected = selectedEmoji == emoji,
+                            onClick = { selectedEmoji = emoji },
+                            label = { Text(emoji, fontSize = 15.sp) }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = descriptionInput,
+                    onValueChange = { descriptionInput = it },
+                    label = { Text("Description (optional)") },
+                    placeholder = { Text("Mood, theme, or watch goal...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                OutlinedTextField(
+                    value = rawTitlesInput,
+                    onValueChange = { rawTitlesInput = it },
+                    label = { Text("Starter Movies (optional, one per line)") },
+                    placeholder = { Text("Chinatown (1974)\nNight Moves (1975)\nThief (1981)") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    maxLines = 8
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (titleInput.isNotBlank()) {
+                        onCreate(titleInput.trim(), selectedEmoji, descriptionInput.trim(), rawTitlesInput)
+                    }
+                },
+                enabled = titleInput.isNotBlank()
+            ) {
+                Text("Create Playlist")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
  * Dialog enabling ad-hoc loading of any Letterboxd list or pasted titles.
  */
 @Composable
 fun AdHocListImportDialog(
     onDismiss: () -> Unit,
-    onLoadList: (CuratedList) -> Unit
+    onLoadList: (CuratedList, Boolean) -> Unit
 ) {
     var titleInput by remember { mutableStateOf("My Ad-Hoc List") }
     var textInput by remember { mutableStateOf("") }
+    var savePermanently by remember { mutableStateOf(true) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("View Ad-Hoc / 3rd-Party List", fontWeight = FontWeight.Bold) },
+        title = { Text("Paste Movie or Letterboxd List", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    "Paste movie titles (one per line) or titles with years. Streamwise will cross-reference them against your watchlist, watched diary, and active streaming subscriptions without saving them all into your personal queue.",
+                    "Paste movie titles (one per line) or titles with years. Streamwise cross-references them against your watchlist, watched diary, and active streaming subscriptions.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1044,9 +1214,25 @@ fun AdHocListImportDialog(
                     },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(160.dp),
+                        .height(140.dp),
                     maxLines = 10
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Save permanently to My Playlists",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Switch(
+                        checked = savePermanently,
+                        onCheckedChange = { savePermanently = it }
+                    )
+                }
             }
         },
         confirmButton = {
@@ -1054,12 +1240,12 @@ fun AdHocListImportDialog(
                 onClick = {
                     if (textInput.isNotBlank()) {
                         val parsed = CuratedListCatalog.parseAdHocList(textInput, titleInput.ifBlank { "Ad-Hoc Custom List" })
-                        onLoadList(parsed)
+                        onLoadList(parsed, savePermanently)
                     }
                 },
                 enabled = textInput.isNotBlank()
             ) {
-                Text("Preview List Ad-Hoc →")
+                Text(if (savePermanently) "Save Playlist →" else "Preview Ad-Hoc →")
             }
         },
         dismissButton = {

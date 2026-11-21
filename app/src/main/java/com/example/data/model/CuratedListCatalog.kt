@@ -20,13 +20,19 @@ object CuratedListCatalog {
 
     fun getAllLists(): List<CuratedList> {
         return listOf(
-            OSCAR_BEST_PICTURE,
-            AFI_TOP_100,
+            NINETIES_THRILLERS_HEISTS,
+            MIND_BENDING_SCIFI,
+            MIDNIGHT_CULT_HORROR,
+            MODERN_AUTEUR_ESSENTIALS,
+            FESTIVAL_HEAT_2025_2026,
+            UNSPOOLED_AND_HDTGM,
             THE_REWATCHABLES,
             THE_BIG_PICTURE,
+            BLANK_CHECK,
+            OSCAR_BEST_PICTURE,
+            AFI_TOP_100,
             SIGHT_AND_SOUND_50,
             CRITERION_ESSENTIALS,
-            BLANK_CHECK,
             IMDB_TOP_50
         )
     }
@@ -657,6 +663,182 @@ object CuratedListCatalog {
             CuratedListItem("Whiplash", 2014, "#38 IMDb", "Damien Chazelle"),
             CuratedListItem("The Prestige", 2006, "#39 IMDb", "Christopher Nolan"),
             CuratedListItem("Alien", 1979, "#40 IMDb", "Ridley Scott")
+        )
+    )
+
+    // ==========================================
+    // 9. 90s & 00s COMFORT THRILLERS & HEISTS
+    // ==========================================
+    val NINETIES_THRILLERS_HEISTS = CuratedList(
+        id = "nineties_thrillers_heists",
+        title = "90s & 00s Comfort Thrillers & Heists",
+        subtitle = "High-Tension Crime, Legal & Heist Staples",
+        category = CuratedListCategory.VIBES,
+        emoji = "💼",
+        description = "Rewatchable cat-and-mouse thrillers, taut corporate paranoia, and slick heist capers built for late-night viewing.",
+        items = listOf(
+            CuratedListItem("Heat", 1995, "Crime Peak", "Michael Mann"),
+            CuratedListItem("The Fugitive", 1993, "Manhunt", "Andrew Davis"),
+            CuratedListItem("Inside Man", 2006, "Heist", "Spike Lee"),
+            CuratedListItem("Collateral", 2004, "LA Noir", "Michael Mann"),
+            CuratedListItem("Michael Clayton", 2007, "Legal Thriller", "Tony Gilroy"),
+            CuratedListItem("The Game", 1997, "Fincher", "David Fincher"),
+            CuratedListItem("Out of Sight", 1998, "Soderbergh", "Steven Soderbergh"),
+            CuratedListItem("Ocean's Eleven", 2001, "Heist Classic", "Steven Soderbergh"),
+            CuratedListItem("The Talented Mr. Ripley", 1999, "Sunlit Noir", "Anthony Minghella"),
+            CuratedListItem("The Town", 2010, "Boston Heist", "Ben Affleck"),
+            CuratedListItem("Sicario", 2015, "Border Thriller", "Denis Villeneuve"),
+            CuratedListItem("Crimson Tide", 1995, "Submarine", "Tony Scott"),
+            CuratedListItem("Enemy of the State", 1998, "Surveillance", "Tony Scott"),
+            CuratedListItem("L.A. Confidential", 1997, "Neo-Noir", "Curtis Hanson"),
+            CuratedListItem("Primal Fear", 1996, "Courtroom", "Gregory Hoblit"),
+            CuratedListItem("Training Day", 2001, "Denzel Peak", "Antoine Fuqua"),
+            CuratedListItem("Déjà Vu", 2006, "Sci-Fi Thriller", "Tony Scott"),
+            CuratedListItem("Unstoppable", 2010, "Runaway Train", "Tony Scott")
+        )
+    )
+
+    // ==========================================
+    // 10. MIND-BENDERS & HIGH-CONCEPT SCI-FI
+    // ==========================================
+    val MIND_BENDING_SCIFI = CuratedList(
+        id = "mind_bending_scifi",
+        title = "Mind-Benders & High-Concept Sci-Fi",
+        subtitle = "Time Loops, Puzzleboxes & Cerebral Futures",
+        category = CuratedListCategory.VIBES,
+        emoji = "🌀",
+        description = "Smart speculative thrillers and twisty puzzleboxes that reward total focus and big sound.",
+        items = listOf(
+            CuratedListItem("Arrival", 2016, "First Contact", "Denis Villeneuve"),
+            CuratedListItem("Ex Machina", 2014, "AI Thriller", "Alex Garland"),
+            CuratedListItem("Children of Men", 2006, "Masterpiece", "Alfonso Cuarón"),
+            CuratedListItem("Coherence", 2013, "Dinner Party", "James Ward Byrkit"),
+            CuratedListItem("Primer", 2004, "Hard Time Travel", "Shane Carruth"),
+            CuratedListItem("Annihilation", 2018, "Shimmer", "Alex Garland"),
+            CuratedListItem("Edge of Tomorrow", 2014, "Action Loop", "Doug Liman"),
+            CuratedListItem("Looper", 2012, "Time Hitman", "Rian Johnson"),
+            CuratedListItem("12 Monkeys", 1995, "Gilliam", "Terry Gilliam"),
+            CuratedListItem("Eternal Sunshine of the Spotless Mind", 2004, "Memory", "Michel Gondry"),
+            CuratedListItem("Dark City", 1998, "Neo-Noir Sci-Fi", "Alex Proyas"),
+            CuratedListItem("Minority Report", 2002, "Precrime", "Steven Spielberg"),
+            CuratedListItem("Source Code", 2011, "8 Minutes", "Duncan Jones"),
+            CuratedListItem("Upgrade", 2018, "Cyberpunk", "Leigh Whannell"),
+            CuratedListItem("Predestination", 2014, "Paradox", "Spierig Brothers"),
+            CuratedListItem("The Prestige", 2006, "Obsession", "Christopher Nolan")
+        )
+    )
+
+    // ==========================================
+    // 11. LATE-NIGHT CULT HORROR & THRILLERS
+    // ==========================================
+    val MIDNIGHT_CULT_HORROR = CuratedList(
+        id = "midnight_cult_horror",
+        title = "Late-Night Cult Horror & Thrillers",
+        subtitle = "Tension, Dread & Midnight Crowd-Pleasers",
+        category = CuratedListCategory.VIBES,
+        emoji = "🕯️",
+        description = "From razor-sharp modern horror comedies to relentless survival thrillers and atmospheric dread.",
+        items = listOf(
+            CuratedListItem("Hereditary", 2018, "A24 Dread", "Ari Aster"),
+            CuratedListItem("Midsommar", 2019, "Folk Horror", "Ari Aster"),
+            CuratedListItem("The Thing", 1982, "Practical FX", "John Carpenter"),
+            CuratedListItem("Get Out", 2017, "Social Thriller", "Jordan Peele"),
+            CuratedListItem("Nope", 2022, "Sci-Fi Horror", "Jordan Peele"),
+            CuratedListItem("It Follows", 2014, "Synth Dread", "David Robert Mitchell"),
+            CuratedListItem("The Witch", 2015, "Period Folk", "Robert Eggers"),
+            CuratedListItem("Ready or Not", 2019, "Horror Comedy", "Radio Silence"),
+            CuratedListItem("Barbarian", 2022, "Airbnb Chaos", "Zach Cregger"),
+            CuratedListItem("Talk to Me", 2023, "Possession", "Philippou Bros"),
+            CuratedListItem("The Cabin in the Woods", 2011, "Meta Horror", "Drew Goddard"),
+            CuratedListItem("Green Room", 2015, "Siege Thriller", "Jeremy Saulnier"),
+            CuratedListItem("Don't Breathe", 2016, "Home Invasion", "Fede Álvarez"),
+            CuratedListItem("28 Days Later", 2002, "Danny Boyle", "Danny Boyle"),
+            CuratedListItem("Scream", 1996, "Slasher Meta", "Wes Craven"),
+            CuratedListItem("The Descent", 2005, "Claustrophobia", "Neil Marshall")
+        )
+    )
+
+    // ==========================================
+    // 12. FINCHER, COENS, VILLENEUVE & PTA
+    // ==========================================
+    val MODERN_AUTEUR_ESSENTIALS = CuratedList(
+        id = "modern_auteur_essentials",
+        title = "Fincher, Coens, Villeneuve & PTA",
+        subtitle = "Obsessive Craft & Signature Modern Auteurs",
+        category = CuratedListCategory.CANON,
+        emoji = "🎥",
+        description = "Precision framing, propulsive scores, and dark American character studies from modern masters.",
+        items = listOf(
+            CuratedListItem("Zodiac", 2007, "Fincher", "David Fincher"),
+            CuratedListItem("Gone Girl", 2014, "Fincher", "David Fincher"),
+            CuratedListItem("Prisoners", 2013, "Villeneuve", "Denis Villeneuve"),
+            CuratedListItem("Sicario", 2015, "Villeneuve", "Denis Villeneuve"),
+            CuratedListItem("Blade Runner 2049", 2017, "Villeneuve", "Denis Villeneuve"),
+            CuratedListItem("Fargo", 1996, "Coen Bros", "Joel & Ethan Coen"),
+            CuratedListItem("Burn After Reading", 2008, "Coen Bros", "Joel & Ethan Coen"),
+            CuratedListItem("Inside Llewyn Davis", 2013, "Coen Bros", "Joel & Ethan Coen"),
+            CuratedListItem("Boogie Nights", 1997, "PTA", "Paul Thomas Anderson"),
+            CuratedListItem("There Will Be Blood", 2007, "PTA", "Paul Thomas Anderson"),
+            CuratedListItem("The Master", 2012, "PTA", "Paul Thomas Anderson"),
+            CuratedListItem("Phantom Thread", 2017, "PTA", "Paul Thomas Anderson"),
+            CuratedListItem("Uncut Gems", 2019, "Safdie Bros", "Josh & Benny Safdie"),
+            CuratedListItem("Nightcrawler", 2014, "Gyllenhaal", "Dan Gilroy")
+        )
+    )
+
+    // ==========================================
+    // 13. UNSPOOLED & HOW DID THIS GET MADE? CULT PICKS
+    // ==========================================
+    val UNSPOOLED_AND_HDTGM = CuratedList(
+        id = "unspooled_hdtgm",
+        title = "Unspooled & HDTGM Cult Picks",
+        subtitle = "Podcast Favorites, Maximalist Action & Guilty Pleasures",
+        category = CuratedListCategory.PODCASTS,
+        emoji = "🎙️",
+        description = "Wildly entertaining 90s blockbusters, cult anomalies, and podcast-debated crowd-pleasers.",
+        items = listOf(
+            CuratedListItem("Face/Off", 1997, "HDTGM Classic", "John Woo"),
+            CuratedListItem("Con Air", 1997, "Cage Peak", "Simon West"),
+            CuratedListItem("The Rock", 1996, "Bayhem", "Michael Bay"),
+            CuratedListItem("Road House", 1989, "Swayze", "Rowdy Herrington"),
+            CuratedListItem("Point Break", 1991, "Bigelow", "Kathryn Bigelow"),
+            CuratedListItem("Demolition Man", 1993, "Three Seashells", "Marco Brambilla"),
+            CuratedListItem("Timecop", 1994, "Van Damme", "Peter Hyams"),
+            CuratedListItem("Bloodsport", 1988, "Kumite", "Newt Arnold"),
+            CuratedListItem("The Room", 2003, "Midnight Cult", "Tommy Wiseau"),
+            CuratedListItem("Miami Connection", 1987, "Dragon Sound", "Woo-sang Park"),
+            CuratedListItem("Fast Five", 2011, "Heist Action", "Justin Lin"),
+            CuratedListItem("Cliffhanger", 1993, "Stallone", "Renny Harlin"),
+            CuratedListItem("Tango & Cash", 1989, "Buddy Cop", "Andrei Konchalovsky"),
+            CuratedListItem("Deep Blue Sea", 1999, "Smart Sharks", "Renny Harlin")
+        )
+    )
+
+    // ==========================================
+    // 14. 2025–2026 FESTIVAL & NEW RELEASE HEAT
+    // ==========================================
+    val FESTIVAL_HEAT_2025_2026 = CuratedList(
+        id = "festival_heat_2025_2026",
+        title = "2025–2026 Festival & New Release Heat",
+        subtitle = "Recent Standouts, Awards Buzz & Fresh Arrivals",
+        category = CuratedListCategory.RECENT,
+        emoji = "🔥",
+        description = "High-signal contemporary releases, festival winners, and hotly discussed films across 2024–2026.",
+        items = listOf(
+            CuratedListItem("Anora", 2024, "Palme d'Or", "Sean Baker"),
+            CuratedListItem("The Brutalist", 2024, "Venice Winner", "Brady Corbet"),
+            CuratedListItem("Conclave", 2024, "Papal Thriller", "Edward Berger"),
+            CuratedListItem("Challengers", 2024, "Guadagnino", "Luca Guadagnino"),
+            CuratedListItem("Civil War", 2024, "Garland", "Alex Garland"),
+            CuratedListItem("The Substance", 2024, "Body Horror", "Coralie Fargeat"),
+            CuratedListItem("A Real Pain", 2024, "Eisenberg", "Jesse Eisenberg"),
+            CuratedListItem("Nosferatu", 2024, "Eggers", "Robert Eggers"),
+            CuratedListItem("Dune: Part Two", 2024, "Villeneuve", "Denis Villeneuve"),
+            CuratedListItem("Sing Sing", 2024, "A24 Drama", "Greg Kwedar"),
+            CuratedListItem("Nickel Boys", 2024, "RaMell Ross", "RaMell Ross"),
+            CuratedListItem("Mickey 17", 2025, "Bong Joon-ho", "Bong Joon-ho"),
+            CuratedListItem("Sinners", 2025, "Ryan Coogler", "Ryan Coogler"),
+            CuratedListItem("The Phoenician Scheme", 2025, "Wes Anderson", "Wes Anderson")
         )
     )
 }

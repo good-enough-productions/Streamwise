@@ -143,14 +143,22 @@ interface MediaDao {
             }
         }
 
-        // Pass 2: Deduplicate remaining items by normalized title
+        // Pass 2: Deduplicate remaining items by normalized title + release year (preserving remakes with different years/TMDB IDs)
         val remaining = all.filter { !idsToDelete.contains(it.id) }
-        val titleGroups = remaining.groupBy { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
-        for ((normTitle, group) in titleGroups) {
+        val titleGroups = remaining.groupBy { item ->
+            val norm = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(item.title)
+            val yr = item.releaseDate?.take(4)?.takeIf { it.length == 4 } ?: ""
+            "$norm|$yr"
+        }
+        for ((key, group) in titleGroups) {
+            val normTitle = key.substringBefore("|")
             if (normTitle.isNotBlank() && group.size > 1) {
-                val (merged, loserIds) = mergeGroup(group)
-                itemsToUpdate.add(merged)
-                idsToDelete.addAll(loserIds)
+                val distinctTmdb = group.mapNotNull { it.tmdbId?.trim()?.takeIf { id -> id.isNotBlank() && id != "0" } }.distinct()
+                if (distinctTmdb.size <= 1) {
+                    val (merged, loserIds) = mergeGroup(group)
+                    itemsToUpdate.add(merged)
+                    idsToDelete.addAll(loserIds)
+                }
             }
         }
 

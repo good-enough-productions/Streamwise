@@ -18,6 +18,8 @@ data class CuratedListItem(
  */
 enum class CuratedListCategory(val displayName: String, val icon: String) {
     ALL("All Lists", "📜"),
+    VIBES("Moods & Vibes", "✨"),
+    RECENT("Modern & Heat", "🔥"),
     AWARDS("Awards & Oscars", "🏆"),
     CANON("Cinema Canon", "🏛️"),
     PODCASTS("Podcasts", "🎙️"),
@@ -34,7 +36,8 @@ data class CuratedList(
     val category: CuratedListCategory,
     val emoji: String,
     val description: String,
-    val items: List<CuratedListItem> = emptyList()
+    val items: List<CuratedListItem> = emptyList(),
+    val isCustom: Boolean = false
 )
 
 /**

@@ -149,6 +149,30 @@ interface TmdbApiService {
         @Path("movie_id") movieId: Int,
         @Query("api_key") apiKey: String
     ): TmdbMovieReleaseDatesResponse
+
+    @GET("search/person")
+    suspend fun searchPerson(
+        @Query("api_key") apiKey: String,
+        @Query("query") query: String
+    ): TmdbPersonSearchResponse
+
+    @GET("person/{person_id}/movie_credits")
+    suspend fun getPersonMovieCredits(
+        @Path("person_id") personId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbPersonMovieCreditsResponse
+
+    @GET("movie/{movie_id}/recommendations")
+    suspend fun getMovieRecommendations(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbSearchResponse
+
+    @GET("movie/{movie_id}/similar")
+    suspend fun getSimilarMovies(
+        @Path("movie_id") movieId: Int,
+        @Query("api_key") apiKey: String
+    ): TmdbSearchResponse
 }
 
 @JsonClass(generateAdapter = true)
@@ -229,4 +253,50 @@ data class TmdbReleaseDateItem(
     @Json(name = "certification") val certification: String? = null,
     @Json(name = "release_date") val releaseDate: String? = null,
     @Json(name = "type") val type: Int = 3
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbPersonSearchResponse(
+    @Json(name = "results") val results: List<TmdbPersonSearchResult> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbPersonSearchResult(
+    @Json(name = "id") val id: Int,
+    @Json(name = "name") val name: String,
+    @Json(name = "profile_path") val profilePath: String? = null,
+    @Json(name = "known_for_department") val knownForDepartment: String? = null,
+    @Json(name = "popularity") val popularity: Double? = null,
+    @Json(name = "known_for") val knownFor: List<TmdbKnownForItem>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbKnownForItem(
+    @Json(name = "id") val id: Int,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "name") val name: String? = null,
+    @Json(name = "media_type") val mediaType: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbPersonMovieCreditsResponse(
+    @Json(name = "id") val id: Int = 0,
+    @Json(name = "cast") val cast: List<TmdbPersonCreditItem> = emptyList(),
+    @Json(name = "crew") val crew: List<TmdbPersonCreditItem> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class TmdbPersonCreditItem(
+    @Json(name = "id") val id: Int,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "overview") val overview: String? = null,
+    @Json(name = "poster_path") val posterPath: String? = null,
+    @Json(name = "release_date") val releaseDate: String? = null,
+    @Json(name = "vote_average") val voteAverage: Double? = null,
+    @Json(name = "vote_count") val voteCount: Int? = null,
+    @Json(name = "popularity") val popularity: Double? = null,
+    @Json(name = "genre_ids") val genreIds: List<Int>? = null,
+    @Json(name = "character") val character: String? = null,
+    @Json(name = "job") val job: String? = null,
+    @Json(name = "department") val department: String? = null
 )

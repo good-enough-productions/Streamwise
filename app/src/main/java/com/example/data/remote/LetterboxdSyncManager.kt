@@ -1,19 +1,22 @@
 package com.example.data.remote
 
 import android.util.Log
-import android.util.Xml
 import com.example.data.local.MediaDao
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaStatus
+import com.example.data.model.WatchSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.xmlpull.v1.XmlPullParser
+import org.w3c.dom.Element
+import org.w3c.dom.Node
+import org.xml.sax.InputSource
 import java.io.InputStream
 import java.io.StringReader
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Locale
+import javax.xml.parsers.DocumentBuilderFactory
 
 data class LetterboxdSyncResult(
     val isSuccess: Boolean,
@@ -114,19 +117,23 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                 val normalizedTitle = TmdbMatchingHelper.normalizeTitle(entry.title)
                 if (normalizedTitle.isEmpty()) continue
 
-                // Try year-aware match first (e.g. "cape fear|1991"), then title-only
+                // Try year-aware match first (e.g. "cape fear|1991"), then title-only if years don't conflict
                 val yearAwareKey = if (!entry.year.isNullOrBlank()) "$normalizedTitle|${entry.year}" else null
-                val existing = (if (yearAwareKey != null) existingItems[yearAwareKey] else null)
-                    ?: existingItems[normalizedTitle]
-                    ?: existingItems[entry.title.trim().lowercase()]
+                val titleFallback = (existingItems[normalizedTitle] ?: existingItems[entry.title.trim().lowercase()])?.takeIf { candidate ->
+                    val candidateYear = candidate.releaseDate?.take(4)
+                    candidateYear.isNullOrBlank() || entry.year.isNullOrBlank() || candidateYear == entry.year
+                }
+                val existing = (if (yearAwareKey != null) existingItems[yearAwareKey] else null) ?: titleFallback
 
                 if (existing != null) {
                     val hasNewerWatch = entry.watchedAt > (existing.watchedAt ?: 0L)
                     val hasNewRating = entry.ratingTenScale != null && existing.rating == null
                     val hasNewNotes = !entry.notes.isNullOrBlank() && existing.userNotes.isNullOrBlank()
+                    val hasNewTmdb = !entry.tmdbId.isNullOrBlank() && existing.tmdbId.isNullOrBlank()
+                    val hasNewPoster = !entry.posterUrl.isNullOrBlank() && existing.imageUrl.isNullOrBlank()
                     val needsStatusUpgrade = existing.status != MediaStatus.WATCHED.name
 
-                    if (needsStatusUpgrade || hasNewerWatch || hasNewRating || hasNewNotes) {
+                    if (needsStatusUpgrade || hasNewerWatch || hasNewRating || hasNewNotes || hasNewTmdb || hasNewPoster) {
                         // Preserve original import source (e.g. podcast) alongside the RSS sync note
                         val combinedSource = if (!existing.importSource.isNullOrBlank() &&
                             !existing.importSource.contains("Letterboxd Live RSS")
@@ -139,12 +146,27 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                             status = MediaStatus.WATCHED.name,
                             watchedAt = if (hasNewerWatch || existing.watchedAt == null) entry.watchedAt else existing.watchedAt,
                             rating = entry.ratingTenScale ?: existing.rating,
-                            userNotes = entry.notes ?: existing.userNotes,
-                            importSource = combinedSource,
+                            userNotes = (entry.notes ?: existing.userNotes)?.take(300),
+                            importSource = combinedSource.take(200),
+                            tmdbId = existing.tmdbId ?: entry.tmdbId,
+                            imageUrl = existing.imageUrl ?: entry.posterUrl,
                             releaseDate = existing.releaseDate ?: entry.year?.takeIf { it.isNotBlank() },
-                            overview = existing.overview ?: "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}."
+                            overview = (existing.overview ?: "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}.").take(300),
+                            updatedAt = System.currentTimeMillis()
                         )
                         mediaDao.updateMediaItem(updated)
+                        if (needsStatusUpgrade || hasNewerWatch) {
+                            mediaDao.insertWatchSession(
+                                WatchSession(
+                                    mediaItemId = updated.id,
+                                    mediaItemTitle = updated.title,
+                                    providerId = updated.providersList.firstOrNull(),
+                                    watchedAt = entry.watchedAt,
+                                    durationMinutes = 110,
+                                    notes = "Synced via Letterboxd Live RSS (@$cleanUser)"
+                                )
+                            )
+                        }
                         existingItems[normalizedTitle] = updated
                         if (yearAwareKey != null) existingItems[yearAwareKey] = updated
                         newlyImported.add(updated)
@@ -157,14 +179,26 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
                         status = MediaStatus.WATCHED.name,
                         addedAt = entry.watchedAt,
                         watchedAt = entry.watchedAt,
+                        tmdbId = entry.tmdbId,
+                        imageUrl = entry.posterUrl,
                         rating = entry.ratingTenScale,
-                        userNotes = entry.notes,
+                        userNotes = entry.notes?.take(300),
                         importSource = "Letterboxd Live RSS (@$cleanUser)",
                         releaseDate = entry.year?.takeIf { it.isNotBlank() },
-                        overview = "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}."
+                        overview = "Imported from Letterboxd diary: ${entry.title} (${entry.year ?: "N/A"}). Logged on ${entry.dateString}.".take(300)
                     )
                     val insertedId = mediaDao.insertMediaItem(item)
                     val insertedItem = item.copy(id = insertedId)
+                    mediaDao.insertWatchSession(
+                        WatchSession(
+                            mediaItemId = insertedId,
+                            mediaItemTitle = insertedItem.title,
+                            providerId = null,
+                            watchedAt = entry.watchedAt,
+                            durationMinutes = 110,
+                            notes = "Synced via Letterboxd Live RSS (@$cleanUser)"
+                        )
+                    )
                     existingItems[normalizedTitle] = insertedItem
                     if (yearAwareKey != null) existingItems[yearAwareKey] = insertedItem
                     newlyImported.add(insertedItem)
@@ -196,102 +230,121 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
         }
     }
 
-    private data class ParsedRssEntry(
+    internal data class ParsedRssEntry(
         val title: String,
         val year: String?,
         val link: String?,
         val dateString: String,
         val watchedAt: Long,
         val ratingTenScale: Double?,
-        val notes: String?
+        val notes: String?,
+        val tmdbId: String? = null,
+        val posterUrl: String? = null,
+        val isRewatch: Boolean = false
     )
 
-    private fun parseRssXml(xml: String): List<ParsedRssEntry> {
+    internal fun parseRssXml(xml: String): List<ParsedRssEntry> {
         val entries = mutableListOf<ParsedRssEntry>()
-        val parser: XmlPullParser = Xml.newPullParser()
-        parser.setInput(StringReader(xml))
-
-        var eventType = parser.eventType
-        var inItem = false
-
-        var curTitle: String? = null
-        var curFilmTitle: String? = null
-        var curFilmYear: String? = null
-        var curLink: String? = null
-        var curWatchedDate: String? = null
-        var curRating: String? = null
-        var curPubDate: String? = null
-        var curDescription: String? = null
-
+        val factory = DocumentBuilderFactory.newInstance().apply {
+            isNamespaceAware = false
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+        }
+        val doc = factory.newDocumentBuilder().parse(InputSource(StringReader(xml)))
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val rfcDateFormat = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US)
 
-        while (eventType != XmlPullParser.END_DOCUMENT) {
-            val tagName = parser.name
-            when (eventType) {
-                XmlPullParser.START_TAG -> {
-                    if (tagName.equals("item", ignoreCase = true)) {
-                        inItem = true
-                        curTitle = null
-                        curFilmTitle = null
-                        curFilmYear = null
-                        curLink = null
-                        curWatchedDate = null
-                        curRating = null
-                        curPubDate = null
-                        curDescription = null
-                    } else if (inItem) {
-                        val cleanTag = tagName.substringAfterLast(':').lowercase()
-                        when (cleanTag) {
-                            "title" -> curTitle = parser.nextText().trim()
-                            "link" -> curLink = parser.nextText().trim()
-                            "filmtitle" -> curFilmTitle = parser.nextText().trim()
-                            "filmyear" -> curFilmYear = parser.nextText().trim()
-                            "watcheddate" -> curWatchedDate = parser.nextText().trim()
-                            "memberrating" -> curRating = parser.nextText().trim()
-                            "pubdate" -> curPubDate = parser.nextText().trim()
-                            "description" -> curDescription = parser.nextText().trim()
-                        }
-                    }
-                }
-                XmlPullParser.END_TAG -> {
-                    if (tagName.equals("item", ignoreCase = true) && inItem) {
-                        val finalTitle = curFilmTitle ?: extractTitleFromRssTitle(curTitle)
-                        if (!finalTitle.isNullOrBlank()) {
-                            val watchDateTimestamp = try {
-                                if (!curWatchedDate.isNullOrBlank()) {
-                                    dateFormat.parse(curWatchedDate)?.time ?: System.currentTimeMillis()
-                                } else if (!curPubDate.isNullOrBlank()) {
-                                    rfcDateFormat.parse(curPubDate)?.time ?: System.currentTimeMillis()
-                                } else {
-                                    System.currentTimeMillis()
-                                }
-                            } catch (e: Exception) {
-                                System.currentTimeMillis()
-                            }
+        val items = doc.getElementsByTagName("item")
+        for (i in 0 until items.length) {
+            val itemNode = items.item(i)
+            if (itemNode.nodeType != Node.ELEMENT_NODE) continue
+            val itemElem = itemNode as Element
 
-                            val ratingTen = curRating?.toDoubleOrNull()?.let { it * 2.0 } // 5-star to 10-scale
-                            val cleanNotes = cleanHtmlDescription(curDescription)
+            var curTitle: String? = null
+            var curFilmTitle: String? = null
+            var curFilmYear: String? = null
+            var curLink: String? = null
+            var curWatchedDate: String? = null
+            var curRating: String? = null
+            var curPubDate: String? = null
+            var curDescription: String? = null
+            var curTmdbId: String? = null
+            var curRewatch: String? = null
 
-                            entries.add(
-                                ParsedRssEntry(
-                                    title = finalTitle,
-                                    year = curFilmYear,
-                                    link = curLink,
-                                    dateString = curWatchedDate ?: curPubDate ?: "Recent",
-                                    watchedAt = watchDateTimestamp,
-                                    ratingTenScale = ratingTen,
-                                    notes = cleanNotes
-                                )
-                            )
-                        }
-                        inItem = false
-                    }
+            val children = itemElem.childNodes
+            for (j in 0 until children.length) {
+                val child = children.item(j)
+                if (child.nodeType != Node.ELEMENT_NODE) continue
+                val cleanTag = child.nodeName.substringAfterLast(':').lowercase()
+                val text = child.textContent?.trim()
+                when (cleanTag) {
+                    "title" -> curTitle = text
+                    "link" -> curLink = text
+                    "filmtitle" -> curFilmTitle = text
+                    "filmyear" -> curFilmYear = text
+                    "watcheddate" -> curWatchedDate = text
+                    "memberrating" -> curRating = text
+                    "pubdate" -> curPubDate = text
+                    "description" -> curDescription = text
+                    "movieid" -> curTmdbId = text
+                    "rewatch" -> curRewatch = text
                 }
             }
-            eventType = parser.next()
+
+            val rawTitle = curFilmTitle ?: extractTitleFromRssTitle(curTitle)
+            val finalTitle = unescapeHtmlEntities(rawTitle)
+            if (!finalTitle.isNullOrBlank()) {
+                val watchDateTimestamp = try {
+                    if (!curWatchedDate.isNullOrBlank()) {
+                        dateFormat.parse(curWatchedDate)?.time ?: System.currentTimeMillis()
+                    } else if (!curPubDate.isNullOrBlank()) {
+                        rfcDateFormat.parse(curPubDate)?.time ?: System.currentTimeMillis()
+                    } else {
+                        System.currentTimeMillis()
+                    }
+                } catch (_: Exception) {
+                    System.currentTimeMillis()
+                }
+
+                val ratingTen = curRating?.toDoubleOrNull()?.let { it * 2.0 } // 5-star to 10-scale
+                val posterUrl = extractPosterUrl(curDescription)
+                val cleanNotes = cleanHtmlDescription(curDescription)
+
+                entries.add(
+                    ParsedRssEntry(
+                        title = finalTitle,
+                        year = curFilmYear?.takeIf { it.isNotBlank() },
+                        link = curLink,
+                        dateString = curWatchedDate ?: curPubDate ?: "Recent",
+                        watchedAt = watchDateTimestamp,
+                        ratingTenScale = ratingTen,
+                        notes = cleanNotes,
+                        tmdbId = curTmdbId?.takeIf { it.isNotBlank() && it != "0" },
+                        posterUrl = posterUrl,
+                        isRewatch = curRewatch.equals("Yes", ignoreCase = true)
+                    )
+                )
+            }
         }
         return entries
+    }
+
+    private fun extractPosterUrl(html: String?): String? {
+        if (html.isNullOrBlank()) return null
+        val match = Regex("""<img[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE).find(html)
+        return match?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.startsWith("http") && it.length <= 500 }
+    }
+
+    private fun unescapeHtmlEntities(text: String?): String? {
+        if (text == null) return null
+        return text
+            .replace("&#039;", "'")
+            .replace("&#39;", "'")
+            .replace("&apos;", "'")
+            .replace("&quot;", "\"")
+            .replace("&amp;", "&")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .trim()
     }
 
     private fun extractTitleFromRssTitle(raw: String?): String? {
@@ -313,6 +366,11 @@ class LetterboxdSyncManager(private val mediaDao: MediaDao) {
             .replace(Regex("<[^>]+>"), " ")
             .replace(Regex("\\s+"), " ")
             .trim()
-        return if (stripped.isNotBlank()) stripped else null
+        val unescaped = unescapeHtmlEntities(stripped) ?: ""
+        // Strip Letterboxd's default non-review boilerplate: "Watched on Saturday November 14, 2026."
+        val withoutBoilerplate = unescaped
+            .replace(Regex("""^Watched on [A-Za-z]+,?\s+[A-Za-z]+\s+\d{1,2},\s+\d{4}\.?$""", RegexOption.IGNORE_CASE), "")
+            .trim()
+        return withoutBoilerplate.takeIf { it.isNotBlank() }
     }
 }

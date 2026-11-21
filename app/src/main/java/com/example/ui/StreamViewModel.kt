@@ -25,6 +25,15 @@ import com.example.data.model.WatchSession
 import com.example.data.model.GeminiAnalysisResult
 import com.example.data.model.PodcastEpisode
 import com.example.data.model.MovieNewsItem
+import com.example.data.model.CuratedList
+import com.example.data.model.CuratedListCatalog
+import com.example.data.model.CuratedListCategory
+import com.example.data.model.CuratedListItem
+import com.example.data.model.NextWatchRecommendation
+import com.example.data.model.UniversalMovieResult
+import com.example.data.model.PersonSearchCandidate
+import com.example.data.model.PersonFilmographyItem
+import com.example.data.model.PersonFilmographyResult
 import com.example.data.remote.GeminiClient
 import com.example.data.remote.GeminiGenerateRequest
 import com.example.data.remote.GeminiContent
@@ -360,7 +369,8 @@ class StreamViewModel(
         // Automatically sync Letterboxd live diary in background on app startup
         val lbUser = userPreferences.letterboxdUsername.trim()
         if (lbUser.isNotBlank()) {
-            syncLetterboxdLive(lbUser, silent = true)
+            val forceFirstSync = userPreferences.lastLetterboxdSyncTime == 0L
+            syncLetterboxdLive(lbUser, silent = !forceFirstSync)
         }
     }
 
@@ -372,8 +382,8 @@ class StreamViewModel(
         }
         val now = System.currentTimeMillis()
         val lastSync = userPreferences.lastLetterboxdSyncTime
-        val fourHoursMs = 4 * 60 * 60 * 1000L
-        if (silent && (now - lastSync) < fourHoursMs) {
+        val fifteenMinutesMs = 15 * 60 * 1000L
+        if (silent && lastSync > 0L && (now - lastSync) < fifteenMinutesMs) {
             android.util.Log.d(TAG, "syncLetterboxdLive: Skipped silent sync (synced ${(now - lastSync) / 60000}m ago)")
             return
         }
@@ -703,10 +713,10 @@ class StreamViewModel(
                                         tmdbId = tmdbId,
                                         imageUrl = poster,
                                         rating = match.voteAverage ?: existingMatch.rating,
-                                        overview = match.overview?.ifBlank { existingMatch.overview } ?: existingMatch.overview,
+                                        overview = (match.overview?.ifBlank { existingMatch.overview } ?: existingMatch.overview)?.take(300),
                                         genres = genres,
                                         releaseDate = match.releaseDate ?: existingMatch.releaseDate,
-                                        userNotes = newNotes.take(400),
+                                        userNotes = newNotes.take(300),
                                         importSource = existingMatch.importSource ?: sourceTag,
                                         updatedAt = System.currentTimeMillis()
                                     )
@@ -736,12 +746,12 @@ class StreamViewModel(
                                         tmdbId = tmdbId,
                                         imageUrl = poster,
                                         rating = match.voteAverage,
-                                        overview = match.overview,
+                                        overview = match.overview?.take(300),
                                         genres = genres,
                                         releaseDate = releaseDate,
                                         providerIds = providersString ?: "none",
                                         importSource = sourceTag,
-                                        userNotes = tagNotes,
+                                        userNotes = tagNotes.take(300),
                                         addedAt = System.currentTimeMillis(),
                                         updatedAt = System.currentTimeMillis()
                                     )
@@ -826,7 +836,7 @@ class StreamViewModel(
                                 imageUrl = poster ?: item.imageUrl,
                                 releaseDate = match.releaseDate ?: item.releaseDate,
                                 rating = match.voteAverage ?: item.rating,
-                                overview = match.overview?.ifBlank { item.overview } ?: item.overview,
+                                overview = (match.overview?.ifBlank { item.overview } ?: item.overview)?.take(300),
                                 genres = genres,
                                 updatedAt = System.currentTimeMillis()
                             )
@@ -1979,7 +1989,7 @@ class StreamViewModel(
                                 providerIds = resolvedProviders,
                                 imageUrl = poster,
                                 rating = rating,
-                                overview = overview,
+                                overview = overview?.take(300),
                                 genres = genres,
                                 releaseDate = match.releaseDate ?: item.releaseDate,
                                 status = if (item.status == MediaStatus.PENDING_METADATA.name) MediaStatus.WATCHLIST.name else item.status,
@@ -2028,7 +2038,7 @@ class StreamViewModel(
                                         providerIds = resolvedTvProviders,
                                         imageUrl = tvPoster,
                                         rating = tvMatch.voteAverage ?: item.rating,
-                                        overview = tvMatch.overview?.ifBlank { item.overview } ?: item.overview,
+                                        overview = (tvMatch.overview?.ifBlank { item.overview } ?: item.overview)?.take(300),
                                         genres = tvGenres,
                                         releaseDate = tvMatch.firstAirDate ?: item.releaseDate,
                                         status = if (item.status == MediaStatus.PENDING_METADATA.name) MediaStatus.WATCHLIST.name else item.status,
@@ -2138,7 +2148,7 @@ class StreamViewModel(
                                 tmdbId = match.id.toString(),
                                 imageUrl = poster ?: item.imageUrl,
                                 rating = match.voteAverage ?: item.rating,
-                                overview = match.overview?.ifBlank { item.overview } ?: item.overview,
+                                overview = (match.overview?.ifBlank { item.overview } ?: item.overview)?.take(300),
                                 genres = genres,
                                 releaseDate = match.releaseDate ?: item.releaseDate,
                                 updatedAt = System.currentTimeMillis()
@@ -2160,7 +2170,7 @@ class StreamViewModel(
                                     tmdbId = tvMatch.id.toString(),
                                     imageUrl = tvPoster ?: item.imageUrl,
                                     rating = tvMatch.voteAverage ?: item.rating,
-                                    overview = tvMatch.overview?.ifBlank { item.overview } ?: item.overview,
+                                    overview = (tvMatch.overview?.ifBlank { item.overview } ?: item.overview)?.take(300),
                                     genres = tvGenres,
                                     releaseDate = tvMatch.firstAirDate ?: item.releaseDate,
                                     updatedAt = System.currentTimeMillis()
@@ -2469,6 +2479,821 @@ class StreamViewModel(
             } finally {
                 _isEnrichingVault.value = false
             }
+        }
+    }
+
+    // =========================================================================
+    // PHASE 2: CUSTOM PLAYLISTS, HISTORY RECOMMENDATIONS & UNIVERSAL SEARCH
+    // =========================================================================
+
+    private val _customPlaylists = MutableStateFlow(loadCustomPlaylistsFromPrefs())
+    val customPlaylists: StateFlow<List<CuratedList>> = _customPlaylists.asStateFlow()
+
+    private fun loadCustomPlaylistsFromPrefs(): List<CuratedList> {
+        return try {
+            val raw = userPreferences.customPlaylistsJson
+            val arr = JSONArray(raw)
+            val list = mutableListOf<CuratedList>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val itemsArr = obj.optJSONArray("items") ?: JSONArray()
+                val items = mutableListOf<CuratedListItem>()
+                for (j in 0 until itemsArr.length()) {
+                    val itemObj = itemsArr.getJSONObject(j)
+                    items.add(
+                        CuratedListItem(
+                            title = itemObj.optString("title"),
+                            year = itemObj.optInt("year", 0).takeIf { it > 1800 },
+                            badge = itemObj.optString("badge").takeIf { it.isNotBlank() },
+                            director = itemObj.optString("director").takeIf { it.isNotBlank() },
+                            note = itemObj.optString("note").takeIf { it.isNotBlank() },
+                            tmdbId = itemObj.optString("tmdbId").takeIf { it.isNotBlank() }
+                        )
+                    )
+                }
+                list.add(
+                    CuratedList(
+                        id = obj.optString("id"),
+                        title = obj.optString("title"),
+                        subtitle = obj.optString("subtitle", "${items.size} Titles"),
+                        category = CuratedListCategory.CUSTOM,
+                        emoji = obj.optString("emoji", "🎞️"),
+                        description = obj.optString("description", "Custom Streamwise playlist"),
+                        items = items,
+                        isCustom = true
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed parsing custom playlists JSON: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private fun persistCustomPlaylists(lists: List<CuratedList>) {
+        val arr = JSONArray()
+        lists.forEach { pl ->
+            val itemsArr = JSONArray()
+            pl.items.forEach { it ->
+                itemsArr.put(
+                    JSONObject().apply {
+                        put("title", it.title)
+                        if (it.year != null) put("year", it.year)
+                        if (!it.badge.isNullOrBlank()) put("badge", it.badge)
+                        if (!it.director.isNullOrBlank()) put("director", it.director)
+                        if (!it.note.isNullOrBlank()) put("note", it.note)
+                        if (!it.tmdbId.isNullOrBlank()) put("tmdbId", it.tmdbId)
+                    }
+                )
+            }
+            arr.put(
+                JSONObject().apply {
+                    put("id", pl.id)
+                    put("title", pl.title)
+                    put("subtitle", "${pl.items.size} ${if (pl.items.size == 1) "Title" else "Titles"}")
+                    put("emoji", pl.emoji)
+                    put("description", pl.description)
+                    put("items", itemsArr)
+                }
+            )
+        }
+        userPreferences.customPlaylistsJson = arr.toString()
+        _customPlaylists.value = lists
+    }
+
+    fun createCustomPlaylist(
+        title: String,
+        subtitle: String = "",
+        emoji: String = "🎞️",
+        description: String = "",
+        rawTitlesText: String = ""
+    ): CuratedList? {
+        val cleanTitle = title.trim()
+        if (cleanTitle.isBlank()) return null
+        val parsed = if (rawTitlesText.isNotBlank()) {
+            CuratedListCatalog.parseAdHocList(rawTitlesText, cleanTitle)
+        } else {
+            CuratedList(
+                id = "custom_${System.currentTimeMillis()}",
+                title = cleanTitle,
+                subtitle = "0 Titles",
+                category = CuratedListCategory.CUSTOM,
+                emoji = emoji.ifBlank { "🎞️" },
+                description = description.ifBlank { "Custom watch playlist" },
+                items = emptyList(),
+                isCustom = true
+            )
+        }
+        val finalList = parsed.copy(
+            id = "custom_${System.currentTimeMillis()}",
+            title = cleanTitle,
+            subtitle = subtitle.trim().ifBlank { "${parsed.items.size} ${if (parsed.items.size == 1) "Title" else "Titles"}" },
+            emoji = emoji.ifBlank { "🎞️" },
+            description = description.trim().ifBlank { "Personal Streamwise playlist" },
+            isCustom = true
+        )
+        persistCustomPlaylists(_customPlaylists.value + finalList)
+        _statusMessage.value = "Created playlist \"${finalList.title}\" (${finalList.items.size} films)"
+        return finalList
+    }
+
+    fun addItemToCustomPlaylist(playlistId: String, item: CuratedListItem) {
+        val current = _customPlaylists.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == playlistId }
+        if (idx == -1) return
+        val target = current[idx]
+        val normNew = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(item.title)
+        if (target.items.any { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) == normNew }) {
+            _statusMessage.value = "\"${item.title}\" is already in \"${target.title}\""
+            return
+        }
+        val updatedItems = target.items + item.copy(badge = item.badge ?: "#${target.items.size + 1}")
+        current[idx] = target.copy(
+            items = updatedItems,
+            subtitle = "${updatedItems.size} ${if (updatedItems.size == 1) "Title" else "Titles"}"
+        )
+        persistCustomPlaylists(current)
+        _statusMessage.value = "Added \"${item.title}\" to \"${target.title}\""
+    }
+
+    fun removeItemFromCustomPlaylist(playlistId: String, title: String) {
+        val current = _customPlaylists.value.toMutableList()
+        val idx = current.indexOfFirst { it.id == playlistId }
+        if (idx == -1) return
+        val target = current[idx]
+        val normTarget = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(title)
+        val updatedItems = target.items.filterNot {
+            com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) == normTarget
+        }
+        current[idx] = target.copy(
+            items = updatedItems,
+            subtitle = "${updatedItems.size} ${if (updatedItems.size == 1) "Title" else "Titles"}"
+        )
+        persistCustomPlaylists(current)
+        _statusMessage.value = "Removed \"$title\" from \"${target.title}\""
+    }
+
+    fun deleteCustomPlaylist(playlistId: String) {
+        val target = _customPlaylists.value.find { it.id == playlistId }
+        persistCustomPlaylists(_customPlaylists.value.filterNot { it.id == playlistId })
+        if (target != null) {
+            _statusMessage.value = "Deleted playlist \"${target.title}\""
+        }
+    }
+
+    fun resetCustomPlaylistsToDefaults() {
+        persistCustomPlaylists(emptyList())
+        _statusMessage.value = "Custom playlists reset to built-in catalog."
+    }
+
+    // --- Watch-History Recommendation Engine ("Finding Your Next Watch") ---
+
+    private val _selectedHistorySeed = MutableStateFlow<MediaItem?>(null)
+    val selectedHistorySeed: StateFlow<MediaItem?> = _selectedHistorySeed.asStateFlow()
+
+    private val _historyRecommendations = MutableStateFlow<List<NextWatchRecommendation>>(emptyList())
+    val historyRecommendations: StateFlow<List<NextWatchRecommendation>> = _historyRecommendations.asStateFlow()
+
+    private val _isLoadingHistoryRecs = MutableStateFlow(false)
+    val isLoadingHistoryRecs: StateFlow<Boolean> = _isLoadingHistoryRecs.asStateFlow()
+
+    private val _spunNextWatch = MutableStateFlow<NextWatchRecommendation?>(null)
+    val spunNextWatch: StateFlow<NextWatchRecommendation?> = _spunNextWatch.asStateFlow()
+
+    val historySeedOptions: StateFlow<List<MediaItem>> = watchedItems
+        .map { watched ->
+            val recent = watched.sortedByDescending { it.watchedAt ?: 0L }.take(8)
+            val topRated = watched.filter { (it.rating ?: 0.0) >= 8.0 }.sortedByDescending { it.rating ?: 0.0 }.take(6)
+            (recent + topRated).distinctBy { it.title.trim().lowercase() }.take(12)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val tonightQueueMatches: StateFlow<List<NextWatchRecommendation>> = combine(
+        allMediaItems,
+        allProviders,
+        customPlaylists
+    ) { items, providers, customLists ->
+        computeTonightMatches(items, providers, customLists)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private fun computeTonightMatches(
+        items: List<MediaItem>,
+        providers: List<StreamingProvider>,
+        customLists: List<CuratedList>
+    ): List<NextWatchRecommendation> {
+        val watched = items.filter { it.status == MediaStatus.WATCHED.name }
+        val watchlist = items.filter { it.status != MediaStatus.WATCHED.name }
+        val watchedNorms = watched.map { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }.toSet()
+        val watchlistMap = watchlist.associateBy { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
+        val activeIds = providers.filter { it.isActive || it.costPerMonth == 0.0 }.map { it.id }.toSet()
+
+        val topGenreScores = watched.flatMap { it.genres?.split(",", "/") ?: emptyList() }
+            .map { it.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+
+        val candidates = mutableListOf<Pair<Double, NextWatchRecommendation>>()
+
+        // 1. Score unwatched items already on user's Watchlist
+        watchlist.forEach { item ->
+            var score = 0.0
+            val reasons = mutableListOf<String>()
+            if (item.isStarred) {
+                score += 4.0
+                reasons.add("Priority Pick")
+            }
+            val matchingActive = item.providersList.filter { activeIds.contains(it) }
+            if (matchingActive.isNotEmpty()) {
+                score += 3.5
+                val pName = providers.find { it.id == matchingActive.first() }?.name ?: matchingActive.first()
+                reasons.add("On $pName")
+            }
+            val genreMatches = (item.genres ?: "").split(",", "/")
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .sortedByDescending { topGenreScores[it.lowercase()] ?: 0 }
+            val topHit = genreMatches.firstOrNull { (topGenreScores[it.lowercase()] ?: 0) > 0 }
+            if (topHit != null) {
+                score += 2.0 + ((topGenreScores[topHit.lowercase()] ?: 0) * 0.02)
+                reasons.add("Matches your $topHit taste")
+            }
+            if ((item.rating ?: 0.0) >= 7.0) {
+                score += (item.rating ?: 0.0) * 0.2
+            }
+            if (!item.importSource.isNullOrBlank() && item.importSource.contains("Podcast", ignoreCase = true)) {
+                score += 1.5
+                reasons.add(item.importSource)
+            }
+
+            candidates.add(
+                score to NextWatchRecommendation(
+                    tmdbId = item.tmdbId,
+                    title = item.title,
+                    year = item.releaseYear,
+                    posterUrl = item.imageUrl,
+                    rating = item.rating,
+                    overview = item.overview,
+                    reason = reasons.take(2).joinToString(" • ").ifBlank { "From your Watchlist" },
+                    sourceSeed = "Your Queue & Taste",
+                    isInWatchlist = true,
+                    isWatched = false,
+                    isStarred = item.isStarred,
+                    matchingMediaItem = item,
+                    availableProviders = item.providersList
+                )
+            )
+        }
+
+        // 2. Surface unwatched highlights from playlists that aren't in Watchlist yet
+        val allPlaylists = CuratedListCatalog.getAllLists() + customLists
+        allPlaylists.take(8).forEach { pl ->
+            pl.items.forEach { cItem ->
+                val norm = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(cItem.title)
+                if (norm.isNotBlank() && !watchedNorms.contains(norm) && !watchlistMap.containsKey(norm)) {
+                    val existing = candidates.any { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.second.title) == norm }
+                    if (!existing) {
+                        val score = if (pl.category == CuratedListCategory.VIBES || pl.category == CuratedListCategory.RECENT) 2.5 else 1.5
+                        candidates.add(
+                            score to NextWatchRecommendation(
+                                tmdbId = cItem.tmdbId,
+                                title = cItem.title,
+                                year = cItem.year,
+                                posterUrl = null,
+                                rating = null,
+                                overview = cItem.note ?: cItem.director?.let { "Directed by $it" },
+                                reason = "From ${pl.emoji} ${pl.title}",
+                                sourceSeed = pl.title,
+                                isInWatchlist = false,
+                                isWatched = false,
+                                isStarred = false
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        return candidates.sortedByDescending { it.first }.map { it.second }.take(18)
+    }
+
+    private fun resolveTmdbKey(): String {
+        val runtimeKey = _tmdbApiKey.value
+        val buildTimeKey = BuildConfig.TMDB_API_KEY
+        return if (runtimeKey.isNotEmpty() && runtimeKey != "MY_TMDB_API_KEY") runtimeKey else buildTimeKey
+    }
+
+    fun shuffleNextWatchSeed() {
+        val watched = watchedItems.value
+        if (watched.isEmpty()) return
+        val pool = watched.filter { !it.tmdbId.isNullOrBlank() || it.watchedAt != null }.ifEmpty { watched }
+        val currentId = _selectedHistorySeed.value?.id
+        val next = pool.filter { it.id != currentId }.randomOrNull() ?: pool.first()
+        loadRecommendationsForSeed(next)
+    }
+
+    fun spinNextWatch(onlyMyServices: Boolean = false) {
+        val pool = if (onlyMyServices) {
+            val activeIds = allProviders.value.filter { it.isActive || it.costPerMonth == 0.0 }.map { it.id }.toSet()
+            tonightQueueMatches.value.filter { rec -> rec.availableProviders.any { activeIds.contains(it) } }
+                .ifEmpty { tonightQueueMatches.value }
+        } else {
+            (_historyRecommendations.value + tonightQueueMatches.value).distinctBy {
+                com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title)
+            }
+        }
+        val currentTitle = _spunNextWatch.value?.title
+        val pick = pool.filter { it.title != currentTitle }.randomOrNull() ?: pool.firstOrNull()
+        _spunNextWatch.value = pick
+        if (pick != null) {
+            _statusMessage.value = "🎲 Next Watch Pick: ${pick.title}"
+        }
+    }
+
+    fun loadRecommendationsForSeed(seedItem: MediaItem? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingHistoryRecs.value = true
+            try {
+                val watched = watchedItems.value.ifEmpty { repository.mediaDao.getAllMediaItemsList().filter { it.status == MediaStatus.WATCHED.name } }
+                val chosenSeed = seedItem
+                    ?: _selectedHistorySeed.value
+                    ?: watched.sortedByDescending { it.watchedAt ?: 0L }.firstOrNull()
+                if (chosenSeed == null) {
+                    _historyRecommendations.value = emptyList()
+                    return@launch
+                }
+                _selectedHistorySeed.value = chosenSeed
+
+                val apiKey = resolveTmdbKey()
+                if (apiKey.isBlank() || apiKey == "MY_TMDB_API_KEY") {
+                    _historyRecommendations.value = tonightQueueMatches.value.take(8)
+                    return@launch
+                }
+
+                var seedMovieId = chosenSeed.tmdbId?.toIntOrNull()
+                if (seedMovieId == null || seedMovieId <= 0) {
+                    val match = com.example.data.remote.TmdbMatchingHelper.searchMovieSmart(
+                        TmdbClient.tmdbApiService,
+                        apiKey,
+                        chosenSeed.title,
+                        chosenSeed.releaseDate
+                    )
+                    seedMovieId = match?.id
+                }
+                if (seedMovieId == null || seedMovieId <= 0) {
+                    _historyRecommendations.value = emptyList()
+                    return@launch
+                }
+
+                val recsDeferred = async {
+                    try { TmdbClient.tmdbApiService.getMovieRecommendations(seedMovieId, apiKey).results } catch (_: Exception) { emptyList() }
+                }
+                val simDeferred = async {
+                    try { TmdbClient.tmdbApiService.getSimilarMovies(seedMovieId, apiKey).results } catch (_: Exception) { emptyList() }
+                }
+                val combined = (recsDeferred.await() + simDeferred.await()).distinctBy { it.id }
+
+                val allDb = allMediaItems.value.ifEmpty { repository.mediaDao.getAllMediaItemsList() }
+                val watchedNorms = allDb.filter { it.status == MediaStatus.WATCHED.name }
+                    .map { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }.toSet()
+                val watchedTmdbIds = allDb.filter { it.status == MediaStatus.WATCHED.name && !it.tmdbId.isNullOrBlank() }
+                    .map { it.tmdbId!!.trim() }.toSet()
+                val watchlistByNorm = allDb.filter { it.status != MediaStatus.WATCHED.name }
+                    .associateBy { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
+
+                val mapped = combined.filter { res ->
+                    val norm = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(res.title)
+                    !watchedTmdbIds.contains(res.id.toString()) && !watchedNorms.contains(norm)
+                }.take(18).map { res ->
+                    val norm = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(res.title)
+                    val wlMatch = watchlistByNorm[norm]
+                    NextWatchRecommendation(
+                        tmdbId = res.id.toString(),
+                        title = res.title,
+                        year = res.releaseDate?.take(4)?.toIntOrNull(),
+                        posterUrl = res.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" },
+                        rating = res.voteAverage,
+                        overview = res.overview,
+                        reason = "Because you watched ${chosenSeed.title}",
+                        sourceSeed = chosenSeed.title,
+                        isInWatchlist = wlMatch != null,
+                        isWatched = false,
+                        isStarred = wlMatch?.isStarred == true,
+                        matchingMediaItem = wlMatch,
+                        availableProviders = wlMatch?.providersList ?: emptyList()
+                    )
+                }
+
+                _historyRecommendations.value = mapped
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed loading watch-history recommendations: ${e.message}", e)
+            } finally {
+                _isLoadingHistoryRecs.value = false
+            }
+        }
+    }
+
+    // --- Outright Universal Movie & Actor/Director Search ---
+
+    private val _universalSearchQuery = MutableStateFlow("")
+    val universalSearchQuery: StateFlow<String> = _universalSearchQuery.asStateFlow()
+
+    private val _universalSearchMode = MutableStateFlow("movies") // "movies" | "actors"
+    val universalSearchMode: StateFlow<String> = _universalSearchMode.asStateFlow()
+
+    private val _movieSearchResults = MutableStateFlow<List<UniversalMovieResult>>(emptyList())
+    val movieSearchResults: StateFlow<List<UniversalMovieResult>> = _movieSearchResults.asStateFlow()
+
+    private val _personSearchResults = MutableStateFlow<List<PersonSearchCandidate>>(emptyList())
+    val personSearchResults: StateFlow<List<PersonSearchCandidate>> = _personSearchResults.asStateFlow()
+
+    private val _selectedPersonFilmography = MutableStateFlow<PersonFilmographyResult?>(null)
+    val selectedPersonFilmography: StateFlow<PersonFilmographyResult?> = _selectedPersonFilmography.asStateFlow()
+
+    private val _isSearchingUniversal = MutableStateFlow(false)
+    val isSearchingUniversal: StateFlow<Boolean> = _isSearchingUniversal.asStateFlow()
+
+    private val _isLoadingPersonFilmography = MutableStateFlow(false)
+    val isLoadingPersonFilmography: StateFlow<Boolean> = _isLoadingPersonFilmography.asStateFlow()
+
+    fun setUniversalSearchMode(mode: String) {
+        _universalSearchMode.value = mode
+        if (_universalSearchQuery.value.isNotBlank()) {
+            performUniversalSearch(_universalSearchQuery.value, mode)
+        }
+    }
+
+    fun clearSelectedPersonFilmography() {
+        _selectedPersonFilmography.value = null
+    }
+
+    fun performUniversalSearch(query: String, mode: String = _universalSearchMode.value) {
+        _universalSearchQuery.value = query
+        _universalSearchMode.value = mode
+        val cleanQuery = query.trim()
+        if (cleanQuery.length < 2) {
+            _movieSearchResults.value = emptyList()
+            _personSearchResults.value = emptyList()
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isSearchingUniversal.value = true
+            try {
+                val apiKey = resolveTmdbKey()
+                val allDb = allMediaItems.value.ifEmpty { repository.mediaDao.getAllMediaItemsList() }
+                val dbByTmdb = allDb.filter { !it.tmdbId.isNullOrBlank() }.associateBy { it.tmdbId!!.trim() }
+                val dbByNorm = allDb.associateBy { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
+
+                if (mode == "actors") {
+                    _selectedPersonFilmography.value = null
+                    if (apiKey.isBlank() || apiKey == "MY_TMDB_API_KEY") {
+                        _personSearchResults.value = emptyList()
+                        _statusMessage.value = "Configure your TMDB API key in Settings to search actors & directors."
+                        return@launch
+                    }
+                    val resp = TmdbClient.tmdbApiService.searchPerson(apiKey, cleanQuery)
+                    val candidates = resp.results.take(12).map { p ->
+                        val known = p.knownFor?.mapNotNull { it.title ?: it.name }?.take(3)?.joinToString(", ") ?: ""
+                        PersonSearchCandidate(
+                            id = p.id,
+                            name = p.name,
+                            profileUrl = p.profilePath?.let { "https://image.tmdb.org/t/p/w185$it" },
+                            department = p.knownForDepartment,
+                            knownForSummary = known
+                        )
+                    }
+                    _personSearchResults.value = candidates
+                    if (candidates.size == 1) {
+                        loadPersonFilmography(candidates.first().id, candidates.first().name)
+                    }
+                } else {
+                    // Movies & TV mode: combine local matches + live TMDB results
+                    val localMatches = allDb.filter { it.title.contains(cleanQuery, ignoreCase = true) }
+                        .take(10)
+                        .map { item ->
+                            UniversalMovieResult(
+                                tmdbId = item.tmdbId,
+                                title = item.title,
+                                year = item.releaseYear,
+                                releaseDate = item.releaseDate,
+                                posterUrl = item.imageUrl,
+                                rating = item.rating,
+                                overview = item.overview,
+                                genres = item.genres,
+                                isInWatchlist = item.status != MediaStatus.WATCHED.name,
+                                isWatched = item.status == MediaStatus.WATCHED.name,
+                                isStarred = item.isStarred,
+                                matchingMediaItem = item,
+                                mediaType = "Library"
+                            )
+                        }
+
+                    if (apiKey.isBlank() || apiKey == "MY_TMDB_API_KEY") {
+                        _movieSearchResults.value = localMatches
+                        return@launch
+                    }
+
+                    val movieDeferred = async {
+                        try { TmdbClient.tmdbApiService.searchMovie(apiKey, cleanQuery).results } catch (_: Exception) { emptyList() }
+                    }
+                    val tvDeferred = async {
+                        try { TmdbClient.tmdbApiService.searchTv(apiKey, cleanQuery).results } catch (_: Exception) { emptyList() }
+                    }
+
+                    val remoteMovies = movieDeferred.await().take(15).map { m ->
+                        val existing = dbByTmdb[m.id.toString()] ?: dbByNorm[com.example.data.remote.TmdbMatchingHelper.normalizeTitle(m.title)]
+                        UniversalMovieResult(
+                            tmdbId = m.id.toString(),
+                            title = m.title,
+                            year = m.releaseDate?.take(4)?.toIntOrNull(),
+                            releaseDate = m.releaseDate,
+                            posterUrl = m.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: existing?.imageUrl,
+                            rating = m.voteAverage,
+                            overview = m.overview,
+                            genres = existing?.genres,
+                            isInWatchlist = existing != null && existing.status != MediaStatus.WATCHED.name,
+                            isWatched = existing?.status == MediaStatus.WATCHED.name,
+                            isStarred = existing?.isStarred == true,
+                            matchingMediaItem = existing,
+                            mediaType = "Movie"
+                        )
+                    }
+
+                    val remoteTv = tvDeferred.await().take(5).map { tv ->
+                        val existing = dbByTmdb[tv.id.toString()] ?: dbByNorm[com.example.data.remote.TmdbMatchingHelper.normalizeTitle(tv.name)]
+                        UniversalMovieResult(
+                            tmdbId = tv.id.toString(),
+                            title = tv.name,
+                            year = tv.firstAirDate?.take(4)?.toIntOrNull(),
+                            releaseDate = tv.firstAirDate,
+                            posterUrl = tv.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: existing?.imageUrl,
+                            rating = tv.voteAverage,
+                            overview = tv.overview,
+                            genres = existing?.genres,
+                            isInWatchlist = existing != null && existing.status != MediaStatus.WATCHED.name,
+                            isWatched = existing?.status == MediaStatus.WATCHED.name,
+                            isStarred = existing?.isStarred == true,
+                            matchingMediaItem = existing,
+                            mediaType = "TV"
+                        )
+                    }
+
+                    val merged = (remoteMovies + remoteTv + localMatches)
+                        .distinctBy { (it.tmdbId ?: "") + "|" + com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
+                    _movieSearchResults.value = merged
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Universal search failed: ${e.message}", e)
+            } finally {
+                _isSearchingUniversal.value = false
+            }
+        }
+    }
+
+    fun loadPersonFilmography(personId: Int, personNameHint: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingPersonFilmography.value = true
+            try {
+                val apiKey = resolveTmdbKey()
+                if (apiKey.isBlank() || apiKey == "MY_TMDB_API_KEY") {
+                    _statusMessage.value = "Configure your TMDB API key in Settings to view filmographies."
+                    return@launch
+                }
+
+                val detailsDeferred = async {
+                    try { TmdbClient.tmdbApiService.getPersonDetails(personId, apiKey) }
+                    catch (_: Exception) { TmdbPersonDetails(id = personId, name = personNameHint ?: "Actor / Director") }
+                }
+                val creditsDeferred = async {
+                    TmdbClient.tmdbApiService.getPersonMovieCredits(personId, apiKey)
+                }
+
+                val person = detailsDeferred.await()
+                val credits = creditsDeferred.await()
+
+                val allDb = allMediaItems.value.ifEmpty { repository.mediaDao.getAllMediaItemsList() }
+                val dbByTmdb = allDb.filter { !it.tmdbId.isNullOrBlank() }.associateBy { it.tmdbId!!.trim() }
+                val dbByNorm = allDb.associateBy { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
+
+                val castEntries = credits.cast.map { it to (it.character?.takeIf { c -> c.isNotBlank() } ?: "Actor") }
+                val directorEntries = credits.crew.filter { it.job.equals("Director", ignoreCase = true) }
+                    .map { it to "Director" }
+
+                val mergedCredits = (castEntries + directorEntries)
+                    .filter { !it.first.title.isNullOrBlank() }
+                    .groupBy { it.first.id }
+                    .map { (_, group) ->
+                        val credit = group.first().first
+                        val roleLabel = group.map { it.second }.distinct().joinToString(" • ")
+                        credit to roleLabel
+                    }
+                    .sortedWith(
+                        compareByDescending<Pair<com.example.data.remote.TmdbPersonCreditItem, String>> {
+                            (it.first.popularity ?: 0.0) + ((it.first.voteCount ?: 0) * 0.01)
+                        }.thenByDescending { it.first.releaseDate ?: "" }
+                    )
+                    .take(50)
+
+                val items = mergedCredits.map { (credit, role) ->
+                    val title = credit.title ?: "Untitled"
+                    val norm = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(title)
+                    val existing = dbByTmdb[credit.id.toString()] ?: dbByNorm[norm]
+                    val age = ActorAgeCalculator.calculateAgeAtRelease(
+                        birthday = person.birthday,
+                        releaseDate = credit.releaseDate
+                    )
+                    PersonFilmographyItem(
+                        tmdbId = credit.id.toString(),
+                        title = title,
+                        releaseDate = credit.releaseDate,
+                        year = credit.releaseDate?.take(4)?.toIntOrNull(),
+                        posterUrl = credit.posterPath?.let { "https://image.tmdb.org/t/p/w500$it" } ?: existing?.imageUrl,
+                        rating = credit.voteAverage,
+                        overview = credit.overview,
+                        roleLabel = role,
+                        actorAgeAtRelease = age,
+                        isWatched = existing?.status == MediaStatus.WATCHED.name,
+                        isInWatchlist = existing != null && existing.status != MediaStatus.WATCHED.name,
+                        isStarred = existing?.isStarred == true,
+                        matchingMediaItem = existing
+                    )
+                }
+
+                val watchedCount = items.count { it.isWatched }
+                _selectedPersonFilmography.value = PersonFilmographyResult(
+                    personId = person.id,
+                    name = person.name,
+                    department = if (directorEntries.size > castEntries.size) "Directing" else "Acting",
+                    birthday = person.birthday,
+                    deathday = person.deathday,
+                    placeOfBirth = person.placeOfBirth,
+                    profileUrl = person.profilePath?.let { "https://image.tmdb.org/t/p/w185$it" },
+                    items = items,
+                    watchedCount = watchedCount,
+                    totalCount = items.size
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed loading filmography for $personId: ${e.message}", e)
+                _statusMessage.value = "Could not load filmography: ${e.localizedMessage}"
+            } finally {
+                _isLoadingPersonFilmography.value = false
+            }
+        }
+    }
+
+    fun addUniversalMovieToWatchlist(
+        title: String,
+        tmdbId: String? = null,
+        posterUrl: String? = null,
+        releaseDate: String? = null,
+        rating: Double? = null,
+        overview: String? = null,
+        sourceTag: String = "Streamwise Explore",
+        starPriority: Boolean = false
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val allDb = repository.mediaDao.getAllMediaItemsList()
+            val norm = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(title)
+            val existing = (if (!tmdbId.isNullOrBlank()) allDb.find { it.tmdbId == tmdbId } else null)
+                ?: allDb.find { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) == norm }
+
+            if (existing != null) {
+                if (existing.status == MediaStatus.WATCHED.name) {
+                    _statusMessage.value = "\"${existing.title}\" is already in your Watched Vault!"
+                } else {
+                    val newStarred = if (starPriority) !existing.isStarred else true
+                    repository.updateStarredStatus(existing.id, newStarred)
+                    _statusMessage.value = if (newStarred) "⭐ Tagged \"${existing.title}\" as Priority!" else "Removed priority from \"${existing.title}\"."
+                }
+            } else {
+                val item = MediaItem(
+                    title = title,
+                    tmdbId = tmdbId,
+                    imageUrl = posterUrl,
+                    releaseDate = releaseDate,
+                    rating = rating,
+                    overview = overview?.take(300),
+                    importSource = sourceTag,
+                    status = MediaStatus.WATCHLIST.name,
+                    isStarred = starPriority,
+                    addedAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis()
+                )
+                repository.insertMediaItem(item)
+                _statusMessage.value = "Added \"$title\" to Watchlist!"
+                syncWatchlistMetadata(forceAll = false)
+            }
+            refreshSearchResultFlags()
+        }
+    }
+
+    fun markUniversalMovieWatched(
+        title: String,
+        tmdbId: String? = null,
+        posterUrl: String? = null,
+        releaseDate: String? = null,
+        rating: Double? = null,
+        overview: String? = null
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            val allDb = repository.mediaDao.getAllMediaItemsList()
+            val norm = com.example.data.remote.TmdbMatchingHelper.normalizeTitle(title)
+            val existing = (if (!tmdbId.isNullOrBlank()) allDb.find { it.tmdbId == tmdbId } else null)
+                ?: allDb.find { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) == norm }
+
+            if (existing != null) {
+                val updated = existing.copy(
+                    status = MediaStatus.WATCHED.name,
+                    watchedAt = now,
+                    tmdbId = existing.tmdbId ?: tmdbId,
+                    imageUrl = existing.imageUrl ?: posterUrl,
+                    rating = existing.rating ?: rating,
+                    updatedAt = now
+                )
+                repository.updateMediaItem(updated)
+                repository.mediaDao.insertWatchSession(
+                    WatchSession(
+                        mediaItemId = existing.id,
+                        mediaItemTitle = existing.title,
+                        providerId = existing.providersList.firstOrNull(),
+                        durationMinutes = 110,
+                        watchedAt = now
+                    )
+                )
+            } else {
+                val item = MediaItem(
+                    title = title,
+                    tmdbId = tmdbId,
+                    imageUrl = posterUrl,
+                    releaseDate = releaseDate,
+                    rating = rating,
+                    overview = overview?.take(300),
+                    importSource = "Streamwise Explore",
+                    status = MediaStatus.WATCHED.name,
+                    watchedAt = now,
+                    addedAt = now,
+                    updatedAt = now
+                )
+                val newId = repository.insertMediaItem(item)
+                repository.mediaDao.insertWatchSession(
+                    WatchSession(
+                        mediaItemId = newId,
+                        mediaItemTitle = title,
+                        providerId = null,
+                        durationMinutes = 110,
+                        watchedAt = now
+                    )
+                )
+            }
+            _statusMessage.value = "✓ Logged \"$title\" to Watched Vault!"
+            refreshSearchResultFlags()
+        }
+    }
+
+    private suspend fun refreshSearchResultFlags() {
+        val allDb = repository.mediaDao.getAllMediaItemsList()
+        val dbByTmdb = allDb.filter { !it.tmdbId.isNullOrBlank() }.associateBy { it.tmdbId!!.trim() }
+        val dbByNorm = allDb.associateBy { com.example.data.remote.TmdbMatchingHelper.normalizeTitle(it.title) }
+
+        _movieSearchResults.value = _movieSearchResults.value.map { r ->
+            val m = (if (!r.tmdbId.isNullOrBlank()) dbByTmdb[r.tmdbId] else null)
+                ?: dbByNorm[com.example.data.remote.TmdbMatchingHelper.normalizeTitle(r.title)]
+            r.copy(
+                isInWatchlist = m != null && m.status != MediaStatus.WATCHED.name,
+                isWatched = m?.status == MediaStatus.WATCHED.name,
+                isStarred = m?.isStarred == true,
+                matchingMediaItem = m
+            )
+        }
+
+        _historyRecommendations.value = _historyRecommendations.value.map { r ->
+            val m = (if (!r.tmdbId.isNullOrBlank()) dbByTmdb[r.tmdbId] else null)
+                ?: dbByNorm[com.example.data.remote.TmdbMatchingHelper.normalizeTitle(r.title)]
+            r.copy(
+                isInWatchlist = m != null && m.status != MediaStatus.WATCHED.name,
+                isWatched = m?.status == MediaStatus.WATCHED.name,
+                isStarred = m?.isStarred == true,
+                matchingMediaItem = m
+            )
+        }
+
+        _selectedPersonFilmography.value?.let { pf ->
+            val updatedItems = pf.items.map { item ->
+                val m = dbByTmdb[item.tmdbId] ?: dbByNorm[com.example.data.remote.TmdbMatchingHelper.normalizeTitle(item.title)]
+                item.copy(
+                    isWatched = m?.status == MediaStatus.WATCHED.name,
+                    isInWatchlist = m != null && m.status != MediaStatus.WATCHED.name,
+                    isStarred = m?.isStarred == true,
+                    matchingMediaItem = m
+                )
+            }
+            _selectedPersonFilmography.value = pf.copy(
+                items = updatedItems,
+                watchedCount = updatedItems.count { it.isWatched }
+            )
         }
     }
 
