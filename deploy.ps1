@@ -1,4 +1,4 @@
-$adb = "C:\Users\dschm\AppData\Local\Android\Sdk\platform-tools\adb.exe"
+$adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 $apk = "$PSScriptRoot\app\build\outputs\apk\debug\app-debug.apk"
 
 $deviceLine = (& $adb devices | Where-Object { $_ -match '\s+device$' } | Select-Object -First 1)
